@@ -3,6 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { DomSanitizer } from '@angular/platform-browser';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
+import { BookDetailsSheetComponent } from './books/details/book-details.sheet';
 import { OpenBookSheetComponent } from './books/open-book.sheet';
 import { RemoveBookSheetComponent } from './books/remove-book.sheet';
 import { COPY } from './ui/copy';
@@ -26,6 +27,7 @@ const TABLESS_ROUTE = /^\/(welcome|read)(\/|$)/;
     ToastComponent,
     OpenBookSheetComponent,
     RemoveBookSheetComponent,
+    BookDetailsSheetComponent,
   ],
   selector: 'app-root',
   styleUrl: './app.css',
