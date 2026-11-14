@@ -1,0 +1,149 @@
+// Data model from docs/specs/2026-11-14-iqra-design.md §7.
+
+export type ID = string; // crypto.randomUUID()
+
+export interface SyncMeta {
+  id: ID;
+  updatedAt: number; // ms, device clock, set on every local write
+  deviceId: string; // stable per install, stored locally
+  deleted?: boolean; // deletion marker; never hard-delete synced records
+}
+
+export interface Book extends SyncMeta {
+  title: string;
+  author: string;
+  driveFileId: string;
+  fileName: string;
+  sizeBytes: number;
+  sha256: string;
+  pageCount: number;
+  outline: OutlineNode[]; // captured once at upload; [] if the PDF has none
+  coverFileId?: string;
+  language: 'en' | 'ar' | 'other'; // detected at upload from page text; editable
+  direction: 'ltr' | 'rtl'; // swipe direction; defaults from language
+  addedAt: number;
+  lastOpenedAt?: number;
+  status: 'to-read' | 'reading' | 'paused' | 'finished';
+  startedAt?: number; // first day with >=3 pages read (set automatically)
+  finishedAt?: number; // set when status becomes 'finished'
+  categoryIds: ID[]; // a book can be in several categories
+  tags: string[]; // free labels, lowercase-kebab
+  rating?: number; // integer 1-10
+  review?: string;
+  progressMode: 'last-page' | 'marked'; // per book [decided]
+  pageMode: 'swipe' | 'scroll'; // per book
+  lastPageReached: number; // furthest page opened (for last-page mode)
+}
+
+export interface OutlineNode {
+  key: string; // index path, e.g. "3.1"
+  title: string;
+  page: number;
+  children: OutlineNode[];
+}
+// Chapter page range = [node.page, nextNodeAtSameOrHigherLevel.page - 1], or to the book's end.
+
+export interface Position extends SyncMeta {
+  // id = `${bookId}:${deviceId}` (one per device)
+  bookId: ID;
+  page: number;
+  offset: number; // 0..1 within the page
+  zoom: number;
+  view: 'page' | 'reflow';
+}
+
+export interface ReadMark extends SyncMeta {
+  // id = `${bookId}:${page}`
+  bookId: ID;
+  page: number;
+  read: boolean;
+}
+
+export type Rect = { x: number; y: number; w: number; h: number }; // 0..1, relative to the page at scale 1
+
+export interface TextAnchor {
+  page: number;
+  start: { item: number; offset: number }; // pdf.js text-content item index + char offset
+  end: { item: number; offset: number };
+  rects: Rect[]; // computed once at creation; used for drawing
+  quote: string; // the selected text, for lists, search and export
+}
+
+export type SummaryScope =
+  | { kind: 'book' }
+  | { kind: 'outline'; nodeKey: string; title: string; fromPage: number; toPage: number }
+  | { kind: 'pages'; fromPage: number; toPage: number };
+
+export interface Annotation extends SyncMeta {
+  bookId: ID;
+  type: 'highlight' | 'note' | 'area' | 'side-note' | 'summary' | 'bookmark';
+  // highlight: colored text.  note: underlined text with a note, no color.
+  // area: a rectangle on a page.  side-note: attached to a page, never drawn.
+  page?: number; // all except summary
+  color?: 'yellow' | 'green' | 'blue' | 'pink'; // highlight, area
+  text?: TextAnchor; // highlight, note
+  rect?: Rect; // area
+  scope?: SummaryScope; // summary
+  body?: string; // note text / summary text
+  tags: string[];
+  createdAt: number;
+}
+
+export interface Category extends SyncMeta {
+  name: string;
+  order: number;
+}
+
+export interface UpNext extends SyncMeta {
+  id: 'up-next';
+  bookIds: ID[]; // ranked read-next list [decided]
+}
+
+export interface Goal extends SyncMeta {
+  categoryId: ID | null; // null = all books
+  measure: 'time' | 'pages';
+  target: number; // minutes or pages, per week
+}
+
+export interface Settings extends SyncMeta {
+  id: 'settings';
+  defaultProgressMode: Book['progressMode'];
+  defaultPageMode: Book['pageMode'];
+  defaultView: 'page' | 'reflow';
+  readerTheme: 'paper' | 'sepia' | 'night';
+  weekStartsOn: 0 | 1 | 6; // Sun / Mon / Sat; default 6 = Saturday [decided]
+  reminders: unknown; // typed as ReminderSettings in Plan 5
+  cardDirection: 'en-ar' | 'ar-en' | 'mixed'; // phase 2
+}
+
+export interface ReadingSession extends SyncMeta {
+  // written by exactly one device, never edited
+  bookId: ID;
+  startedAt: number;
+  endedAt: number;
+  activeMs: number; // excludes idle time
+  pagesRead: number[]; // pages that counted as read in this session (see 9.2)
+}
+
+export interface Word extends SyncMeta {
+  // phase 2
+  text: string;
+  translation: string;
+  bookId: ID;
+  page: number;
+  srs: { due: number; intervalDays: number; ease: number; reps: number; lapses: number };
+}
+
+export type TableName =
+  | 'books'
+  | 'categories'
+  | 'upNext'
+  | 'goals'
+  | 'settings'
+  | 'annotations'
+  | 'positions'
+  | 'readMarks'
+  | 'sessions'
+  | 'words';
+
+export type SyncRecord = SyncMeta & Record<string, unknown>;
