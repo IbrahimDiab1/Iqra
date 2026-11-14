@@ -3,6 +3,8 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { DomSanitizer } from '@angular/platform-browser';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
+import { OpenBookSheetComponent } from './books/open-book.sheet';
+import { RemoveBookSheetComponent } from './books/remove-book.sheet';
 import { COPY } from './ui/copy';
 import { icon, IconName } from './ui/icons';
 import { ToastComponent } from './ui/toast.component';
@@ -17,7 +19,14 @@ interface Tab {
 const TABLESS_ROUTE = /^\/(welcome|read)(\/|$)/;
 
 @Component({
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, ToastComponent],
+  imports: [
+    RouterOutlet,
+    RouterLink,
+    RouterLinkActive,
+    ToastComponent,
+    OpenBookSheetComponent,
+    RemoveBookSheetComponent,
+  ],
   selector: 'app-root',
   styleUrl: './app.css',
   templateUrl: './app.html',
