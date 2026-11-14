@@ -11,6 +11,14 @@ export interface DriveFileInfo {
 /** 401/403 from Drive: the access token is missing, expired or revoked. */
 export class DriveAuthError extends Error {}
 
+/** A Drive step got no answer within its deadline. Retry on a later pass. */
+export class DriveTimeoutError extends Error {
+  constructor() {
+    super('Drive request timed out');
+    this.name = 'DriveTimeoutError';
+  }
+}
+
 export interface DriveAdapter {
   listAppData(): Promise<DriveFileInfo[]>;
   readText(fileId: string): Promise<string>;

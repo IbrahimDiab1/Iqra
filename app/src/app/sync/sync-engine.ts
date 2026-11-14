@@ -28,6 +28,8 @@ const TABLES: TableName[] = [
 ];
 const DEBOUNCE_MS = 5000;
 const INTERVAL_MS = 120_000;
+/** A run still going after this long is abandoned, so a stalled call cannot block later syncs. */
+const RUN_TIMEOUT_MS = 5 * 60_000;
 
 interface PullResult {
   errors: string[];
@@ -91,6 +93,8 @@ export class SyncEngine implements OnDestroy {
   onAfterPull: ((dropped: { keep: ID; drop: ID }[]) => Promise<void>) | null = null;
 
   private inFlight: Promise<void> | null = null;
+  /** Changes on each run and on each abandoned run, so a stale run stops reporting. */
+  private runId = 0;
   private started = false;
   private changesSub: Subscription | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -114,10 +118,23 @@ export class SyncEngine implements OnDestroy {
 
   /** Runs one pass. Concurrent calls share the running pass. */
   syncNow(): Promise<void> {
-    this.inFlight ??= this.run().finally(() => {
+    this.inFlight ??= this.runWithWatchdog().finally(() => {
       this.inFlight = null;
     });
     return this.inFlight;
+  }
+
+  /** Resolves when the run ends, or after RUN_TIMEOUT_MS with status error. */
+  private runWithWatchdog(): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<void>((resolve) => {
+      timer = setTimeout(() => {
+        this.runId += 1;
+        this.setError('Sync timed out');
+        resolve();
+      }, RUN_TIMEOUT_MS);
+    });
+    return Promise.race([this.run(), expired]).finally(() => clearTimeout(timer));
   }
 
   ngOnDestroy(): void {
@@ -133,6 +150,11 @@ export class SyncEngine implements OnDestroy {
     const shard = shardFor(table, rec);
     this.statusSignal.set(!navigator.onLine ? 'offline' : this.auth.token() === null ? 'paused' : 'saving');
     this.patchState(shard, { dirty: true }).catch((error: unknown) => this.handleFailure(error));
+    this.scheduleSync();
+  }
+
+  /** Runs a pass DEBOUNCE_MS from now, replacing any pass already scheduled. */
+  private scheduleSync(): void {
     clearTimeout(this.debounceTimer);
     this.debounceTimer = setTimeout(() => void this.syncNow(), DEBOUNCE_MS);
   }
@@ -146,23 +168,34 @@ export class SyncEngine implements OnDestroy {
       this.statusSignal.set('paused');
       return;
     }
+    const id = ++this.runId;
+    const current = (): boolean => id === this.runId;
     try {
       if (await this.db.syncState.filter((s) => s.dirty).first()) this.statusSignal.set('saving');
       await this.runDueDeletes();
       const listing = await this.drive.listAppData();
       const pulled = await this.pull(listing);
+      if (!current()) return;
       await this.removeDuplicateBooks();
+      if (!current()) return;
       const errors = [...pulled.errors, ...(await this.push(pulled.primaryIds))];
       await this.deleteMergedExtras(pulled.extras);
+      if (!current()) return;
       if (errors.length > 0) {
         this.setError(errors[0]);
+        return;
+      }
+      // A change made during the run leaves its shard dirty: keep saving and sync again soon.
+      if (await this.db.syncState.filter((s) => s.dirty && !s.error).first()) {
+        this.statusSignal.set('saving');
+        this.scheduleSync();
         return;
       }
       this.lastErrorSignal.set(null);
       this.lastSyncedSignal.set(this.clock.now());
       this.statusSignal.set('synced');
     } catch (error) {
-      this.handleFailure(error);
+      if (current()) this.handleFailure(error);
     }
   }
 
@@ -187,16 +220,28 @@ export class SyncEngine implements OnDestroy {
    */
   private async pull(listing: DriveFileInfo[]): Promise<PullResult> {
     const result: PullResult = { errors: [], extras: new Map(), primaryIds: new Map() };
-    for (const [name, files] of groupByName(listing)) {
-      const primary = oldestFirst(files)[0];
-      result.primaryIds.set(name, primary.id);
-      if (files.length > 1) {
-        await this.pullDuplicates(name, oldestFirst(files), result);
-        continue;
+    const groups = groupByName(listing);
+    // A shard whose file is gone forgets its remote id; the next push recreates the file.
+    for (const state of await this.db.syncState.toArray()) {
+      if (state.remoteId && !groups.has(state.shard)) {
+        await this.patchState(state.shard, { remoteId: undefined, remoteModified: undefined, dirty: true });
       }
-      const state = await this.db.syncState.get(name);
-      if (state?.remoteId === primary.id && state.remoteModified === primary.modifiedTime && !state.error) continue;
-      await this.pullOne(primary, result);
+    }
+    for (const [name, files] of groups) {
+      try {
+        const primary = oldestFirst(files)[0];
+        result.primaryIds.set(name, primary.id);
+        if (files.length > 1) {
+          await this.pullDuplicates(name, oldestFirst(files), result);
+          continue;
+        }
+        const state = await this.db.syncState.get(name);
+        if (state?.remoteId === primary.id && state.remoteModified === primary.modifiedTime && !state.error) continue;
+        await this.pullOne(primary, result);
+      } catch (error) {
+        if (error instanceof DriveAuthError) throw error;
+        result.errors.push(error instanceof Error ? error.message : String(error));
+      }
     }
     return result;
   }
@@ -335,15 +380,22 @@ export class SyncEngine implements OnDestroy {
     const errors: string[] = [];
     const dirty = await this.db.syncState.filter((s) => s.dirty && !s.error).toArray();
     for (const state of dirty) {
-      const message = await this.pushShard(state, primaryIds.get(state.shard));
-      if (message) errors.push(message);
+      try {
+        const message = await this.pushShard(state, primaryIds.get(state.shard));
+        if (message) errors.push(message);
+      } catch (error) {
+        // One shard's failure must not stop the others. Its dirty flag is already restored.
+        if (error instanceof DriveAuthError) throw error;
+        errors.push(error instanceof Error ? error.message : String(error));
+      }
     }
     return errors;
   }
 
+  /** fileId comes only from the fresh listing; undefined creates the file. */
   private async pushShard(state: SyncState, listedId: string | undefined): Promise<string | null> {
     const shard = state.shard;
-    const fileId = state.remoteId ?? listedId;
+    const fileId = listedId;
     // Cleared before the read, so a change made during the push sets it again.
     await this.patchState(shard, { dirty: false });
     try {

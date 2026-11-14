@@ -101,6 +101,7 @@ describe('SyncEngine', () => {
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     for (const device of devices.splice(0)) {
       device.injector.destroy();
       await device.db.delete();
@@ -233,6 +234,60 @@ describe('SyncEngine', () => {
     expect(readText).not.toHaveBeenCalled();
     expect(writeAppDataJson).not.toHaveBeenCalled();
     expect(deleteFile).not.toHaveBeenCalled();
+  });
+
+  it('recreates a shard file that was deleted from Drive and reports synced', async () => {
+    await a.repo.put<Book>('books', bookDraft('b1', { title: 'Before' }));
+    await a.engine.syncNow();
+    const file = (await drive.listAppData()).find((f) => f.name === 'library.json')!;
+    await drive.deleteFile(file.id);
+
+    await a.repo.put<Book>('books', { ...(await a.db.books.get('b1'))!, title: 'After' });
+    await a.engine.syncNow();
+
+    expect(a.engine.status()).toBe('synced');
+    const remote = await remoteShard(drive, 'library.json');
+    expect(remote.tables.books?.[0]).toMatchObject({ id: 'b1', title: 'After' });
+  });
+
+  it('abandons a run that stalls for five minutes and syncs again on the next call', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    vi.spyOn(drive, 'listAppData').mockReturnValueOnce(new Promise(() => {}));
+
+    const stalled = a.engine.syncNow();
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    await stalled;
+
+    expect(a.engine.status()).toBe('error');
+    expect(a.engine.lastError()).toBe('Sync timed out');
+
+    await a.engine.syncNow();
+    expect(a.engine.status()).toBe('synced');
+  });
+
+  it('stays saving and syncs again when a change lands during a run', async () => {
+    await a.repo.put<Book>('books', bookDraft('b1'));
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const write = drive.writeAppDataJson.bind(drive);
+    let injected = false;
+    vi.spyOn(drive, 'writeAppDataJson').mockImplementation(async (name, json, fileId) => {
+      // The write has already been merged, so this record misses the file the run uploads.
+      if (!injected) {
+        injected = true;
+        await a.repo.put<Book>('books', bookDraft('b2'));
+      }
+      return write(name, json, fileId);
+    });
+
+    await a.engine.syncNow();
+    expect(a.engine.status()).toBe('saving');
+
+    await vi.advanceTimersByTimeAsync(5000);
+    await a.engine.syncNow();
+
+    expect(a.engine.status()).toBe('synced');
+    const remote = await remoteShard(drive, 'library.json');
+    expect(remote.tables.books?.map((r) => r.id).sort()).toEqual(['b1', 'b2']);
   });
 
   it('shares one run between concurrent syncNow calls', async () => {

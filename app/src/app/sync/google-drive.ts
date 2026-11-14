@@ -1,4 +1,4 @@
-import { DriveAdapter, DriveAuthError, DriveFileInfo } from './drive-adapter';
+import { DriveAdapter, DriveAuthError, DriveFileInfo, DriveTimeoutError } from './drive-adapter';
 
 export interface TokenSource {
   token(): string | null;
@@ -10,6 +10,8 @@ const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
 const BASE = 'https://www.googleapis.com';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const FILE_FIELDS = 'id,name,modifiedTime,size';
+/** Longest a request or a single download read may go without an answer. */
+const REQUEST_TIMEOUT_MS = 60_000;
 
 /** Shape of a Drive v3 file resource as this adapter requests it. */
 interface DriveFileResource {
@@ -23,6 +25,39 @@ interface DriveFileResource {
 type Sleep = (ms: number) => Promise<void>;
 
 const defaultSleep: Sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Runs one step under a deadline. The step is raced against the deadline, so a fetch that
+ * ignores its abort signal still fails. The signal aborts the step's fetch when time runs out
+ * or the caller's signal aborts.
+ */
+function withDeadline<T>(
+  ms: number,
+  step: (signal: AbortSignal) => Promise<T>,
+  external?: AbortSignal,
+): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let onExternal: (() => void) | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new DriveTimeoutError());
+      controller.abort();
+    }, ms);
+    if (external) {
+      onExternal = () => {
+        reject(new DOMException('Aborted', 'AbortError'));
+        controller.abort();
+      };
+      if (external.aborted) onExternal();
+      else external.addEventListener('abort', onExternal);
+    }
+  });
+  return Promise.race([step(controller.signal), deadline]).finally(() => {
+    clearTimeout(timer);
+    if (external && onExternal) external.removeEventListener('abort', onExternal);
+  });
+}
 
 /** Drive adapter that talks to the Drive v3 REST API with fetch. */
 export class GoogleDrive implements DriveAdapter {
@@ -46,10 +81,12 @@ export class GoogleDrive implements DriveAdapter {
     return (json.files ?? []).map(toInfo);
   }
 
-  async readText(fileId: string): Promise<string> {
-    const res = await this.request(`${BASE}/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`);
-    await ensureOk(res, 'read');
-    return res.text();
+  readText(fileId: string): Promise<string> {
+    return withDeadline(REQUEST_TIMEOUT_MS, async (signal) => {
+      const res = await this.request(`${BASE}/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, { signal });
+      await ensureOk(res, 'read');
+      return res.text();
+    });
   }
 
   writeAppDataJson(name: string, json: string, fileId?: string): Promise<DriveFileInfo> {
@@ -76,12 +113,17 @@ export class GoogleDrive implements DriveAdapter {
     return this.sendChunks(sessionUrl, blob, onProgress);
   }
 
+  /** The response may take up to 60 s to start, and each read may wait up to 60 s for more bytes. */
   async downloadBlob(fileId: string, onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<Blob> {
-    const res = await this.request(`${BASE}/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, { signal });
+    const res = await withDeadline(
+      REQUEST_TIMEOUT_MS,
+      (deadlineSignal) => this.request(`${BASE}/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, { signal: deadlineSignal }),
+      signal,
+    );
     await ensureOk(res, 'download');
     const type = res.headers.get('Content-Type') ?? '';
     if (!res.body) {
-      const blob = await res.blob();
+      const blob = await withDeadline(REQUEST_TIMEOUT_MS, () => res.blob(), signal);
       onProgress?.(1);
       return blob;
     }
@@ -91,7 +133,10 @@ export class GoogleDrive implements DriveAdapter {
     const parts: Uint8Array[] = [];
     let received = 0;
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await withDeadline(REQUEST_TIMEOUT_MS, () => reader.read(), signal).catch(async (error) => {
+        await reader.cancel().catch(() => undefined);
+        throw error;
+      });
       if (done) break;
       parts.push(value);
       received += value.byteLength;
@@ -102,9 +147,11 @@ export class GoogleDrive implements DriveAdapter {
 
   /** A 404 counts as success. */
   async deleteFile(fileId: string): Promise<void> {
-    const res = await this.request(`${BASE}/drive/v3/files/${encodeURIComponent(fileId)}`, { method: 'DELETE' });
-    if (res.status === 404) return;
-    await ensureOk(res, 'delete');
+    await withDeadline(REQUEST_TIMEOUT_MS, async (signal) => {
+      const res = await this.request(`${BASE}/drive/v3/files/${encodeURIComponent(fileId)}`, { method: 'DELETE', signal });
+      if (res.status === 404) return;
+      await ensureOk(res, 'delete');
+    });
   }
 
   async storageQuota(): Promise<{ limit: number; usage: number }> {
@@ -136,9 +183,11 @@ export class GoogleDrive implements DriveAdapter {
   ): Promise<DriveFileInfo> {
     if (fileId !== undefined) {
       const url = `${BASE}/upload/drive/v3/files/${encodeURIComponent(fileId)}?uploadType=media&fields=${FILE_FIELDS}`;
-      const res = await this.request(url, { method: 'PATCH', headers: { 'Content-Type': mediaType }, body: media });
-      await ensureOk(res, 'update');
-      return toInfo((await res.json()) as DriveFileResource);
+      return withDeadline(REQUEST_TIMEOUT_MS, async (signal) => {
+        const res = await this.request(url, { method: 'PATCH', headers: { 'Content-Type': mediaType }, body: media, signal });
+        await ensureOk(res, 'update');
+        return toInfo((await res.json()) as DriveFileResource);
+      });
     }
 
     const boundary = `iqra${Math.random().toString(36).slice(2)}`;
@@ -150,30 +199,36 @@ export class GoogleDrive implements DriveAdapter {
       `\r\n--${boundary}--`,
     ]);
     const url = `${BASE}/upload/drive/v3/files?uploadType=multipart&fields=${FILE_FIELDS}`;
-    const res = await this.request(url, {
-      method: 'POST',
-      headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
-      body,
+    return withDeadline(REQUEST_TIMEOUT_MS, async (signal) => {
+      const res = await this.request(url, {
+        method: 'POST',
+        headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+        body,
+        signal,
+      });
+      await ensureOk(res, 'create');
+      return toInfo((await res.json()) as DriveFileResource);
     });
-    await ensureOk(res, 'create');
-    return toInfo((await res.json()) as DriveFileResource);
   }
 
   private async startResumableSession(blob: Blob, name: string, folderId: string, bookId: string): Promise<string> {
     const metadata = { name, parents: [folderId], appProperties: { iqraBookId: bookId } };
-    const res = await this.request(`${BASE}/upload/drive/v3/files?uploadType=resumable&fields=${FILE_FIELDS}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'X-Upload-Content-Type': blob.type || 'application/pdf',
-        'X-Upload-Content-Length': String(blob.size),
-      },
-      body: JSON.stringify(metadata),
+    return withDeadline(REQUEST_TIMEOUT_MS, async (signal) => {
+      const res = await this.request(`${BASE}/upload/drive/v3/files?uploadType=resumable&fields=${FILE_FIELDS}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=UTF-8',
+          'X-Upload-Content-Type': blob.type || 'application/pdf',
+          'X-Upload-Content-Length': String(blob.size),
+        },
+        body: JSON.stringify(metadata),
+        signal,
+      });
+      await ensureOk(res, 'upload start');
+      const location = res.headers.get('Location');
+      if (!location) throw new Error('Drive upload start returned no session URL');
+      return location;
     });
-    await ensureOk(res, 'upload start');
-    const location = res.headers.get('Location');
-    if (!location) throw new Error('Drive upload start returned no session URL');
-    return location;
   }
 
   /**
@@ -200,23 +255,29 @@ export class GoogleDrive implements DriveAdapter {
 
         const end = Math.min(offset + CHUNK_SIZE, total);
         const range = total === 0 ? `bytes */0` : `bytes ${offset}-${end - 1}/${total}`;
-        const res = await this.request(sessionUrl, {
-          method: 'PUT',
-          headers: { 'Content-Range': range },
-          body: blob.slice(offset, end),
+        const outcome = await withDeadline(REQUEST_TIMEOUT_MS, async (signal) => {
+          const res = await this.request(sessionUrl, {
+            method: 'PUT',
+            headers: { 'Content-Range': range },
+            body: blob.slice(offset, end),
+            signal,
+          });
+          if (res.status === 308) return { done: false as const };
+          await ensureOk(res, 'upload');
+          return { done: true as const, info: toInfo((await res.json()) as DriveFileResource) };
         });
 
-        if (res.status === 308) {
+        if (!outcome.done) {
           failures = 0;
           offset = end;
           onProgress?.(offset / total);
           continue;
         }
-        await ensureOk(res, 'upload');
         onProgress?.(1);
-        return toInfo((await res.json()) as DriveFileResource);
+        return outcome.info;
       } catch (error) {
-        if (!(error instanceof TypeError) || failures >= RETRY_DELAYS_MS.length) throw error;
+        const retryable = error instanceof TypeError || error instanceof DriveTimeoutError;
+        if (!retryable || failures >= RETRY_DELAYS_MS.length) throw error;
         await this.sleep(RETRY_DELAYS_MS[failures]);
         failures += 1;
         recover = true;
@@ -229,17 +290,20 @@ export class GoogleDrive implements DriveAdapter {
     sessionUrl: string,
     total: number,
   ): Promise<{ offset: number } | { info: DriveFileInfo }> {
-    const res = await this.request(sessionUrl, {
-      method: 'PUT',
-      headers: { 'Content-Range': `bytes */${total}` },
-      body: '',
+    return withDeadline(REQUEST_TIMEOUT_MS, async (signal) => {
+      const res = await this.request(sessionUrl, {
+        method: 'PUT',
+        headers: { 'Content-Range': `bytes */${total}` },
+        body: '',
+        signal,
+      });
+      if (res.status === 308) {
+        const last = /-(\d+)$/.exec(res.headers.get('Range') ?? '');
+        return { offset: last ? Number(last[1]) + 1 : 0 };
+      }
+      await ensureOk(res, 'upload status');
+      return { info: toInfo((await res.json()) as DriveFileResource) };
     });
-    if (res.status === 308) {
-      const last = /-(\d+)$/.exec(res.headers.get('Range') ?? '');
-      return { offset: last ? Number(last[1]) + 1 : 0 };
-    }
-    await ensureOk(res, 'upload status');
-    return { info: toInfo((await res.json()) as DriveFileResource) };
   }
 
   private async findFolder(name: string, parentId: string): Promise<string | undefined> {
@@ -249,20 +313,25 @@ export class GoogleDrive implements DriveAdapter {
     return json.files?.[0]?.id;
   }
 
-  private async createFolder(name: string, parentId: string): Promise<string> {
-    const res = await this.request(`${BASE}/drive/v3/files?fields=id`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-      body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: [parentId] }),
+  private createFolder(name: string, parentId: string): Promise<string> {
+    return withDeadline(REQUEST_TIMEOUT_MS, async (signal) => {
+      const res = await this.request(`${BASE}/drive/v3/files?fields=id`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+        body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: [parentId] }),
+        signal,
+      });
+      await ensureOk(res, 'folder create');
+      return ((await res.json()) as DriveFileResource).id;
     });
-    await ensureOk(res, 'folder create');
-    return ((await res.json()) as DriveFileResource).id;
   }
 
-  private async getJson<T>(url: string, what: string): Promise<T> {
-    const res = await this.request(url);
-    await ensureOk(res, what);
-    return (await res.json()) as T;
+  private getJson<T>(url: string, what: string): Promise<T> {
+    return withDeadline(REQUEST_TIMEOUT_MS, async (signal) => {
+      const res = await this.request(url, { signal });
+      await ensureOk(res, what);
+      return (await res.json()) as T;
+    });
   }
 
   /** Adds the bearer token and maps 401/403 to DriveAuthError. Other statuses are left to the caller. */

@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { DriveAuthError } from './drive-adapter';
+import { DriveAuthError, DriveTimeoutError } from './drive-adapter';
 import { CHUNK_SIZE, GoogleDrive, TokenSource } from './google-drive';
 
 const TOTAL = 20971520;
@@ -158,5 +158,22 @@ describe('GoogleDrive', () => {
       url: `${BASE}/drive/v3/files/f9?alt=media`,
       httpHeaders: { Authorization: 'Bearer t1' },
     });
+  });
+});
+
+describe('GoogleDrive deadlines', () => {
+  it('fails a request that gets no answer within 60 seconds with a retryable timeout', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const fetchFn = vi.fn(() => new Promise<Response>(() => {}));
+      const drive = new GoogleDrive(tokens('t1'), fetchFn, vi.fn());
+
+      const pending = drive.listAppData();
+      const assertion = expect(pending).rejects.toBeInstanceOf(DriveTimeoutError);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
