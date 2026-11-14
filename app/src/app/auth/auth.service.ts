@@ -38,6 +38,16 @@ const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const PROFILE_KEY = 'iqra.profile';
 /** The token is treated as expired this long before Google expires it. */
 const EXPIRY_MARGIN_MS = 60_000;
+/** A silent token request that GIS has not answered by now counts as failed. */
+const SILENT_TIMEOUT_MS = 10_000;
+
+/** The user closed or never opened the Google sign-in popup. The state is left unchanged. */
+export class AuthCancelledError extends Error {
+  constructor() {
+    super('Sign-in was cancelled');
+    this.name = 'AuthCancelledError';
+  }
+}
 
 interface TokenResponse {
   access_token?: string;
@@ -46,13 +56,19 @@ interface TokenResponse {
 }
 
 interface TokenClient {
-  requestAccessToken(options: { prompt: string }): void;
+  requestAccessToken(options: { prompt?: string }): void;
 }
 
 interface GisTokenConfig {
   client_id: string;
   scope: string;
   callback: (response: TokenResponse) => void;
+  error_callback: (error: { type: string }) => void;
+}
+
+interface Pending {
+  resolve: (grant: Grant) => void;
+  reject: (error: Error) => void;
 }
 
 declare global {
@@ -120,7 +136,7 @@ export class GisAuthService extends AuthApi {
   private accessToken: string | null = null;
   private expiresAt = 0;
   private client: TokenClient | null = null;
-  private pending: { resolve: (grant: Grant) => void; reject: (error: Error) => void } | null = null;
+  private pending: Pending | null = null;
 
   constructor() {
     super();
@@ -141,7 +157,7 @@ export class GisAuthService extends AuthApi {
   }
 
   async signIn(): Promise<void> {
-    const grant = await this.requestGrant('consent');
+    const grant = await this.requestGrant(undefined);
     const profile = await this.fetchProfile(grant.token);
     this.profileSignal.set(profile);
     writeStoredProfile(profile);
@@ -154,7 +170,7 @@ export class GisAuthService extends AuthApi {
 
   async trySilent(): Promise<boolean> {
     try {
-      this.commit(await this.requestGrant('none'));
+      this.commit(await this.requestGrant('none', SILENT_TIMEOUT_MS));
       return true;
     } catch {
       return false;
@@ -181,11 +197,29 @@ export class GisAuthService extends AuthApi {
     this.stateSignal.set('signed-in');
   }
 
-  private async requestGrant(prompt: string): Promise<Grant> {
+  /** prompt undefined leaves the prompt to GIS, which shows consent only when needed. */
+  private async requestGrant(prompt: string | undefined, timeoutMs?: number): Promise<Grant> {
     const client = await this.ensureClient();
     return new Promise<Grant>((resolve, reject) => {
-      this.pending = { resolve, reject };
-      client.requestAccessToken({ prompt });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const pending: Pending = {
+        resolve: (grant) => {
+          clearTimeout(timer);
+          resolve(grant);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      };
+      this.pending = pending;
+      if (timeoutMs !== undefined) {
+        timer = setTimeout(() => {
+          if (this.pending === pending) this.pending = null;
+          reject(new AuthCancelledError());
+        }, timeoutMs);
+      }
+      client.requestAccessToken(prompt === undefined ? {} : { prompt });
     });
   }
 
@@ -195,6 +229,11 @@ export class GisAuthService extends AuthApi {
     this.client = window.google!.accounts.oauth2.initTokenClient({
       client_id: environment.googleClientId,
       scope: SCOPES,
+      error_callback: () => {
+        const pending = this.pending;
+        this.pending = null;
+        pending?.reject(new AuthCancelledError());
+      },
       callback: (response) => {
         const pending = this.pending;
         this.pending = null;
