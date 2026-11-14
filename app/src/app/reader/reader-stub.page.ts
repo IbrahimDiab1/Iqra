@@ -1,4 +1,5 @@
 import { Component, DestroyRef, ElementRef, inject, signal, viewChild } from '@angular/core';
+import { DomSanitizer } from '@angular/platform-browser';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import { CLOCK } from '../core/clock';
@@ -7,6 +8,7 @@ import { Repo } from '../core/repo';
 import type { Book } from '../core/models';
 import { loadPdfjs } from '../books/import/pdf-meta';
 import { DRIVE_ADAPTER } from '../sync/drive-adapter';
+import { icon } from '../ui/icons';
 import { COPY } from '../ui/copy';
 
 /**
@@ -18,7 +20,7 @@ import { COPY } from '../ui/copy';
   selector: 'f-reader-stub-page',
   template: `
     <section class="page">
-      <a class="back" routerLink="/library">{{ copy.back }}</a>
+      <a class="back" routerLink="/library"><span [innerHTML]="backIcon"></span>{{ copy.back }}</a>
       @if (state() === 'loading') {
         <p class="status">{{ copy.loading }}</p>
       } @else if (state() === 'error') {
@@ -33,7 +35,7 @@ import { COPY } from '../ui/copy';
   `,
   styles: `
     .page { display: grid; gap: 12px; padding: 16px var(--gutter); }
-    .back { justify-self: start; color: var(--accent); font-size: 15px; }
+    .back { justify-self: start; display: inline-flex; align-items: center; gap: 4px; min-width: 40px; min-height: 40px; padding: 0 8px 0 4px; color: var(--accent); font-size: 15px; text-decoration: none; }
     .status, .count { margin: 0; color: var(--muted); font-size: 15px; }
     .stage { width: 100%; }
     canvas { display: block; max-width: 100%; box-shadow: 0 1px 4px rgb(0 0 0 / 0.2); }
@@ -41,6 +43,7 @@ import { COPY } from '../ui/copy';
 })
 export class ReaderStubPage {
   protected readonly copy = COPY.reader;
+  protected readonly backIcon = inject(DomSanitizer).bypassSecurityTrustHtml(icon('back', 22));
   protected readonly state = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly pageLabel = signal('');
 
