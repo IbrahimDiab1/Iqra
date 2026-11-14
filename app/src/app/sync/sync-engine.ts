@@ -29,6 +29,28 @@ const TABLES: TableName[] = [
 const DEBOUNCE_MS = 5000;
 const INTERVAL_MS = 120_000;
 
+interface PullResult {
+  errors: string[];
+  /** Extra copies of duplicated shards, keyed by shard name. */
+  extras: Map<string, DriveFileInfo[]>;
+  /** The Drive file each shard is written to: the oldest copy. */
+  primaryIds: Map<string, string>;
+}
+
+function groupByName(listing: DriveFileInfo[]): Map<string, DriveFileInfo[]> {
+  const groups = new Map<string, DriveFileInfo[]>();
+  for (const file of listing) {
+    const group = groups.get(file.name);
+    if (group) group.push(file);
+    else groups.set(file.name, [file]);
+  }
+  return groups;
+}
+
+function oldestFirst(files: DriveFileInfo[]): DriveFileInfo[] {
+  return [...files].sort((x, y) => x.modifiedTime.localeCompare(y.modifiedTime) || x.id.localeCompare(y.id));
+}
+
 /** Parses a shard file. Null when it is not JSON, or it was written by a newer schema. */
 function parseShardDoc(text: string): ShardDoc | null {
   let json: unknown;
@@ -128,9 +150,10 @@ export class SyncEngine implements OnDestroy {
       if (await this.db.syncState.filter((s) => s.dirty).first()) this.statusSignal.set('saving');
       await this.runDueDeletes();
       const listing = await this.drive.listAppData();
-      const errors = await this.pull(listing);
+      const pulled = await this.pull(listing);
       await this.removeDuplicateBooks();
-      errors.push(...(await this.push(listing)));
+      const errors = [...pulled.errors, ...(await this.push(pulled.primaryIds))];
+      await this.deleteMergedExtras(pulled.extras);
       if (errors.length > 0) {
         this.setError(errors[0]);
         return;
@@ -157,31 +180,70 @@ export class SyncEngine implements OnDestroy {
     this.statusSignal.set('error');
   }
 
-  /** Downloads each changed file and merges it into the local tables. Returns the unreadable-file messages. */
-  private async pull(listing: DriveFileInfo[]): Promise<string[]> {
-    const errors: string[] = [];
-    for (const file of listing) {
-      const state = await this.db.syncState.get(file.name);
-      if (state?.remoteId === file.id && state.remoteModified === file.modifiedTime && !state.error) continue;
-
-      const doc = parseShardDoc(await this.drive.readText(file.id));
-      if (!doc) {
-        const message = COPY.sync.unreadable(file.name);
-        await this.patchState(file.name, { error: message });
-        errors.push(message);
+  /**
+   * Downloads each changed file and merges it into the local tables. A shard that exists as
+   * several Drive files (two devices created it at once) is merged from all of them; the oldest
+   * becomes its remote file, and the others are removed after a successful push.
+   */
+  private async pull(listing: DriveFileInfo[]): Promise<PullResult> {
+    const result: PullResult = { errors: [], extras: new Map(), primaryIds: new Map() };
+    for (const [name, files] of groupByName(listing)) {
+      const primary = oldestFirst(files)[0];
+      result.primaryIds.set(name, primary.id);
+      if (files.length > 1) {
+        await this.pullDuplicates(name, oldestFirst(files), result);
         continue;
       }
-      await this.db.transaction('rw', this.syncTables(), async () => {
-        const { needsPush } = await this.mergeIntoLocal(file.name, doc);
-        await this.patchState(file.name, {
-          remoteId: file.id,
-          remoteModified: file.modifiedTime,
-          error: undefined,
-          ...(needsPush ? { dirty: true } : {}),
-        });
-      });
+      const state = await this.db.syncState.get(name);
+      if (state?.remoteId === primary.id && state.remoteModified === primary.modifiedTime && !state.error) continue;
+      await this.pullOne(primary, result);
     }
-    return errors;
+    return result;
+  }
+
+  private async pullOne(file: DriveFileInfo, result: PullResult): Promise<void> {
+    const doc = parseShardDoc(await this.drive.readText(file.id));
+    if (!doc) {
+      const message = COPY.sync.unreadable(file.name);
+      await this.patchState(file.name, { error: message });
+      result.errors.push(message);
+      return;
+    }
+    await this.db.transaction('rw', this.syncTables(), async () => {
+      const { needsPush } = await this.mergeIntoLocal(file.name, doc);
+      await this.patchState(file.name, {
+        remoteId: file.id,
+        remoteModified: file.modifiedTime,
+        error: undefined,
+        ...(needsPush ? { dirty: true } : {}),
+      });
+    });
+  }
+
+  /** Merges every copy of a duplicated shard. Dirty is set so the push writes the merged result. */
+  private async pullDuplicates(name: string, files: DriveFileInfo[], result: PullResult): Promise<void> {
+    const docs: ShardDoc[] = [];
+    for (const file of files) {
+      const doc = parseShardDoc(await this.drive.readText(file.id));
+      if (!doc) {
+        const message = COPY.sync.unreadable(name);
+        await this.patchState(name, { error: message });
+        result.errors.push(message);
+        return;
+      }
+      docs.push(doc);
+    }
+    const [primary, ...extras] = files;
+    await this.db.transaction('rw', this.syncTables(), async () => {
+      for (const doc of docs) await this.mergeIntoLocal(name, doc);
+      await this.patchState(name, {
+        remoteId: primary.id,
+        remoteModified: primary.modifiedTime,
+        error: undefined,
+        dirty: true,
+      });
+    });
+    result.extras.set(name, extras);
   }
 
   /**
@@ -208,15 +270,14 @@ export class SyncEngine implements OnDestroy {
     return { merged, needsPush };
   }
 
+  /**
+   * Writes remote records as they are. A pulled tombstone never queues a Drive delete: only the
+   * device that decides a deletion (Delete everywhere, or its own duplicate pass) does, so the
+   * undo window of the deleting device stays intact.
+   */
   private async applyRemote(table: TableName, recs: SyncRecord[]): Promise<void> {
     if (recs.length === 0) return;
     await this.repo.applyRemote(table, recs);
-    if (table !== 'books') return;
-    for (const rec of recs) {
-      if (rec.deleted) {
-        await this.queueDriveDeletes([rec['driveFileId'] as string | undefined, rec['coverFileId'] as string | undefined]);
-      }
-    }
   }
 
   /**
@@ -270,14 +331,11 @@ export class SyncEngine implements OnDestroy {
   }
 
   /** Writes the shards that changed locally. Returns the unreadable-file messages. */
-  private async push(listing: DriveFileInfo[]): Promise<string[]> {
-    const listedIds = new Map<string, string>();
-    for (const file of listing) if (!listedIds.has(file.name)) listedIds.set(file.name, file.id);
-
+  private async push(primaryIds: Map<string, string>): Promise<string[]> {
     const errors: string[] = [];
     const dirty = await this.db.syncState.filter((s) => s.dirty && !s.error).toArray();
     for (const state of dirty) {
-      const message = await this.pushShard(state, listedIds.get(state.shard));
+      const message = await this.pushShard(state, primaryIds.get(state.shard));
       if (message) errors.push(message);
     }
     return errors;
@@ -308,7 +366,30 @@ export class SyncEngine implements OnDestroy {
     }
   }
 
-  /** Deletes Drive files queued by duplicate cleanup and deleted books. Failed deletes stay queued. */
+  /**
+   * Removes the extra copies of duplicated shards, once their records are in the primary file.
+   * A shard still dirty or in error has not been pushed, so its extras stay. The listing is
+   * taken again, and an extra changed since it was read is kept for the next pass.
+   */
+  private async deleteMergedExtras(extras: Map<string, DriveFileInfo[]>): Promise<void> {
+    const ready: DriveFileInfo[] = [];
+    for (const [name, files] of extras) {
+      const state = await this.db.syncState.get(name);
+      if (state && !state.dirty && !state.error) ready.push(...files);
+    }
+    if (ready.length === 0) return;
+    const current = new Map((await this.drive.listAppData()).map((f) => [f.id, f.modifiedTime]));
+    for (const file of ready) {
+      if (current.get(file.id) !== file.modifiedTime) continue;
+      try {
+        await this.drive.deleteFile(file.id);
+      } catch (error) {
+        if (error instanceof DriveAuthError) throw error;
+      }
+    }
+  }
+
+  /** Deletes Drive files queued by duplicate cleanup. Failed deletes stay queued. */
   private async runDueDeletes(): Promise<void> {
     const now = this.clock.now();
     const due = (await this.db.pendingDriveDeletes.toArray()).filter((d) => d.notBefore <= now);

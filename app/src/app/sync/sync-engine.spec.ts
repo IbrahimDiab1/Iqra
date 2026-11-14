@@ -187,8 +187,35 @@ describe('SyncEngine', () => {
 
     const live = (await a.db.books.toArray()).filter((book) => !book.deleted);
     expect(live.map((book) => ({ id: book.id, addedAt: book.addedAt }))).toEqual([{ id: 'ba', addedAt: 1 }]);
-    const pending = await a.db.pendingDriveDeletes.toArray();
-    expect(pending.map((p) => p.fileId)).toContain('drive-b');
+    // B's own duplicate pass decided the drop, so B queues the PDF. A only pulled the tombstone.
+    expect((await b.db.pendingDriveDeletes.toArray()).map((p) => p.fileId)).toContain('drive-b');
+    expect(await a.db.pendingDriveDeletes.toArray()).toEqual([]);
+  });
+
+  it('does not queue a Drive delete when a device pulls a tombstoned book', async () => {
+    await a.repo.put<Book>('books', bookDraft('b1', { driveFileId: 'drive-b1' }));
+    await a.engine.syncNow();
+    await a.repo.softDelete('books', 'b1');
+    await a.engine.syncNow();
+
+    await b.engine.syncNow();
+
+    expect((await b.db.books.get('b1'))?.deleted).toBe(true);
+    expect(await b.db.pendingDriveDeletes.toArray()).toEqual([]);
+  });
+
+  it('merges two Drive files with the same shard name and leaves one', async () => {
+    await drive.writeAppDataJson('library.json', JSON.stringify({ schemaVersion: 1, tables: { books: [{ ...bookDraft('b1'), updatedAt: 5, deviceId: 'x' }] } }));
+    await drive.writeAppDataJson('library.json', JSON.stringify({ schemaVersion: 1, tables: { books: [{ ...bookDraft('b2'), updatedAt: 6, deviceId: 'y' }] } }));
+
+    await a.engine.syncNow();
+
+    expect(a.engine.status()).toBe('synced');
+    expect((await a.db.books.toArray()).map((book) => book.id).sort()).toEqual(['b1', 'b2']);
+    const libraries = (await drive.listAppData()).filter((f) => f.name === 'library.json');
+    expect(libraries).toHaveLength(1);
+    const remote = await remoteShard(drive, 'library.json');
+    expect(remote.tables.books?.map((r) => r.id).sort()).toEqual(['b1', 'b2']);
   });
 
   it('is offline with no adapter calls when navigator.onLine is false', async () => {
