@@ -51,22 +51,30 @@ export class UploadQueue {
 
   private async process(entry: PendingUpload): Promise<void> {
     const book = await this.db.books.get(entry.bookId);
-    // A book that was removed as a duplicate has nothing left to upload.
-    if (book && !book.deleted) {
-      if (entry.kind === 'pdf') await this.uploadPdf(book);
-      else await this.uploadCover(book);
+    const blob = await this.localBlob(entry);
+    // Nothing to upload for a book that was removed as a duplicate, or whose local file is gone.
+    // Dropping the entry keeps it from blocking the entries behind it.
+    if (!book || book.deleted || !blob) {
+      console.warn('Dropped a pending upload with nothing to send', entry);
+    } else if (entry.kind === 'pdf') {
+      await this.uploadPdf(book, blob);
+    } else {
+      await this.uploadCover(book, blob);
     }
     await this.db.pendingUploads.delete(entry.id);
   }
 
-  private async uploadPdf(book: Book): Promise<void> {
+  private async localBlob(entry: PendingUpload): Promise<Blob | undefined> {
+    if (entry.kind === 'pdf') return (await this.db.pdfFiles.get(entry.bookId))?.blob;
+    return (await this.db.covers.get(entry.bookId))?.blob;
+  }
+
+  private async uploadPdf(book: Book, blob: Blob): Promise<void> {
     if (book.driveFileId) return;
-    const file = await this.db.pdfFiles.get(book.id);
-    if (!file) throw new Error(`No PDF stored for book ${book.id}`);
     this.booksFolderId ??= await this.drive.ensureBooksFolder();
     this.setProgress(book.id, 0);
     try {
-      const info = await this.drive.uploadPdf(file.blob, book.fileName, this.booksFolderId, book.id, (fraction) =>
+      const info = await this.drive.uploadPdf(blob, book.fileName, this.booksFolderId, book.id, (fraction) =>
         this.setProgress(book.id, fraction),
       );
       await this.saveFileIds(book.id, { driveFileId: info.id });
@@ -75,11 +83,9 @@ export class UploadQueue {
     }
   }
 
-  private async uploadCover(book: Book): Promise<void> {
+  private async uploadCover(book: Book, blob: Blob): Promise<void> {
     if (book.coverFileId) return;
-    const cover = await this.db.covers.get(book.id);
-    if (!cover) throw new Error(`No cover stored for book ${book.id}`);
-    const info = await this.drive.writeAppDataBlob(`cover-${book.id}.jpg`, cover.blob);
+    const info = await this.drive.writeAppDataBlob(`cover-${book.id}.jpg`, blob);
     await this.saveFileIds(book.id, { coverFileId: info.id });
   }
 

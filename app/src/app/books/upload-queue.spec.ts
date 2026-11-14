@@ -21,9 +21,12 @@ describe('UploadQueue', () => {
   let auth: FakeAuthService;
   let queue: UploadQueue;
   let importer: ImportService;
+  /** Books whose stored PDF and cover reads return nothing, as if the local files were lost. */
+  let withoutBlob: Set<string>;
 
   beforeEach(() => {
     localStorage.clear();
+    withoutBlob = new Set();
     drive = new FakeDrive();
     TestBed.configureTestingModule({
       providers: [
@@ -44,14 +47,15 @@ describe('UploadQueue', () => {
     // fake-indexeddb returns stored Blobs as plain objects in this environment, so the PDF and cover
     // are read back here as real Blobs. Only the queue's reads are stubbed.
     vi.spyOn(db.pdfFiles, 'get').mockImplementation(((bookId: string) =>
-      Promise.resolve({
-        bookId,
-        blob: new Blob(['bytes'], { type: 'application/pdf' }),
-        sizeBytes: 5,
-        savedAt: 1000,
-      })) as never);
+      Promise.resolve(
+        withoutBlob.has(bookId)
+          ? undefined
+          : { bookId, blob: new Blob(['bytes'], { type: 'application/pdf' }), sizeBytes: 5, savedAt: 1000 },
+      )) as never);
     vi.spyOn(db.covers, 'get').mockImplementation(((bookId: string) =>
-      Promise.resolve({ bookId, blob: new Blob(['jpeg'], { type: 'image/jpeg' }) })) as never);
+      Promise.resolve(
+        withoutBlob.has(bookId) ? undefined : { bookId, blob: new Blob(['jpeg'], { type: 'image/jpeg' }) },
+      )) as never);
     auth = TestBed.inject(AuthApi) as FakeAuthService;
     queue = TestBed.inject(UploadQueue);
     importer = TestBed.inject(ImportService);
@@ -125,6 +129,22 @@ describe('UploadQueue', () => {
     expect(seen).toEqual([0.5, 1]);
     expect(queue.progress().has(book.id)).toBe(false);
     expect(await pendingFor(book.id)).toEqual([]);
+  });
+
+  it('drops an entry whose local blob is missing so the entries behind it still upload', async () => {
+    const [badId] = (await importer.importFiles([pdf('bad.pdf', 'bad')])).added;
+    const [goodId] = (await importer.importFiles([pdf('good.pdf', 'good')])).added;
+    withoutBlob.add(badId);
+    await auth.signIn();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await queue.run();
+
+    expect(await pendingFor(badId)).toEqual([]);
+    expect(await pendingFor(goodId)).toEqual([]);
+    expect((await db.books.get(goodId))!.driveFileId).not.toBe('');
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it('does nothing while signed out', async () => {
