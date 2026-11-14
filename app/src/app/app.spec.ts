@@ -3,6 +3,16 @@ import { ComponentFixture } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { App } from './app';
 import { routes } from './app.routes';
+import { AuthApi } from './auth/auth.service';
+import { FakeAuthService } from './auth/fake-auth.service';
+import { DRIVE_ADAPTER } from './sync/drive-adapter';
+import { FakeDrive } from './sync/fake-drive';
+
+function signedInAuth(): FakeAuthService {
+  const auth = new FakeAuthService();
+  void auth.signIn();
+  return auth;
+}
 
 describe('App shell', () => {
   let fixture: ComponentFixture<App>;
@@ -16,7 +26,7 @@ describe('App shell', () => {
   }
 
   beforeEach(() => {
-    TestBed.configureTestingModule({ imports: [App], providers: [provideRouter(routes)] });
+    TestBed.configureTestingModule({ imports: [App], providers: [provideRouter(routes), { provide: AuthApi, useFactory: signedInAuth }, { provide: DRIVE_ADAPTER, useFactory: () => new FakeDrive() }] });
     router = TestBed.inject(Router);
     fixture = TestBed.createComponent(App);
     el = fixture.nativeElement as HTMLElement;
@@ -39,8 +49,26 @@ describe('App shell', () => {
     expect(el.textContent).toContain('Coming soon');
   });
 
-  it.each(['/welcome', '/read/abc'])('hides the tab bar on %s', async (url) => {
-    await go(url);
+  it('hides the tab bar on /read/abc', async () => {
+    await go('/read/abc');
+    expect(el.querySelector('nav.tabbar')).toBeNull();
+  });
+
+  it('hides the tab bar on /welcome when signed out', async () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [App],
+      providers: [
+        provideRouter(routes),
+        { provide: AuthApi, useClass: FakeAuthService },
+        { provide: DRIVE_ADAPTER, useFactory: () => new FakeDrive() },
+      ],
+    });
+    router = TestBed.inject(Router);
+    fixture = TestBed.createComponent(App);
+    el = fixture.nativeElement as HTMLElement;
+    await go('/welcome');
+    expect(router.url).toBe('/welcome');
     expect(el.querySelector('nav.tabbar')).toBeNull();
   });
 });
