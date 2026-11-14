@@ -31,13 +31,15 @@ function bookDraft(id: string): Omit<Book, 'updatedAt' | 'deviceId'> {
 describe('Repo', () => {
   let repo: Repo;
   let db: IqraDb;
+  let clock: { t: number };
 
   beforeEach(() => {
     localStorage.clear();
+    clock = { t: 1000 };
     TestBed.configureTestingModule({
       providers: [
         { provide: DB, useFactory: () => new IqraDb(`iqra-test-${newId()}`) },
-        { provide: CLOCK, useValue: { now: () => 1000 } },
+        { provide: CLOCK, useValue: { now: () => clock.t } },
       ],
     });
     repo = TestBed.inject(Repo);
@@ -72,12 +74,13 @@ describe('Repo', () => {
   describe('softDelete', () => {
     it('keeps the record, marks it deleted and updates updatedAt', async () => {
       await repo.put<Book>('books', bookDraft('b1'));
+      clock.t = 2000;
       await repo.softDelete('books', 'b1');
 
       const stored = await db.books.get('b1');
       expect(stored).toBeDefined();
       expect(stored?.deleted).toBe(true);
-      expect(stored?.updatedAt).toBe(1000);
+      expect(stored?.updatedAt).toBe(2000);
     });
 
     it('emits once on changes$ with the deleted record', async () => {
