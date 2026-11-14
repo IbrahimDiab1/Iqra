@@ -37,31 +37,37 @@ export class ImportService {
   private readonly inspector = inject(PDF_INSPECTOR);
   private readonly uploads = inject(UploadQueue);
 
-  /** Imports files in order. A file that fails is skipped and the rest still import. */
+  /**
+   * Imports files in order. A file that fails is skipped and the rest still import. Failures are
+   * reported in one final toast, so a success toast cannot hide them.
+   */
   async importFiles(files: File[]): Promise<ImportResult> {
     const settings = await this.db.settings.get('settings');
     const added: ID[] = [];
     const skipped: string[] = [];
+    let lastFailure: string | null = null;
 
     for (const file of files) {
       try {
         const id = await this.importOne(file, settings);
         if (id) added.push(id);
         else {
-          this.toast.show(COPY.import.duplicate(file.name));
+          lastFailure = COPY.import.duplicate(file.name);
           skipped.push(file.name);
         }
       } catch (err) {
         if (!(err instanceof UnreadablePdfError)) console.error('Import failed', err);
-        this.toast.show(COPY.import.unreadable(file.name));
+        lastFailure = COPY.import.unreadable(file.name);
         skipped.push(file.name);
       }
     }
 
-    if (added.length > 0) {
+    if (lastFailure !== null) {
+      this.toast.show(added.length > 0 ? `${COPY.import.added(added.length)}. ${lastFailure}` : lastFailure);
+    } else if (added.length > 0) {
       this.toast.show(COPY.import.added(added.length));
-      void this.uploads.run();
     }
+    if (added.length > 0) void this.uploads.run();
     return { added, skipped };
   }
 

@@ -1,4 +1,10 @@
+import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
+
+// The preinstalled Chromium build differs from this Playwright's default; use it when present.
+const PREINSTALLED_CHROME = '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome';
+const CHROME_PATH =
+  process.env.PW_CHROMIUM_PATH ?? (existsSync(PREINSTALLED_CHROME) ? PREINSTALLED_CHROME : undefined);
 
 const PORT = 4300;
 
@@ -15,8 +21,7 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        // Set PW_CHROMIUM_PATH to use a preinstalled browser whose build differs from this Playwright's.
-        launchOptions: process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {},
+        launchOptions: CHROME_PATH ? { executablePath: CHROME_PATH } : {},
       },
     },
   ],

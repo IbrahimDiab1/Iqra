@@ -62,7 +62,9 @@ describe('ImportService', () => {
 
     expect(result.added).toHaveLength(2);
     expect(result.skipped).toEqual(['broken.pdf']);
-    expect(toast.show).toHaveBeenCalledWith(COPY.import.unreadable('broken.pdf'));
+    expect(toast.show).toHaveBeenCalledTimes(1);
+    expect(toast.show).toHaveBeenCalledWith(expect.stringContaining("broken.pdf couldn't be added"));
+    expect(toast.show).toHaveBeenCalledWith(expect.stringContaining(COPY.import.added(2)));
     const titles = (await db.books.toArray()).map((b) => b.fileName).sort();
     expect(titles).toEqual(['good.pdf', 'good2.pdf']);
   });

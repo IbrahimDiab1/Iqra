@@ -30,7 +30,8 @@ test('library syncs between devices', async ({ browser }) => {
     // Device A: add a good PDF and a broken one.
     const deviceA = await openDevice(contextA);
     await deviceA.locator('input[type="file"]').setInputFiles([SAMPLE, BROKEN]);
-    await expect(deviceA.getByRole('status')).toContainText("broken.pdf couldn't be added");
+    // The toast is the role=status element inside the toast component (.toast); the sync status is also role=status.
+    await expect(deviceA.locator('.toast')).toContainText("broken.pdf couldn't be added");
     await deviceA.getByRole('tab', { name: /To read/ }).click();
     await expect(bookCard(deviceA, 'Sample Book')).toBeVisible();
 
