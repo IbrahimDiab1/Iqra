@@ -194,7 +194,7 @@ function draftOf(b: Book): Draft {
           <div class="fileinfo">
             <div class="grow">
               <div>{{ copy.fileInfo(sizeMb(b), b.pageCount) }}</div>
-              <div class="sub">{{ files.downloaded().has(b.id) ? copy.onDevice : copy.notDownloaded }}</div>
+              <div class="sub">{{ fileStatus(b) }}</div>
             </div>
             @if (files.downloaded().has(b.id)) {
               <button type="button" class="btn-ghost" (click)="files.removeLocal(b)">{{ copy.removeDownload }}</button>
@@ -203,7 +203,7 @@ function draftOf(b: Book): Draft {
                 type="button"
                 class="btn-primary"
                 [disabled]="files.downloadProgress().has(b.id)"
-                (click)="files.download(b)"
+                (click)="files.download(b, { open: false })"
               >
                 {{ copy.download }}
               </button>
@@ -484,6 +484,12 @@ export class BookDetailsSheetComponent {
   /** Tapping the chosen rating again clears it. */
   protected toggleRating(n: number): void {
     this.set('rating', this.draft()?.rating === n ? undefined : n);
+  }
+
+  protected fileStatus(b: Book): string {
+    const progress = this.files.downloadProgress().get(b.id);
+    if (progress !== undefined) return COPY.open.downloading(Math.round(progress * 100));
+    return this.files.downloaded().has(b.id) ? this.copy.onDevice : this.copy.notDownloaded;
   }
 
   protected sizeMb(b: Book): string {

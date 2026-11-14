@@ -65,8 +65,11 @@ export class FilesService {
     this.openSheet.set(b);
   }
 
-  /** Stores the PDF on this device, then opens it. Shows a toast on failure. */
-  async download(b: Book): Promise<void> {
+  /**
+   * Stores the PDF on this device. Opens it afterwards unless `open` is false (fetch ahead).
+   * Shows a toast on failure.
+   */
+  async download(b: Book, opts: { open?: boolean } = {}): Promise<void> {
     if (this.downloading.has(b.id)) return;
     this.downloading.add(b.id);
     this.setProgress(b.id, 0);
@@ -80,6 +83,7 @@ export class FilesService {
       this.downloading.delete(b.id);
       this.setProgress(b.id, null);
     }
+    if (opts.open === false) return;
     this.openSheet.set(null);
     this.navigateToBook(b.id);
   }

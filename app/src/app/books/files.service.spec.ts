@@ -133,6 +133,16 @@ describe('FilesService', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/read', book.id]);
   });
 
+  it('stores the PDF without opening the reader when open is false', async () => {
+    const book = await uploadedBook();
+
+    await files.download(book, { open: false });
+
+    expect(await db.pdfFiles.get(book.id)).toMatchObject({ bookId: book.id, sizeBytes: 4 });
+    expect(files.downloadProgress().has(book.id)).toBe(false);
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
   it('shows the failure toast and stores nothing when the download fails', async () => {
     const book = await uploadedBook();
     drive.failNext(new TypeError());
