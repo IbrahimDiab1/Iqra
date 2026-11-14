@@ -8,6 +8,7 @@ import { DB, IqraDb } from '../core/db';
 import { DEVICE_ID } from '../core/ids';
 import type { Annotation, Book, ID } from '../core/models';
 import { Repo } from '../core/repo';
+import { UploadQueue } from '../books/upload-queue';
 import { DRIVE_ADAPTER, DriveAuthError } from './drive-adapter';
 import { FakeDrive } from './fake-drive';
 import { SyncEngine } from './sync-engine';
@@ -37,6 +38,7 @@ function makeDevice(name: string, deviceId: string, drive: FakeDrive): Device {
       { provide: DRIVE_ADAPTER, useValue: drive },
       { provide: AuthApi, useValue: auth },
       Repo,
+      UploadQueue,
       SyncEngine,
     ],
     TestBed.inject(EnvironmentInjector),

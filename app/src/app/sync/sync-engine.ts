@@ -5,6 +5,7 @@ import { CLOCK } from '../core/clock';
 import { DB, SyncState } from '../core/db';
 import type { Annotation, ID, Position, ReadMark, ReadingSession, SyncRecord, TableName } from '../core/models';
 import { Repo } from '../core/repo';
+import { UploadQueue } from '../books/upload-queue';
 import { COPY } from '../ui/copy';
 import { DRIVE_ADAPTER, DriveAuthError, DriveFileInfo } from './drive-adapter';
 import { duplicateBooks, mergeTable, pruneTombstones, wins } from './merge';
@@ -81,6 +82,7 @@ export class SyncEngine implements OnDestroy {
   private readonly drive = inject(DRIVE_ADAPTER);
   private readonly auth = inject(AuthApi);
   private readonly clock = inject(CLOCK);
+  private readonly uploads = inject(UploadQueue);
 
   private readonly statusSignal = signal<SyncStatus>('paused');
   private readonly lastSyncedSignal = signal<number | null>(null);
@@ -194,6 +196,7 @@ export class SyncEngine implements OnDestroy {
       this.lastErrorSignal.set(null);
       this.lastSyncedSignal.set(this.clock.now());
       this.statusSignal.set('synced');
+      void this.uploads.run();
     } catch (error) {
       if (current()) this.handleFailure(error);
     }

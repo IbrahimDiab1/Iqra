@@ -6,6 +6,7 @@ import type { Book, ID, Settings } from '../../core/models';
 import { Repo } from '../../core/repo';
 import { COPY } from '../../ui/copy';
 import { ToastService } from '../../ui/toast.service';
+import { UploadQueue } from '../upload-queue';
 import { renderCover } from './cover';
 import { sha256Hex } from './hash';
 import { cleanTitle, readPdfMeta, UnreadablePdfError, type PdfMeta } from './pdf-meta';
@@ -34,6 +35,7 @@ export class ImportService {
   private readonly clock = inject(CLOCK);
   private readonly toast = inject(ToastService);
   private readonly inspector = inject(PDF_INSPECTOR);
+  private readonly uploads = inject(UploadQueue);
 
   /** Imports files in order. A file that fails is skipped and the rest still import. */
   async importFiles(files: File[]): Promise<ImportResult> {
@@ -56,7 +58,10 @@ export class ImportService {
       }
     }
 
-    if (added.length > 0) this.toast.show(COPY.import.added(added.length));
+    if (added.length > 0) {
+      this.toast.show(COPY.import.added(added.length));
+      void this.uploads.run();
+    }
     return { added, skipped };
   }
 

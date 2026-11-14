@@ -1,7 +1,11 @@
 import { TestBed } from '@angular/core/testing';
+import { AuthApi } from '../../auth/auth.service';
+import { FakeAuthService } from '../../auth/fake-auth.service';
 import { CLOCK } from '../../core/clock';
 import { DB, IqraDb } from '../../core/db';
 import { newId } from '../../core/ids';
+import { DRIVE_ADAPTER } from '../../sync/drive-adapter';
+import { FakeDrive } from '../../sync/fake-drive';
 import { COPY } from '../../ui/copy';
 import { ToastService } from '../../ui/toast.service';
 import { PDF_INSPECTOR, ImportService, type PdfInspector } from './import.service';
@@ -34,6 +38,8 @@ describe('ImportService', () => {
         { provide: DB, useFactory: () => new IqraDb(`iqra-test-${newId()}`) },
         { provide: CLOCK, useValue: { now: () => 1000 } },
         { provide: PDF_INSPECTOR, useValue: inspector as PdfInspector },
+        { provide: DRIVE_ADAPTER, useValue: new FakeDrive() },
+        { provide: AuthApi, useClass: FakeAuthService },
       ],
     });
     service = TestBed.inject(ImportService);
