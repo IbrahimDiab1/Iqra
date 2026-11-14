@@ -180,6 +180,7 @@ describe('FilesService', () => {
         updatedAt: 1000,
       } as Annotation);
       await db.readMarks.put({ id: `${book.id}:3`, bookId: book.id, page: 3, read: true, deviceId: 'device-a', updatedAt: 1000 } as ReadMark);
+      await db.positions.put({ id: `${book.id}:device-a`, bookId: book.id, page: 1, offset: 0, zoom: 1, view: 'page', deviceId: 'device-a', updatedAt: 1000 });
       await db.pdfFiles.put({ bookId: book.id, blob: new Blob(['%PDF']), sizeBytes: 4, savedAt: 1000 });
       await db.syncState.put({ shard: `book-${book.id}.json`, remoteId: 'shard-file', dirty: false });
     }
@@ -206,6 +207,23 @@ describe('FilesService', () => {
       expect((await db.upNext.get('up-next'))?.bookIds).toEqual([book.id, 'other']);
       expect(await db.pendingDriveDeletes.count()).toBe(0);
       expect(await db.pdfFiles.get(book.id)).toBeDefined();
+    });
+
+    it('a double call is a no-op, and one undo restores everything', async () => {
+      const book = await uploadedBook();
+      await seed(book);
+
+      await Promise.all([files.deleteEverywhere(book), files.deleteEverywhere(book)]);
+      await settle();
+      toast.undo();
+      await settle();
+
+      expect((await db.books.get(book.id))?.deleted).toBe(false);
+      expect((await db.annotations.get('ann-1'))?.deleted).toBe(false);
+      expect((await db.positions.get(`${book.id}:device-a`))?.deleted).toBe(false);
+      expect((await db.readMarks.get(`${book.id}:3`))?.deleted).toBe(false);
+      expect((await db.upNext.get('up-next'))?.bookIds).toEqual([book.id, 'other']);
+      expect(await db.pendingDriveDeletes.count()).toBe(0);
     });
 
     it('without undo, removes the local PDF after 10 s and the Drive files on the next sync', async () => {

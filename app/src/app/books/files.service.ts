@@ -35,6 +35,11 @@ export class FilesService {
   /** Download progress as a 0..1 fraction, for books being downloaded now. */
   readonly downloadProgress: Signal<Map<ID, number>> = this.progress.asReadonly();
 
+  /** Books with an operation in flight. A second call for the same book while one runs is a no-op. */
+  private readonly downloading = new Set<ID>();
+  private readonly removing = new Set<ID>();
+  private readonly deleting = new Set<ID>();
+
   private readonly openSheet = signal<Book | null>(null);
   /** The book the open sheet is asking about, or null when it is closed. */
   readonly openSheetBook: Signal<Book | null> = this.openSheet.asReadonly();
@@ -62,6 +67,8 @@ export class FilesService {
 
   /** Stores the PDF on this device, then opens it. Shows a toast on failure. */
   async download(b: Book): Promise<void> {
+    if (this.downloading.has(b.id)) return;
+    this.downloading.add(b.id);
     this.setProgress(b.id, 0);
     try {
       const blob = await this.drive.downloadBlob(b.driveFileId, (fraction) => this.setProgress(b.id, fraction));
@@ -70,6 +77,7 @@ export class FilesService {
       this.toast.show(COPY.open.failed);
       return;
     } finally {
+      this.downloading.delete(b.id);
       this.setProgress(b.id, null);
     }
     this.openSheet.set(null);
@@ -84,9 +92,15 @@ export class FilesService {
 
   /** Deletes the local PDF and keeps the book and its notes. */
   async removeLocal(b: Book): Promise<void> {
-    await this.db.pdfFiles.delete(b.id);
+    if (this.removing.has(b.id)) return;
+    this.removing.add(b.id);
     this.removeSheet.set(null);
-    this.toast.show(COPY.remove.removedDevice);
+    try {
+      await this.db.pdfFiles.delete(b.id);
+      this.toast.show(COPY.remove.removedDevice);
+    } finally {
+      this.removing.delete(b.id);
+    }
   }
 
   /**
@@ -94,7 +108,21 @@ export class FilesService {
    * The local PDF is removed when the toast expires without undo.
    */
   async deleteEverywhere(b: Book): Promise<void> {
+    if (this.deleting.has(b.id)) return;
+    this.deleting.add(b.id);
+    // Closes before any await, so a second tap cannot reach this method again.
+    this.removeSheet.set(null);
+    try {
+      await this.softDeleteBook(b);
+    } finally {
+      this.deleting.delete(b.id);
+    }
+  }
+
+  private async softDeleteBook(b: Book): Promise<void> {
     const { db } = this;
+    const current = await db.books.get(b.id);
+    if (!current || current.deleted) return;
     const targets: SoftDeleted[] = [{ table: 'books', id: b.id }];
     for (const table of ['annotations', 'positions', 'readMarks'] as const) {
       const rows = (await db.table<SyncMeta>(table).where('bookId').equals(b.id).toArray()).filter((r) => !r.deleted);
@@ -116,7 +144,6 @@ export class FilesService {
     const notBefore = this.clock.now() + UNDO_MS;
     await db.pendingDriveDeletes.bulkPut(fileIds.map((fileId) => ({ fileId, notBefore })));
 
-    this.removeSheet.set(null);
     let settled = false;
     const expiry = setTimeout(() => {
       settled = true;
