@@ -20,6 +20,8 @@
 
 .tab {
   flex: 1;
+  min-width: 40px;
+  min-height: 40px;
   display: flex;
   flex-direction: column;
   align-items: center;

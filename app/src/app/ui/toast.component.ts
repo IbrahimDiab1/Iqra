@@ -42,6 +42,8 @@ import { ToastService } from './toast.service';
     }
     .toast button {
       flex: none;
+      min-width: 40px;
+      min-height: 40px;
       padding: 4px 8px;
       border: 0;
       border-radius: 8px;
