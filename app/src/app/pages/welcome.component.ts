@@ -1,6 +1,7 @@
 import { Component, HostListener, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthApi } from '../auth/auth.service';
+import { SyncEngine } from '../sync/sync-engine';
 import { DRIVE_ADAPTER } from '../sync/drive-adapter';
 import { COPY } from '../ui/copy';
 
@@ -46,6 +47,7 @@ export class WelcomePage {
   private readonly auth = inject(AuthApi);
   private readonly drive = inject(DRIVE_ADAPTER);
   private readonly router = inject(Router);
+  private readonly sync = inject(SyncEngine);
 
   protected readonly copy = COPY.welcome;
   protected readonly online = signal(navigator.onLine);
@@ -70,13 +72,14 @@ export class WelcomePage {
       this.busy.set(false);
       return;
     }
+    this.sync.start();
     try {
       await this.drive.ensureBooksFolder();
       await navigator.storage?.persist?.();
     } catch {
       // Left for the sync engine to retry; the library still opens.
     }
-    // Task 9: await sync.syncNow()
+    await this.sync.syncNow();
     await this.router.navigateByUrl('/library');
   }
 }

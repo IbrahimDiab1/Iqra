@@ -1,6 +1,6 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthApi } from '../auth/auth.service';
 import { FakeAuthService } from '../auth/fake-auth.service';
 import { DRIVE_ADAPTER } from '../sync/drive-adapter';
@@ -49,6 +49,7 @@ describe('WelcomePage', () => {
     el.querySelector<HTMLButtonElement>('button.cta')!.click();
     await fixture.whenStable();
     expect(drive.folderNames()).toEqual(['Iqra', 'Books']);
-    expect(router.url).toBe('/library');
+    // The first sync runs IndexedDB work that whenStable does not track, so wait for the redirect.
+    await vi.waitFor(() => expect(router.url).toBe('/library'));
   });
 });

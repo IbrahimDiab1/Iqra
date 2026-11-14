@@ -1,3 +1,5 @@
+import { InjectionToken } from '@angular/core';
+
 const DEVICE_ID_KEY = 'iqra.deviceId';
 
 /** A new record id (UUID). */
@@ -13,3 +15,9 @@ export function getDeviceId(): string {
   localStorage.setItem(DEVICE_ID_KEY, id);
   return id;
 }
+
+/** The device id stamped on local writes. Tests provide one per simulated device. */
+export const DEVICE_ID = new InjectionToken<string>('deviceId', {
+  providedIn: 'root',
+  factory: () => getDeviceId(),
+});

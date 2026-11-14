@@ -4,7 +4,7 @@ import { Observable, Subject, from } from 'rxjs';
 import { liveQuery, type Table } from 'dexie';
 import { CLOCK } from './clock';
 import { DB } from './db';
-import { getDeviceId } from './ids';
+import { DEVICE_ID } from './ids';
 import type { ID, SyncMeta, SyncRecord, TableName } from './models';
 
 export interface RepoChange {
@@ -21,6 +21,7 @@ export interface RepoChange {
 export class Repo {
   private readonly db = inject(DB);
   private readonly clock = inject(CLOCK);
+  private readonly deviceId = inject(DEVICE_ID);
   private readonly changes = new Subject<RepoChange>();
 
   readonly changes$: Observable<RepoChange> = this.changes.asObservable();
@@ -30,7 +31,7 @@ export class Repo {
     table: TableName,
     rec: Omit<T, 'updatedAt' | 'deviceId'> & Partial<SyncMeta>,
   ): Promise<T> {
-    const stamped = { ...rec, updatedAt: this.clock.now(), deviceId: getDeviceId() } as unknown as T;
+    const stamped = { ...rec, updatedAt: this.clock.now(), deviceId: this.deviceId } as unknown as T;
     await this.table(table).put(stamped);
     this.changes.next({ table, rec: stamped as SyncRecord });
     return stamped;
@@ -42,7 +43,7 @@ export class Repo {
     const deleted = await this.db.transaction('rw', store, async () => {
       const existing = await store.get(id);
       if (!existing) return undefined;
-      const rec = { ...existing, deleted: true, updatedAt: this.clock.now(), deviceId: getDeviceId() };
+      const rec = { ...existing, deleted: true, updatedAt: this.clock.now(), deviceId: this.deviceId };
       await store.put(rec);
       return rec;
     });
