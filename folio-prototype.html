@@ -1,0 +1,1618 @@
+<title>Folio Reader Prototype</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
+<style>
+/* Layout: a phone-sized working prototype on the left, a short guide on the right; stacks on narrow screens. */
+:root {
+  --ui: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --book: "Literata", Georgia, "Times New Roman", serif;
+  --ar: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+
+  --bg: #E9ECEA;
+  --surface: #FBFCFB;
+  --surface-2: #F0F3F1;
+  --line: #DCE2DF;
+  --fg: #19211F;
+  --muted: #5D6A66;
+  --accent: #1E6B64;
+  --accent-fg: #FFFFFF;
+  --accent-soft: #DCEDEA;
+  --danger: #A8433F;
+  --ok: #2F8F5B;
+  --warn: #C98A1B;
+  --tool-bg: #1D2423;
+  --tool-fg: #F2F5F4;
+  --tool-line: #3A4442;
+  --undo: #8FD8CE;
+  --shadow: 0 18px 50px rgba(18, 32, 29, .14), 0 2px 6px rgba(18, 32, 29, .06);
+
+  --hl-yellow: rgba(247, 205, 70, .48);
+  --hl-green: rgba(118, 201, 132, .42);
+  --hl-blue: rgba(116, 176, 236, .42);
+  --hl-pink: rgba(236, 132, 168, .40);
+  --sw-yellow: #F2C94C;
+  --sw-green: #6CC383;
+  --sw-blue: #6AA8E8;
+  --sw-pink: #E989AE;
+  --sel: rgba(30, 107, 100, .24);
+
+  --paper-light: #FEFEFC;
+  --ink-light: #1E1F1C;
+  --paper-sepia: #F4EBD7;
+  --ink-sepia: #3B2F22;
+  --paper-night: #151716;
+  --ink-night: #D5D0C6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1211; --surface: #161B1A; --surface-2: #1E2524; --line: #2B3533;
+    --fg: #E6ECEA; --muted: #97A5A1; --accent: #63BDB2; --accent-fg: #0B1514; --accent-soft: #1B3532;
+    --danger: #E08480; --ok: #5CC28A; --warn: #E2AE4E;
+    --tool-bg: #2A3331; --tool-fg: #F2F5F4; --tool-line: #46524F; --undo: #8FD8CE;
+    --shadow: 0 18px 50px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .3);
+    --hl-yellow: rgba(247, 205, 70, .32); --hl-green: rgba(118, 201, 132, .3);
+    --hl-blue: rgba(116, 176, 236, .3); --hl-pink: rgba(236, 132, 168, .3);
+    --sel: rgba(99, 189, 178, .3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1211; --surface: #161B1A; --surface-2: #1E2524; --line: #2B3533;
+  --fg: #E6ECEA; --muted: #97A5A1; --accent: #63BDB2; --accent-fg: #0B1514; --accent-soft: #1B3532;
+  --danger: #E08480; --ok: #5CC28A; --warn: #E2AE4E;
+  --tool-bg: #2A3331; --tool-fg: #F2F5F4; --tool-line: #46524F; --undo: #8FD8CE;
+  --shadow: 0 18px 50px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .3);
+  --hl-yellow: rgba(247, 205, 70, .32); --hl-green: rgba(118, 201, 132, .3);
+  --hl-blue: rgba(116, 176, 236, .3); --hl-pink: rgba(236, 132, 168, .3);
+  --sel: rgba(99, 189, 178, .3);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--ui); font-size: 14px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, [role="button"]:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.ic { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+.wrap { display: flex; gap: 48px; justify-content: center; align-items: flex-start; max-width: 1080px; margin: 0 auto; }
+.device {
+  position: relative; width: 400px; max-width: 100%; flex: none;
+  height: min(820px, calc(100dvh - 48px)); min-height: 600px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 28px;
+  overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--shadow);
+}
+#screen { flex: 1; min-height: 0; position: relative; }
+.scroll { height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+
+/* Guide column */
+.guide { max-width: 380px; padding-top: 12px; line-height: 1.55; }
+.guide h1 { font-size: 28px; line-height: 1.15; letter-spacing: -.015em; margin: 0 0 6px; text-wrap: balance; }
+.guide .lede { color: var(--muted); margin: 0 0 20px; }
+.guide h2 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 24px 0 10px; font-weight: 600; }
+.guide ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 9px; }
+.guide li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; }
+.guide li .ic { color: var(--accent); margin-top: 1px; }
+.guide b { font-weight: 600; }
+.guide .note { margin-top: 24px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); color: var(--muted); font-size: 13px; }
+.guide .new { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); padding: 1px 6px; border-radius: 6px; margin-right: 4px; vertical-align: 1px; }
+
+@media (max-width: 860px) {
+  .wrap { flex-direction: column; align-items: center; gap: 28px; }
+  .guide { max-width: 400px; width: 100%; }
+}
+@media (max-width: 440px) {
+  body { padding-block: 12px; }
+  .device { border-radius: 18px; height: calc(100dvh - 24px); }
+}
+
+/* Shared controls */
+.icon-btn { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: none; border: 0; flex: none; }
+.icon-btn:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+.icon-btn[aria-pressed="true"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.icon-btn:disabled { opacity: .35; cursor: default; }
+.btn-primary { background: var(--accent); color: var(--accent-fg); border: 0; border-radius: 12px; padding: 10px 16px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.btn-primary.sm { padding: 8px 12px; font-size: 13px; }
+.btn-primary:disabled { opacity: .55; cursor: default; }
+.btn-ghost { background: none; border: 0; border-radius: 12px; padding: 10px 14px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.btn-ghost.sm { padding: 7px 10px; font-size: 13px; }
+.btn-ghost:hover { background: var(--surface-2); color: var(--fg); }
+.btn-ghost.danger { color: var(--danger); }
+.btn-line { background: none; border: 1px solid var(--line); border-radius: 10px; padding: 7px 12px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.btn-line:hover { background: var(--surface-2); }
+.pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); background: none; border-radius: 999px; padding: 7px 12px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.pill.on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.pill .badge { font-size: 11px; font-weight: 700; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: var(--accent-fg); display: inline-grid; place-items: center; }
+.chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 18px 10px; scrollbar-width: none; align-items: center; }
+.chips::-webkit-scrollbar { display: none; }
+.chips .clabel { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; flex: none; width: 62px; }
+.chip { border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 13px; background: var(--surface); white-space: nowrap; }
+.chip[aria-pressed="true"] { background: var(--fg); color: var(--surface); border-color: var(--fg); }
+.muted { color: var(--muted); }
+.tagpill { font-size: 11.5px; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 999px; }
+.switch { width: 44px; height: 26px; border-radius: 999px; background: var(--line); border: 0; position: relative; flex: none; padding: 0; transition: background .2s; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .2s; }
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(18px); }
+
+.hdr { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 20px 18px 12px; }
+.hdr h1 { font-size: 28px; line-height: 1.1; letter-spacing: -.02em; margin: 2px 0 0; font-weight: 600; }
+.hdr-actions { display: flex; gap: 2px; align-items: center; }
+.subhdr { display: flex; align-items: center; gap: 4px; padding: 12px 10px 8px 6px; }
+.subhdr h1 { font-size: 20px; margin: 0; font-weight: 600; }
+.sync { font-size: 12px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+.sync .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.sync.saving .dot { background: var(--warn); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.search-field { margin: 0 18px 12px; display: flex; align-items: center; gap: 8px; background: var(--surface-2); border-radius: 12px; padding: 0 12px; color: var(--muted); }
+.search-field input { flex: 1; min-width: 0; border: 0; background: none; padding: 11px 0; font: inherit; color: var(--fg); outline: none; }
+
+/* Tab bar */
+.tabbar { display: flex; border-top: 1px solid var(--line); background: var(--surface); padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px)); }
+.tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 500; color: var(--muted); background: none; border: 0; padding: 6px 0; border-radius: 10px; }
+.tab[aria-current="page"] { color: var(--accent); }
+
+/* Library */
+.continue { margin: 0 18px 16px; padding: 14px; border-radius: 18px; background: var(--accent-soft); display: grid; grid-template-columns: 76px 1fr; gap: 14px; align-items: center; }
+.continue .eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-weight: 600; }
+.continue h2 { font-size: 17px; line-height: 1.25; margin: 4px 0 2px; font-weight: 600; text-wrap: balance; }
+.continue h2[dir="rtl"] { font-family: var(--ar); }
+.continue .where { font-size: 12.5px; color: var(--muted); margin-bottom: 10px; font-variant-numeric: tabular-nums; }
+.continue .row { display: flex; align-items: center; gap: 10px; }
+.bar { height: 4px; background: color-mix(in srgb, var(--fg) 12%, transparent); border-radius: 4px; overflow: hidden; flex: 1; }
+.bar > i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+.cover {
+  aspect-ratio: 2 / 3; width: 100%; border-radius: 4px 8px 8px 4px; padding: 10px 9px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--c1) 82%, white), var(--c1));
+  color: var(--c2); display: flex; flex-direction: column; justify-content: space-between;
+  font-family: var(--book); box-shadow: inset 4px 0 0 rgba(0, 0, 0, .16), 0 3px 10px rgba(0, 0, 0, .14); overflow: hidden;
+}
+.cover .ct { font-size: 12px; font-weight: 600; line-height: 1.18; }
+.cover .ca { font-size: 9.5px; opacity: .85; }
+.cover[dir="rtl"] { font-family: var(--ar); }
+.cover[dir="rtl"] .ct { font-size: 14px; }
+.grid-head { display: flex; justify-content: space-between; align-items: center; padding: 4px 18px 10px; font-size: 12.5px; color: var(--muted); }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 12px; padding: 0 18px 24px; list-style: none; margin: 0; }
+.book { background: none; border: 0; padding: 0; text-align: start; width: 100%; -webkit-touch-callout: none; user-select: none; }
+.book .bt { font-size: 12.5px; font-weight: 600; margin-top: 8px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.book .bt[dir="rtl"] { font-family: var(--ar); }
+.book .bs { font-size: 11.5px; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.book .bar { margin-top: 6px; height: 3px; }
+.empty { text-align: center; color: var(--muted); padding: 40px 24px; line-height: 1.5; }
+
+/* Reader */
+.reader {
+  --paper: var(--paper-light); --ink: var(--ink-light);
+  position: relative; height: 100%; display: flex; flex-direction: column; color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 7%, var(--paper));
+}
+.reader[data-rt="sepia"] { --paper: var(--paper-sepia); --ink: var(--ink-sepia); }
+.reader[data-rt="night"] { --paper: var(--paper-night); --ink: var(--ink-night); --hl-yellow: rgba(247, 205, 70, .28); --hl-green: rgba(118, 201, 132, .26); --hl-blue: rgba(116, 176, 236, .28); --hl-pink: rgba(236, 132, 168, .28); }
+.r-top, .r-bottom {
+  position: absolute; left: 0; right: 0; z-index: 5;
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  transition: transform .24s cubic-bezier(.2, .8, .2, 1), opacity .2s;
+}
+.r-top { top: 0; display: flex; align-items: center; gap: 0; padding: 8px 6px 8px 2px; border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); }
+.r-bottom { bottom: 0; padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); display: grid; gap: 4px; }
+.reader.immersive .r-top { transform: translateY(-100%); opacity: 0; pointer-events: none; }
+.reader.immersive .r-bottom { transform: translateY(100%); opacity: 0; pointer-events: none; }
+.r-title { flex: 1; min-width: 0; padding: 0 4px; }
+.r-title .t1 { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.r-title .t2 { font-size: 12px; color: color-mix(in srgb, var(--ink) 58%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.r-row { display: flex; align-items: center; gap: 6px; }
+.r-row .pg { flex: 1; min-width: 0; font-size: 13px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.r-row .pg span { color: color-mix(in srgb, var(--ink) 55%, transparent); }
+.r-range { display: flex; align-items: center; gap: 10px; padding: 0 6px; }
+.r-range input { flex: 1; accent-color: var(--accent); min-width: 0; }
+.float-hint { position: absolute; top: 66px; left: 50%; transform: translateX(-50%); z-index: 6; background: var(--tool-bg); color: var(--tool-fg); padding: 7px 12px; border-radius: 999px; font-size: 12.5px; white-space: nowrap; font-family: var(--ui); }
+.reader.immersive .float-hint { top: 14px; }
+
+.scroller { flex: 1; overflow: auto; padding: 66px 12px 108px; overscroll-behavior: contain; }
+.reader.immersive .scroller { padding-top: 14px; }
+.page {
+  position: relative; background: var(--paper); margin: 0 auto 14px; font-family: var(--book);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--ink) 16%, transparent); border-radius: 2px;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+/* Page view: the PDF page as printed, scaled to fit the width */
+.page.pdf { aspect-ratio: 1 / 1.48; container-type: inline-size; line-height: 1.5; padding: 9% 8% 6%; overflow: hidden; }
+.page.pdf p, .page.pdf .fig, .page.pdf .pno { font-size: 3.2cqw; }
+.page.pdf h2 { font-size: 4cqw; }
+.page.pdf .pno { position: absolute; bottom: 3.5%; left: 0; right: 0; }
+/* Reading mode: text reflowed at a comfortable size */
+.page.reflow { max-width: 560px; padding: 22px 20px 18px; font-size: calc(17px * var(--zoom, 1)); line-height: 1.7; border-radius: 6px; }
+.page.reflow p { text-align: start; hyphens: manual; }
+.reader.areamode .page.pdf[data-real] { touch-action: none; cursor: crosshair; }
+.page h2 { font-size: 1.25em; text-align: center; font-weight: 600; margin: .2em 0 1em; letter-spacing: .03em; }
+.page p { margin: 0 0 .8em; text-align: justify; hyphens: auto; text-indent: 1.4em; }
+.page .pno { text-align: center; font-size: 11px; font-family: var(--ui); color: color-mix(in srgb, var(--ink) 50%, transparent); font-variant-numeric: tabular-nums; }
+.page.reflow .pno { margin-top: 12px; }
+.page.placeholder { display: flex; flex-direction: column; justify-content: center; text-align: center; font-family: var(--ui); font-size: 13.5px; color: color-mix(in srgb, var(--ink) 60%, transparent); }
+.page.reflow.placeholder { min-height: 320px; }
+.fig { margin: 0 0 1.1em; text-align: center; }
+.fig svg { width: 100%; max-width: 280px; height: auto; color: var(--ink); }
+.fig svg text { fill: currentColor; font-family: var(--book); font-size: 8px; }
+.fig figcaption { font-size: .8em; font-style: italic; margin-top: 2px; color: color-mix(in srgb, var(--ink) 70%, transparent); }
+
+.w, .sp { cursor: text; transition: background-color .12s; }
+.w { border-radius: 2px; }
+.hl-yellow { background: var(--hl-yellow); }
+.hl-green { background: var(--hl-green); }
+.hl-blue { background: var(--hl-blue); }
+.hl-pink { background: var(--hl-pink); }
+.w.hl-yellow, .w.hl-green, .w.hl-blue, .w.hl-pink, .w.hl-none { cursor: pointer; border-radius: 0; }
+.hl-none { text-decoration: underline dotted var(--accent); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.w.sel, .sp.sel { background: var(--sel); }
+.nm { display: inline-block; width: .5em; height: .5em; border-radius: 50%; background: var(--accent); vertical-align: super; margin: 0 1px 0 2px; cursor: pointer; }
+.flash { animation: flash 1.6s ease; }
+@keyframes flash { 0%, 55% { background-color: color-mix(in srgb, var(--accent) 38%, transparent); } }
+.area { position: absolute; border-radius: 3px; outline: 1.5px solid color-mix(in srgb, var(--ink) 25%, transparent); cursor: pointer; }
+.area-draft { position: absolute; border: 1.5px dashed var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border-radius: 3px; pointer-events: none; }
+
+.seltool { position: absolute; z-index: 8; display: flex; align-items: center; gap: 2px; padding: 6px; background: var(--tool-bg); color: var(--tool-fg); border-radius: 14px; box-shadow: 0 10px 28px rgba(0, 0, 0, .28); font-family: var(--ui); animation: pop .16s ease-out; }
+@keyframes pop { from { transform: translateY(4px) scale(.97); opacity: 0; } }
+.sw { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; margin: 0 1px; padding: 0; flex: none; }
+.sw.sm { width: 22px; height: 22px; }
+.sw.cur { border-color: var(--tool-fg); box-shadow: 0 0 0 1px var(--tool-bg) inset; }
+.tpop .sw.cur { border-color: var(--fg); box-shadow: 0 0 0 2px var(--surface) inset; }
+.sw-yellow { background: var(--sw-yellow); } .sw-green { background: var(--sw-green); }
+.sw-blue { background: var(--sw-blue); } .sw-pink { background: var(--sw-pink); }
+.vr { width: 1px; align-self: stretch; background: var(--tool-line); margin: 2px 4px; }
+.tbtn { display: flex; flex-direction: column; align-items: center; font-size: 10.5px; gap: 2px; padding: 4px 6px; background: none; border: 0; border-radius: 8px; min-width: 44px; }
+.tbtn:hover { background: var(--tool-line); }
+.tpop { position: absolute; z-index: 8; left: 12px; right: 12px; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px 12px; box-shadow: var(--shadow); font-family: var(--ui); animation: pop .16s ease-out; }
+.tpop .meta { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
+.tpop .src { font-family: var(--book); font-size: 14px; margin: 6px 0 0; color: var(--muted); }
+.tpop .ar { font-family: var(--ar); font-size: 17px; line-height: 1.85; margin: 4px 0 8px; }
+.tpop .fine { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+.tpop .pq { font-family: var(--book); font-size: 14px; line-height: 1.5; margin: 8px 0 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.tpop .pn { font-size: 14.5px; line-height: 1.5; margin: 8px 0 0; }
+.tpop .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.tp-act { display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: 10px; flex-wrap: wrap; }
+.tp-act .sws { display: flex; gap: 4px; margin-right: auto; }
+
+/* Sheets */
+#layer { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
+#layer.open { pointer-events: auto; }
+.scrim { position: absolute; inset: 0; background: color-mix(in srgb, #000 36%, transparent); opacity: 0; transition: opacity .24s; }
+#layer.open .scrim { opacity: 1; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 90%; background: var(--surface); color: var(--fg); border-radius: 22px 22px 0 0; display: flex; flex-direction: column; transform: translateY(100%); transition: transform .3s cubic-bezier(.2, .8, .2, 1); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.sheet.tall { height: 86%; }
+#layer.open .sheet { transform: none; }
+.grab { width: 38px; height: 4px; border-radius: 4px; background: var(--line); margin: 8px auto 2px; flex: none; }
+.sh-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 10px 10px 18px; }
+.sh-head h3 { margin: 0; font-size: 17px; font-weight: 600; }
+.sh-head .acts { display: flex; gap: 2px; }
+.sh-body { padding: 0 18px 16px; overflow-y: auto; flex: 1; min-height: 0; }
+.sh-foot { display: flex; align-items: center; gap: 6px; padding: 10px 14px 14px; border-top: 1px solid var(--line); }
+.seg { display: flex; background: var(--surface-2); border-radius: 12px; padding: 3px; gap: 2px; }
+.sheet > .seg { margin: 0 18px 14px; }
+.seg button { flex: 1; border: 0; background: none; padding: 8px 4px; border-radius: 9px; font-size: 13px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+.seg button[aria-selected="true"], .seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.seg .ct { font-size: 11px; color: var(--muted); margin-left: 3px; font-variant-numeric: tabular-nums; }
+.lbl { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .06em; }
+.field { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; font: inherit; font-size: 14.5px; background: var(--surface-2); color: var(--fg); resize: vertical; line-height: 1.5; }
+textarea.field { min-height: 104px; }
+.field.sm { padding: 8px 12px; font-size: 13.5px; }
+.field + .field.sm { margin-top: 8px; }
+.quote { margin: 0; font-family: var(--book); font-size: 14.5px; line-height: 1.55; max-height: 116px; overflow-y: auto; }
+.tagpick { display: flex; flex-wrap: wrap; gap: 6px; }
+.range-row { display: flex; gap: 10px; }
+.range-row label { flex: 1; font-size: 12.5px; color: var(--muted); display: grid; gap: 4px; }
+.help { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; line-height: 1.45; }
+.stepper { display: flex; align-items: center; gap: 4px; background: var(--surface-2); border-radius: 12px; padding: 3px; width: max-content; }
+.stepper button { border: 0; background: none; padding: 7px 14px; border-radius: 9px; font-weight: 600; }
+.stepper button:hover { background: var(--surface); }
+.stepper span { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; font-size: 13px; }
+.fileinfo { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); font-size: 13px; margin-top: 14px; }
+.fileinfo .grow { flex: 1; min-width: 0; }
+.fileinfo .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+mark { color: inherit; padding: 0 1px; border-radius: 2px; }
+.hlm-yellow { background: var(--hl-yellow); } .hlm-green { background: var(--hl-green); }
+.hlm-blue { background: var(--hl-blue); } .hlm-pink { background: var(--hl-pink); }
+.hlm-none { background: none; text-decoration: underline dotted var(--accent); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.hit { background: var(--hl-yellow); }
+
+/* Annotation list */
+.anns { list-style: none; margin: 0; padding: 0; }
+.ann { display: block; width: 100%; text-align: start; padding: 12px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.ann:hover { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.ann .kind { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+.ann .q { font-family: var(--book); font-size: 14.5px; line-height: 1.55; margin: 6px 0 0; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.ann .nt { font-size: 13.5px; line-height: 1.5; margin: 6px 0 0; }
+.arabic { font-family: var(--ar); }
+.ann .meta { font-size: 12px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.areathumb { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; margin-top: 6px; padding: 6px 10px; border-radius: 8px; }
+.grp { font-size: 12px; font-weight: 600; color: var(--muted); margin: 16px 0 0; text-transform: uppercase; letter-spacing: .06em; }
+.grp.ar { font-family: var(--ar); text-transform: none; font-size: 13px; }
+.pn-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.sheet .chips { padding: 2px 0 6px; }
+
+.toc { list-style: none; margin: 0; padding: 0; }
+.toc li { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); }
+.toc-go { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: baseline; text-align: start; background: none; border: 0; padding: 12px 0; }
+.toc-go .tt { flex: 1; min-width: 0; font-size: 14px; }
+.toc-go .tp { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.toc li.cur .tt { color: var(--accent); font-weight: 600; }
+.sum-pill { font-size: 12px; border: 1px dashed var(--line); background: none; border-radius: 999px; padding: 4px 10px; color: var(--muted); white-space: nowrap; }
+.sum-pill.has { border-style: solid; border-color: transparent; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.rd { width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--line); background: none; display: grid; place-items: center; padding: 0; color: transparent; flex: none; }
+.rd[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.book-sum { margin-bottom: 8px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); display: block; width: 100%; text-align: start; border: 0; }
+.book-sum .k { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.book-sum p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.5; }
+.res { display: block; width: 100%; text-align: start; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 12px 0; }
+.res .rp { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.res .rs { font-family: var(--book); font-size: 14px; line-height: 1.5; }
+
+/* Words */
+.review-cta { margin: 0 18px 16px; padding: 16px; border-radius: 18px; background: var(--accent-soft); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.review-cta b { display: block; font-size: 16px; }
+.review-cta span { font-size: 12.5px; color: var(--muted); }
+.words { list-style: none; margin: 0; padding: 0 18px 24px; }
+.word { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.word .en { font-family: var(--book); font-size: 15px; line-height: 1.45; }
+.word .ar { font-family: var(--ar); font-size: 15.5px; line-height: 1.7; margin-top: 4px; }
+.word .wm { font-size: 12px; color: var(--muted); margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+.due { color: var(--accent); font-weight: 600; }
+.card { border: 1px solid var(--line); border-radius: 20px; padding: 22px 20px; min-height: 220px; display: flex; flex-direction: column; justify-content: center; gap: 12px; background: var(--surface-2); text-align: center; }
+.card .en { font-family: var(--book); font-size: 18px; line-height: 1.5; }
+.card .ar { font-family: var(--ar); font-size: 19px; line-height: 1.8; }
+.card .ans { animation: pop .2s ease-out; padding-top: 12px; border-top: 1px solid var(--line); }
+.card .src { font-size: 12px; color: var(--muted); }
+.rate { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
+.rate button { border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 10px 4px; font-weight: 600; font-size: 13.5px; display: grid; gap: 2px; }
+.rate button small { font-weight: 400; color: var(--muted); font-size: 11.5px; }
+.progress-dots { display: flex; justify-content: center; gap: 5px; margin: 12px 0; }
+.progress-dots i { width: 22px; height: 4px; border-radius: 4px; background: var(--line); }
+.progress-dots i.done { background: var(--accent); }
+
+/* Stats */
+.sec { padding: 4px 18px 20px; }
+.sec-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 2px; }
+.sec h3 { font-size: 15px; margin: 0; font-weight: 600; }
+.sec .sub { font-size: 12.5px; color: var(--muted); margin: 2px 0 10px; font-variant-numeric: tabular-nums; }
+.totals { margin: 0 18px 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.total { padding: 14px; border-radius: 16px; background: var(--surface-2); }
+.total .k { font-size: 12px; color: var(--muted); }
+.total .v { font-size: 22px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.total .d { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.goal { display: block; width: 100%; text-align: start; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 12px 0; }
+.goal .gt { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; font-weight: 600; }
+.goal .gt span:last-child { font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.goal .bar { margin: 8px 0 6px; height: 6px; }
+.goal .gs { font-size: 12px; color: var(--muted); }
+.goal .gs.met { color: var(--ok); font-weight: 600; }
+.chart text { fill: var(--muted); font-family: var(--ui); font-size: 10.5px; }
+.chart .b { fill: color-mix(in srgb, var(--accent) 45%, var(--surface)); }
+.chart .b.today { fill: var(--accent); }
+.chart .base { stroke: var(--line); }
+.chart .val { fill: var(--fg); font-weight: 600; }
+.brow { display: grid; grid-template-columns: 38px 1fr; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.brow .cover { padding: 4px; }
+.brow .cover .ct, .brow .cover .ca { display: none; }
+.brow .t { font-size: 13.5px; font-weight: 600; }
+.brow .t[dir="rtl"] { font-family: var(--ar); }
+.brow .d { font-size: 12px; color: var(--muted); margin: 2px 0 6px; font-variant-numeric: tabular-nums; }
+
+/* Settings */
+.set-sec { padding: 0 18px 6px; }
+.set-sec > h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; margin: 16px 0 8px; }
+.set-card { background: var(--surface-2); border-radius: 16px; padding: 2px 14px; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); min-height: 52px; }
+.set-row:last-child { border-bottom: 0; }
+.set-row .grow { flex: 1; min-width: 0; }
+.set-row .k { font-size: 14px; }
+.set-row .k[dir="rtl"] { font-family: var(--ar); }
+.set-row .d { font-size: 12px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.set-row .seg { flex: none; }
+.set-row .seg button { padding: 6px 10px; font-size: 12.5px; }
+.set-col { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.set-col:last-child { border-bottom: 0; }
+.set-col .k { font-size: 14px; margin-bottom: 8px; }
+.avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; font-weight: 700; flex: none; }
+.stack { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--line); margin: 10px 0 8px; }
+.stack i { display: block; height: 100%; }
+.stack .s1 { background: var(--accent); min-width: 6px; }
+.stack .s2 { background: color-mix(in srgb, var(--muted) 55%, var(--line)); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.legend .l1 { background: var(--accent); } .legend .l2 { background: color-mix(in srgb, var(--muted) 55%, var(--line)); } .legend .l3 { background: var(--line); }
+.big-num { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.big-num small { font-size: 13px; color: var(--muted); font-weight: 500; }
+
+/* Toast */
+.toast { position: absolute; left: 50%; bottom: 82px; transform: translateX(-50%); background: var(--tool-bg); color: var(--tool-fg); padding: 10px 10px 10px 16px; border-radius: 12px; font-size: 13.5px; display: flex; gap: 10px; align-items: center; z-index: 40; white-space: nowrap; box-shadow: 0 10px 28px rgba(0, 0, 0, .25); animation: pop .18s ease-out; max-width: calc(100% - 32px); }
+.toast span { overflow: hidden; text-overflow: ellipsis; padding-right: 6px; }
+.toast button { color: var(--undo); font-weight: 600; background: none; border: 0; padding: 4px 8px; border-radius: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="wrap">
+  <div class="device" id="device">
+    <div id="screen"></div>
+    <nav class="tabbar" id="tabbar" aria-label="Main"></nav>
+    <div id="layer" aria-hidden="true"></div>
+    <div id="toast" class="toast" role="status" hidden></div>
+  </div>
+
+  <aside class="guide">
+    <h1>Folio, round two</h1>
+    <p class="lede">Updated from your 10 comments. Everything is clickable; books, notes and numbers are sample data.</p>
+
+    <h2>What changed</h2>
+    <ul>
+      <li><svg class="ic" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg><span><span class="new">1</span><b>Select any words.</b> Tap a word to select it. To select a range, drag with the mouse on PC, or long-press and drag on your phone.</span></li>
+      <li><svg class="ic" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg><span><span class="new">2</span><b>No more “time left”.</b> Progress is in pages, with time spent shown second.</span></li>
+      <li><svg class="ic" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg><span><span class="new">3</span><b>Page view by default</b>, the PDF page as printed. The icon next to the frame switches to <b>Reading mode</b>: the same text, larger and reflowed. Your highlights show in both views.</span></li>
+      <li><svg class="ic" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg><span><span class="new">4–5</span><b>Status and category filter together.</b> “Continue reading” shows the most recent book in whatever you’ve filtered.</span></li>
+      <li><svg class="ic" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg><span><span class="new">6, 10</span><b>Settings</b> (the gear in Library): your Drive and device storage, offline copies, categories, defaults and export.</span></li>
+      <li><svg class="ic" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg><span><span class="new">7</span><b>Weekly goals</b>, as many as you want, each by category, in time or pages. The daily streak is gone.</span></li>
+      <li><svg class="ic" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg><span><span class="new">8</span><b>Flashcards both ways</b>: English → Arabic, Arabic → English, or mixed.</span></li>
+      <li><svg class="ic" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg><span><span class="new">9</span><b>Tap highlighted text to read its note</b> right on the page. A small dot marks highlights that have a note.</span></li>
+      <li><svg class="ic" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg><span><span class="new">10</span><b>Edit book details</b>: long-press a book (right-click on PC), or use the pencil in Contents &amp; notes.</span></li>
+    </ul>
+    <p class="note">The sample book is the public-domain 1859 text of <i>On the Origin of Species</i>, pages 11–12. For the demo, only a few words and phrases have their own Arabic translation; any other selection shows the full sentence’s translation. The real app translates exactly what you select.</p>
+  </aside>
+</div>
+
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const isArabic = s => /[؀-ۿ]/.test(s || '');
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+  const fmtMin = m => { const h = Math.floor(m / 60), r = m % 60; return h ? (r ? `${h}h ${r}m` : `${h}h`) : `${r}m`; };
+
+  const ICON = {
+    back: '<path d="M15 18l-6-6 6-6"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
+    bookmark: '<path d="M7 4h10v16l-5-3.6L7 20z"/>',
+    bookmarkFill: '<path d="M7 4h10v16l-5-3.6L7 20z" fill="currentColor"/>',
+    list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
+    area: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
+    reflow: '<path d="M4 6h16M4 10.5h16M4 15h11M4 19.5h7"/>',
+    pageview: '<rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M8.5 7.5h7M8.5 11h7M8.5 14.5h4"/>',
+    chevL: '<path d="M15 18l-6-6 6-6"/>',
+    chevR: '<path d="M9 6l6 6-6 6"/>',
+    note: '<path d="M5 4h10l4 4v12H5z"/><path d="M9 12h6M9 16h4"/>',
+    tag: '<path d="M3.5 12.5V4h8.5l8.5 8.5-8 8z"/><circle cx="8" cy="8.5" r="1.3"/>',
+    translate: '<path d="M4 5h9M8.5 3v2M11 5c-.8 3.8-3.6 6.8-7 8.2M6.3 8.6c1.4 2 3.3 3.6 5.7 4.6M13 21l4-9 4 9M14.4 18h5.2"/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+    check: '<path d="M5 12l5 5 9-10"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    library: '<path d="M5 4h3v16H5zM10.5 4h3v16h-3zM16 5.2l2.9-.8 3.6 15-2.9.8z"/>',
+    notes: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
+    words: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 10h8"/>',
+    stats: '<path d="M5 20V11M12 20V4M19 20v-6"/>',
+    x: '<path d="M6 6l12 12M18 6L6 18"/>',
+    type: '<path d="M3 18L8 6l5 12M4.6 14.2h6.8M15 18l3-7 3 7M15.9 16h4.2"/>',
+    upload: '<path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M5 20h14"/>',
+    trash: '<path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13"/>',
+    sort: '<path d="M7 4v16M3.5 16.5L7 20l3.5-3.5M17 20V4M13.5 7.5L17 4l3.5 3.5"/>',
+    edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+    swap: '<path d="M7 7h12l-3.5-3.5M17 17H5l3.5 3.5"/>'
+  };
+  const ic = (n, s = 22) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
+
+  /* ---------- Sample data ---------- */
+  let CATS = ['Tech', 'General', 'Philosophy', 'Arabic'];
+  const STATUS = { 'reading': 'Reading', 'to-read': 'To read', 'paused': 'Paused', 'finished': 'Finished' };
+  const BOOKS = [
+    { id: 'origin', title: 'On the Origin of Species', author: 'Charles Darwin', pages: 502, page: 11, cats: ['General'], status: 'reading', last: 10, lastLabel: 'Today', spent: 370, size: 18.4, offline: true, c1: '#2E5E55', c2: '#E3D3AA' },
+    { id: 'ddia', title: 'Designing Data-Intensive Applications', author: 'Martin Kleppmann', pages: 616, page: 301, cats: ['Tech'], status: 'reading', last: 9, lastLabel: 'Yesterday', spent: 680, size: 24.1, offline: true, c1: '#3B3F78', c2: '#E2E4F6' },
+    { id: 'med', title: 'Meditations', author: 'Marcus Aurelius', pages: 304, page: 118, cats: ['Philosophy', 'General'], status: 'reading', last: 8, lastLabel: '2 days ago', spent: 145, size: 3.2, offline: true, c1: '#6E3A2C', c2: '#EEDFCB' },
+    { id: 'muq', title: 'مقدمة ابن خلدون', author: 'ابن خلدون', pages: 612, page: 144, cats: ['Arabic', 'General'], status: 'reading', last: 7, lastLabel: '3 days ago', spent: 185, size: 42.6, offline: true, rtl: true, c1: '#1E3A57', c2: '#E6D6A8' },
+    { id: 'ddd', title: 'Domain-Driven Design', author: 'Eric Evans', pages: 560, page: 140, cats: ['Tech'], status: 'paused', last: 5, lastLabel: 'Last month', spent: 245, size: 31.7, offline: false, c1: '#2F5A7A', c2: '#DCE9F2' },
+    { id: 'kalila', title: 'كليلة ودمنة', author: 'ابن المقفع', pages: 280, page: 62, cats: ['Arabic'], status: 'paused', last: 3, lastLabel: 'Last month', spent: 100, size: 9.8, offline: false, rtl: true, c1: '#5B4A1D', c2: '#F0E4BF' },
+    { id: 'walden', title: 'Walden', author: 'Henry David Thoreau', pages: 352, page: 352, cats: ['Philosophy'], status: 'finished', last: 2, lastLabel: 'In September', spent: 450, size: 6.1, offline: true, c1: '#3D5A2E', c2: '#E8E4C8' },
+    { id: 'war', title: 'The Art of War', author: 'Sun Tzu', pages: 96, page: 0, cats: ['General'], status: 'to-read', last: 0, lastLabel: 'Not opened', spent: 0, size: 1.4, offline: true, c1: '#7A2023', c2: '#F2E4D0' }
+  ];
+  const ORIGIN = BOOKS[0];
+
+  const S = {
+    s1: { en: 'When on board H.M.S. ‘Beagle,’ as naturalist, I was much struck with certain facts in the distribution of the inhabitants of South America, and in the geological relations of the present to the past inhabitants of that continent.', ar: 'عندما كنتُ على متن السفينة «بيغل» بصفتي عالِمًا طبيعيًا، استوقفتني حقائق معيّنة في توزّع سكان أمريكا الجنوبية، وفي العلاقات الجيولوجية بين سكان تلك القارة الحاليين والسابقين.' },
+    s2: { en: 'These facts seemed to me to throw some light on the origin of species—that mystery of mysteries, as it has been called by one of our greatest philosophers.', ar: 'بدا لي أن هذه الحقائق تُلقي بعض الضوء على أصل الأنواع، ذلك اللغز الأعظم كما سمّاه أحد أعظم فلاسفتنا.' },
+    s3: { en: 'On my return home, it occurred to me, in 1837, that something might perhaps be made out on this question by patiently accumulating and reflecting on all sorts of facts which could possibly have any bearing on it.', ar: 'وعند عودتي إلى الوطن عام 1837، خطر لي أنه ربما يمكن التوصّل إلى شيء في هذه المسألة بالجمع الصبور لكل أنواع الحقائق التي قد تكون لها صلة بها، والتأمّل فيها.' },
+    s4: { en: 'After five years’ work I allowed myself to speculate on the subject, and drew up some short notes; these I enlarged in 1844 into a sketch of the conclusions, which then seemed to me probable.', ar: 'وبعد خمس سنوات من العمل سمحتُ لنفسي بالتأمّل النظري في الموضوع، ودوّنتُ بعض الملاحظات القصيرة، ثم وسّعتها عام 1844 إلى مخطّط للاستنتاجات التي بدت لي محتملة آنذاك.' },
+    s5: { en: 'From that period to the present day I have steadily pursued the same object.', ar: 'ومنذ تلك الفترة حتى اليوم وأنا أسعى بثبات إلى الهدف نفسه.' },
+    s6: { en: 'In considering the Origin of Species, it is quite conceivable that a naturalist, reflecting on the mutual affinities of organic beings, on their embryological relations, their geographical distribution, geological succession, and other such facts, might come to the conclusion that each species had not been independently created, but had descended, like varieties, from other species.', ar: 'عند النظر في أصل الأنواع، من المتصوَّر تمامًا أن عالِمًا طبيعيًا يتأمّل في الصلات المتبادلة بين الكائنات الحية، وفي علاقاتها الجنينية، وتوزّعها الجغرافي، وتعاقبها الجيولوجي، قد يصل إلى أن كل نوع لم يُخلق مستقلًا، بل انحدر من أنواع أخرى كما تنحدر الضروب.' },
+    s7: { en: 'Nevertheless, such a conclusion, even if well founded, would be unsatisfactory, until it could be shown how the innumerable species inhabiting this world have been modified, so as to acquire that perfection of structure and coadaptation which most justly excites our admiration.', ar: 'ومع ذلك، فإن مثل هذا الاستنتاج، حتى لو كان له أساس متين، سيظل غير مُرضٍ ما لم يُبيَّن كيف تعدّلت الأنواع التي لا تُحصى في هذا العالم، حتى اكتسبت ذلك الكمال في البنية والتكيّف المتبادل الذي يثير إعجابنا عن حق.' }
+  };
+  const DICT = {
+    naturalist: 'عالِم طبيعي', struck: 'استوقفني، أثار انتباهي', inhabitants: 'السكان', distribution: 'التوزّع، الانتشار',
+    geological: 'جيولوجي', mystery: 'لغز', philosophers: 'فلاسفة', accumulating: 'جمع، تكديس', patiently: 'بصبر',
+    speculate: 'يتأمّل نظريًا، يُخمّن', sketch: 'مخطّط أوّلي', probable: 'مُرجَّح، محتمل', steadily: 'بثبات',
+    pursued: 'سعى إلى، واصل', conceivable: 'يمكن تصوّره', affinities: 'صلات، قرابات', embryological: 'جنيني',
+    succession: 'تعاقب', independently: 'بشكل مستقل', descended: 'انحدر', varieties: 'ضروب، سلالات',
+    nevertheless: 'ومع ذلك', unsatisfactory: 'غير مُرضٍ', innumerable: 'لا يُحصى', modified: 'تعدّل، تغيّر',
+    coadaptation: 'التكيّف المتبادل', admiration: 'إعجاب', founded: 'مبني على أساس'
+  };
+  const PHRASES = {
+    'throw some light on': 'يُلقي بعض الضوء على', 'mystery of mysteries': 'لغز الألغاز', 'much struck with': 'تأثّرتُ كثيرًا بـ',
+    'drew up': 'صاغ، دوّن', 'made out': 'تبيّن، توصّل إلى', 'bearing on': 'له صلة بـ', 'well founded': 'له أساس متين',
+    'excites our admiration': 'يثير إعجابنا'
+  };
+  const PAGES = {
+    11: [{ h: 'Introduction' }, { p: ['s1', 's2'] }, { p: ['s3', 's4', 's5'] }],
+    12: [{ fig: 1 }, { p: ['s6'] }, { p: ['s7'] }]
+  };
+  /* Each page becomes a list of words; highlights point at word positions, so they work in both views. */
+  const PT = {}, PB = {};
+  for (const [pg, blocks] of Object.entries(PAGES)) {
+    const toks = [];
+    PB[pg] = blocks.map(bl => {
+      if (!bl.p) return bl;
+      const a = toks.length;
+      bl.p.forEach(sid => S[sid].en.split(' ').forEach(t => toks.push({ t, sid })));
+      return { ...bl, a, b: toks.length };
+    });
+    PT[pg] = toks;
+  }
+  const quoteOf = (pg, a, b) => PT[pg].slice(a, b + 1).map(x => x.t).join(' ');
+  function rangeOf(pg, phrase) {
+    const want = phrase.split(' ').map(norm), T = PT[pg].map(x => norm(x.t));
+    for (let i = 0; i <= T.length - want.length; i++) if (want.every((w, k) => T[i + k] === w)) return [i, i + want.length - 1];
+    return null;
+  }
+  const CHAPTERS = [
+    ['Introduction', 9], ['I. Variation under Domestication', 15], ['II. Variation under Nature', 52],
+    ['III. Struggle for Existence', 68], ['IV. Natural Selection', 89], ['V. Laws of Variation', 141],
+    ['VI. Difficulties on Theory', 177], ['VII. Instinct', 217], ['VIII. Hybridism', 252],
+    ['IX. Imperfection of the Geological Record', 279], ['X. Geological Succession', 312],
+    ['XI–XII. Geographical Distribution', 346], ['XIII. Mutual Affinities', 411], ['XIV. Recapitulation and Conclusion', 459]
+  ].map(([t, p]) => ({ t, p }));
+  const chapterOf = p => [...CHAPTERS].reverse().find(c => p >= c.p)?.t || 'Front matter';
+  const TOTAL = ORIGIN.pages;
+
+  let seq = 100;
+  const nid = () => 'a' + (++seq);
+  let anns = [
+    { id: 'a1', book: 'origin', type: 'highlight', page: 11, r: rangeOf(11, 'mystery of mysteries'), color: 'yellow', note: 'The question the whole book is trying to answer.', tags: ['big-question'] },
+    { id: 'a10', book: 'origin', type: 'highlight', page: 11, r: rangeOf(11, 'patiently accumulating and reflecting on all sorts of facts'), color: 'none', note: 'His method: collect first, theorize later.', tags: ['method'] },
+    { id: 'a11', book: 'origin', type: 'highlight', page: 12, r: rangeOf(12, 'each species had not been independently created'), color: 'green', note: '', tags: [] },
+    { id: 'a2', book: 'origin', type: 'bookmark', page: 11, tags: [] },
+    { id: 'a9', book: 'origin', type: 'bookmark', page: 89, tags: [] },
+    { id: 'a3', book: 'origin', type: 'summary', chapter: 'Introduction', page: 9, note: 'Darwin explains how the Beagle voyage led him to spend about twenty years collecting facts before publishing his theory.', tags: ['chapter-summary'] },
+    { id: 'a4', book: 'origin', type: 'side', page: 12, note: 'Compare this with Wallace’s 1858 essay. Same conclusion, reached independently.', tags: ['to-research'] },
+    { id: 'a5', book: 'med', type: 'highlight', color: 'green', quote: 'Begin the morning by saying to thyself, I shall meet with the busy-body, the ungrateful, arrogant, deceitful, envious, unsocial.', note: 'Morning reflection to try this week.', page: 23, tags: ['habits'] },
+    { id: 'a12', book: 'ddia', type: 'highlight', color: 'blue', quote: 'Reliability, scalability and maintainability', note: 'The three concerns from chapter 1. Use them in design reviews.', page: 4, tags: ['architecture'] },
+    { id: 'a6', book: 'walden', type: 'highlight', color: 'blue', quote: 'I went to the woods because I wished to live deliberately, to front only the essential facts of life.', note: '', page: 88, tags: ['big-question'] },
+    { id: 'a7', book: 'kalila', type: 'side', page: 40, note: 'فكرة الحكاية داخل الحكاية، قارنها بألف ليلة وليلة.', tags: ['structure'] },
+    { id: 'a8', book: 'muq', type: 'summary', chapter: 'الباب الأول', page: 120, note: 'Asabiyyah: group cohesion builds a state, then weakens over about three generations.', tags: ['chapter-summary', 'history'] }
+  ];
+  let words = [
+    { en: 'throw some light on', ar: 'يُلقي بعض الضوء على', src: 'On the Origin of Species', page: 11, due: true },
+    { en: 'mystery of mysteries', ar: 'لغز الألغاز', src: 'On the Origin of Species', page: 11, due: true },
+    { en: 'to front only the essential facts of life', ar: 'أن يواجه حقائق الحياة الجوهرية وحدها', src: 'Walden', page: 88, due: true },
+    { en: 'busy-body', ar: 'شخص فضولي يتدخّل فيما لا يعنيه', src: 'Meditations', page: 23, due: false, next: 'In 3 days' }
+  ];
+  let goals = [
+    { id: 'g1', cat: 'Tech', measure: 'time', target: 240, done: 160 },
+    { id: 'g2', cat: 'General', measure: 'time', target: 120, done: 125 },
+    { id: 'g3', cat: 'All', measure: 'pages', target: 300, done: 214 }
+  ];
+
+  const prefersDark = (() => { try { return matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) { return false; } })();
+  const st = {
+    screen: 'library', fStatus: 'All', fCat: 'All', libQuery: null,
+    view: 'page', defaultView: 'page', readerTheme: prefersDark ? 'night' : 'paper', layout: 'paged', zoom: 1, progressMode: 'last',
+    page: 11, chrome: true, sel: null, peek: null, areaMode: false, draft: null,
+    panelTab: 'notes', panelFilter: 'All', hubType: 'All', hubTag: null, hubQuery: '',
+    readPages: new Set([9, 10]), readChapters: new Set(), sync: 'synced',
+    chartMetric: 'pages', cardDir: 'en-ar', mobileData: true, autoOffline: true
+  };
+
+  const device = $('#device'), screen = $('#screen'), layer = $('#layer'), tabbar = $('#tabbar');
+
+  /* ---------- Sync status + toast ---------- */
+  let syncT;
+  const syncHTML = () => st.sync === 'saving'
+    ? '<span class="sync saving"><i class="dot"></i>Saved on this device · syncing to Drive</span>'
+    : '<span class="sync"><i class="dot"></i>Synced with Google Drive</span>';
+  const paintSync = () => $$('[data-sync]').forEach(n => n.innerHTML = syncHTML());
+  function saved() {
+    st.sync = 'saving'; paintSync(); clearTimeout(syncT);
+    syncT = setTimeout(() => { st.sync = 'synced'; paintSync(); }, 1300);
+  }
+  let toastT, undoFn = null;
+  function toast(msg, undo) {
+    const t = $('#toast');
+    undoFn = undo || null;
+    t.innerHTML = `<span>${esc(msg)}</span>${undo ? '<button data-act="undo">Undo</button>' : ''}`;
+    t.style.bottom = st.screen === 'reader' ? '112px' : (st.screen === 'settings' ? '24px' : '82px');
+    t.hidden = false;
+    t.style.animation = 'none'; void t.offsetWidth; t.style.animation = '';
+    clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; undoFn = null; }, 4000);
+  }
+
+  /* ---------- Navigation ---------- */
+  const TABS = [['library', 'Library'], ['notes', 'Notes'], ['words', 'Words'], ['stats', 'Stats']];
+  function paintTabs() {
+    tabbar.hidden = st.screen === 'reader' || st.screen === 'settings';
+    tabbar.innerHTML = TABS.map(([k, l]) => `<button class="tab" data-act="go" data-to="${k}" ${st.screen === k ? 'aria-current="page"' : ''}>${ic(k, 22)}<span>${l}</span></button>`).join('');
+  }
+  function go(to) { closeSheet(true); st.screen = to; st.sel = null; st.peek = null; st.areaMode = false; render(); }
+  function render() {
+    paintTabs();
+    ({ library: renderLibrary, reader: renderReader, notes: renderHub, words: renderWords, stats: renderStats, settings: renderSettings })[st.screen]();
+  }
+
+  /* ---------- Library ---------- */
+  const cover = b => `<div class="cover" style="--c1:${b.c1};--c2:${b.c2}" ${b.rtl ? 'dir="rtl" lang="ar"' : ''}><span class="ct">${esc(b.title)}</span><span class="ca">${esc(b.author)}</span></div>`;
+  const pct = b => Math.round(b.page / b.pages * 100);
+  function bookStatus(b) {
+    if (b.status === 'finished') return `Finished · ${b.pages} pages`;
+    if (b.status === 'to-read') return `Not started · ${b.pages} pages`;
+    return `p. ${b.page} of ${b.pages} · ${pct(b)}%`;
+  }
+  const RTL = b => b.rtl ? 'dir="rtl" lang="ar"' : '';
+  function renderLibrary() {
+    ORIGIN.page = Math.max(ORIGIN.page, st.page);
+    let list = BOOKS.filter(b => (st.fStatus === 'All' || STATUS[b.status] === st.fStatus) && (st.fCat === 'All' || b.cats.includes(st.fCat)));
+    if (st.libQuery) list = list.filter(b => (b.title + ' ' + b.author).toLowerCase().includes(st.libQuery.toLowerCase()));
+    list.sort((x, y) => y.last - x.last);
+    const recent = list.find(b => b.status === 'reading' || b.status === 'paused');
+    const scope = [st.fCat !== 'All' ? st.fCat : '', st.fStatus !== 'All' ? st.fStatus.toLowerCase() : ''].filter(Boolean).join(' · ');
+    screen.innerHTML = `<div class="scroll">
+      <header class="hdr">
+        <div><div data-sync>${syncHTML()}</div><h1>Library</h1></div>
+        <div class="hdr-actions">
+          <button class="icon-btn" data-act="lib-search" aria-label="Search library" aria-pressed="${st.libQuery !== null}">${ic('search')}</button>
+          <button class="icon-btn" data-act="go" data-to="settings" aria-label="Settings">${ic('gear')}</button>
+          <button class="btn-primary sm" data-act="upload" style="margin-left:4px">${ic('upload', 17)}Add PDF</button>
+        </div>
+      </header>
+      ${st.libQuery !== null ? `<label class="search-field">${ic('search', 18)}<input id="lib-q" type="search" placeholder="Title or author" value="${esc(st.libQuery)}" autocomplete="off"></label>` : ''}
+      ${recent ? `<section class="continue" aria-label="Continue reading">
+        <div>${cover(recent)}</div>
+        <div style="min-width:0">
+          <div class="eyebrow">Continue reading${scope ? ` · ${esc(scope)}` : ''}</div>
+          <h2 ${RTL(recent)}>${esc(recent.title)}</h2>
+          <div class="where">p. ${recent.page} of ${recent.pages} · ${recent.lastLabel}</div>
+          <div class="row"><button class="btn-primary sm" data-act="open-book" data-id="${recent.id}">Resume</button><div class="bar"><i style="width:${Math.max(2, pct(recent))}%"></i></div></div>
+        </div>
+      </section>` : ''}
+      <div class="chips" role="group" aria-label="Status"><span class="clabel">Status</span>
+        ${['All', ...Object.values(STATUS)].map(f => `<button class="chip" data-act="fstatus" data-v="${f}" aria-pressed="${st.fStatus === f}">${f}</button>`).join('')}
+      </div>
+      <div class="chips" role="group" aria-label="Category"><span class="clabel">Category</span>
+        ${['All', ...CATS].map(f => `<button class="chip" data-act="fcat" data-v="${esc(f)}" aria-pressed="${st.fCat === f}">${esc(f)}</button>`).join('')}
+      </div>
+      <div class="grid-head"><span>${list.length} ${list.length === 1 ? 'book' : 'books'}</span><span style="display:inline-flex;gap:4px;align-items:center">${ic('sort', 15)}Recently read</span></div>
+      ${list.length ? `<ul class="grid">${list.map(b => `<li><button class="book" data-act="open-book" data-id="${b.id}" data-book="${b.id}">
+        ${cover(b)}
+        <div class="bt" ${RTL(b)}>${esc(b.title)}</div>
+        <div class="bs">${bookStatus(b)}</div>
+        ${b.status === 'reading' || b.status === 'paused' ? `<div class="bar"><i style="width:${Math.max(2, pct(b))}%"></i></div>` : ''}
+      </button></li>`).join('')}</ul>` : `<p class="empty">No books match these filters.<br>Long-press a book to change its status or categories.</p>`}
+    </div>`;
+    const q = $('#lib-q');
+    if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); q.oninput = () => { st.libQuery = q.value; renderLibrary(); }; }
+  }
+
+  /* Book details (rename, author, categories, status, offline) */
+  let details = null;
+  function openDetails(id) {
+    const b = BOOKS.find(x => x.id === id);
+    details = { id, cats: [...b.cats], status: b.status, offline: b.offline };
+    paintDetails();
+  }
+  function paintDetails(keep) {
+    const b = BOOKS.find(x => x.id === details.id), d = details;
+    openSheet(`<div class="sh-head"><h3>Book details</h3><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('x')}</button></div>
+      <div class="sh-body">
+        <label class="lbl" for="bd-title">Title</label>
+        <input id="bd-title" class="field" dir="auto" value="${esc($('#bd-title')?.value ?? b.title)}">
+        <label class="lbl" for="bd-author">Author</label>
+        <input id="bd-author" class="field" dir="auto" value="${esc($('#bd-author')?.value ?? b.author)}">
+        <span class="lbl">Status</span>
+        <div class="seg">${Object.entries(STATUS).map(([k, l]) => `<button data-act="bd-status" data-v="${k}" aria-pressed="${d.status === k}">${l}</button>`).join('')}</div>
+        <span class="lbl">Categories</span>
+        <div class="tagpick">${CATS.map(c => `<button class="chip" data-act="bd-cat" data-v="${esc(c)}" aria-pressed="${d.cats.includes(c)}">${esc(c)}</button>`).join('')}</div>
+        <p class="help">A book can be in several categories. Manage the list in Settings.</p>
+        <div class="fileinfo">
+          <div class="grow"><div>PDF · ${b.size} MB · ${b.pages} pages</div><div class="sub">Stored in Google Drive › Folio › Books</div></div>
+          <span class="muted" style="font-size:12.5px">Keep offline</span>
+          <button class="switch" role="switch" aria-checked="${d.offline}" aria-label="Keep a copy on this device" data-act="bd-offline"></button>
+        </div>
+      </div>
+      <div class="sh-foot"><button class="btn-ghost danger" data-act="bd-remove">Remove book</button><span style="flex:1"></span><button class="btn-ghost" data-act="sheet-close">Cancel</button><button class="btn-primary" data-act="bd-save">Save</button></div>`, null, { keep: true });
+  }
+
+  /* ---------- Reader ---------- */
+  const hlAt = (pg, i) => anns.find(h => h.type === 'highlight' && h.book === 'origin' && h.page === pg && h.r && i >= h.r[0] && i <= h.r[1]);
+  const isBookmarked = p => anns.some(a => a.book === 'origin' && a.type === 'bookmark' && a.page === p);
+  const notesOnPage = p => anns.filter(a => a.book === 'origin' && a.page === p && a.type !== 'bookmark' && a.type !== 'summary').length;
+  const figHTML = () => `<figure class="fig"><svg viewBox="0 0 260 150" role="img" aria-label="Branching diagram showing species diverging over time">
+    <g stroke="currentColor" stroke-width=".5" opacity=".35">${[118, 86, 54, 22].map(y => `<path d="M24 ${y}H246"/>`).join('')}</g>
+    <g>${['I', 'II', 'III', 'IV'].map((t, i) => `<text x="10" y="${121 - i * 32}">${t}</text>`).join('')}</g>
+    <g stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round">
+      <path d="M130 144V118M130 118L84 86M130 118l48-32M84 86L60 54M84 86l14-32M178 86l-12-32M178 86l34-32M60 54L48 22M60 54l12-32M98 54l4-32M166 54l-6-32M212 54l-12-32M212 54l16-32"/>
+    </g>
+    <g fill="currentColor">${[[48, 22], [72, 22], [102, 22], [160, 22], [200, 22], [228, 22]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.4"/>`).join('')}<circle cx="130" cy="144" r="3"/></g>
+  </svg><figcaption>Fig. 1. Divergence of character (redrawn for this sample)</figcaption></figure>`;
+  function paraHTML(pg, bl) {
+    let out = '';
+    for (let i = bl.a; i < bl.b; i++) {
+      const h = hlAt(pg, i);
+      out += `<span class="w${h ? ' hl-' + h.color : ''}" data-i="${i}">${esc(PT[pg][i].t)}</span>`;
+      if (h && h.r[1] === i && (h.note || h.tags.length)) out += `<span class="nm" data-act="peek" data-id="${h.id}" role="button" aria-label="Show note"></span>`;
+      if (i < bl.b - 1) { const h2 = hlAt(pg, i + 1); out += `<span class="sp${h && h === h2 ? ' hl-' + h.color : ''}" data-i="${i}"> </span>`; }
+    }
+    return `<p>${out}</p>`;
+  }
+  function pageHTML(n) {
+    const cls = st.view === 'page' ? 'pdf' : 'reflow';
+    const width = st.view === 'page' ? `style="width:${Math.round(st.zoom * 100)}%"` : '';
+    if (!PB[n]) return `<article class="page ${cls} placeholder" data-page="${n}" ${width}><p style="text-indent:0;text-align:center">Page ${n} isn’t in this sample.<br>Pages 11 and 12 are.</p><div class="pno">${n}</div></article>`;
+    const areas = st.view === 'page' ? anns.filter(a => a.book === 'origin' && a.type === 'area' && a.page === n) : [];
+    return `<article class="page ${cls}" data-page="${n}" data-real ${width}>
+      ${PB[n].map(bl => bl.h ? `<h2>${bl.h}</h2>` : bl.fig ? figHTML() : paraHTML(n, bl)).join('')}
+      ${areas.map(a => `<div class="area hl-${a.color}" data-act="peek" data-id="${a.id}" role="button" aria-label="Area highlight" style="left:${a.rect.x}%;top:${a.rect.y}%;width:${a.rect.w}%;height:${a.rect.h}%"></div>`).join('')}
+      <div class="pno">${st.view === 'page' ? n : `Page ${n}`}</div>
+    </article>`;
+  }
+  function renderReader() {
+    const pages = st.layout === 'paged' ? [st.page] : [st.page, st.page + 1].filter(p => p <= TOTAL);
+    const bm = isBookmarked(st.page), read = st.readPages.has(st.page), here = notesOnPage(st.page);
+    const prevScroll = $('#scroller')?.scrollTop || 0;
+    screen.innerHTML = `<div class="reader ${st.chrome ? '' : 'immersive'} ${st.areaMode ? 'areamode' : ''}" data-rt="${st.readerTheme}" style="--zoom:${st.zoom}" id="reader">
+      <div class="r-top">
+        <button class="icon-btn" data-act="go" data-to="library" aria-label="Back to library">${ic('back')}</button>
+        <div class="r-title"><div class="t1">${esc(ORIGIN.title)}</div><div class="t2">${esc(chapterOf(st.page))}</div></div>
+        <button class="icon-btn" data-act="view" aria-label="${st.view === 'page' ? 'Switch to reading mode' : 'Switch to page view'}" title="${st.view === 'page' ? 'Reading mode' : 'Page view'}">${ic(st.view === 'page' ? 'reflow' : 'pageview')}</button>
+        <button class="icon-btn" data-act="area" aria-label="Highlight an area" aria-pressed="${st.areaMode}" ${st.view === 'page' ? '' : 'disabled'}>${ic('area')}</button>
+        <button class="icon-btn" data-act="panel" data-tab="search" aria-label="Search in this book">${ic('search')}</button>
+        <button class="icon-btn" data-act="bookmark" aria-label="${bm ? 'Remove bookmark' : 'Bookmark this page'}" aria-pressed="${bm}">${ic(bm ? 'bookmarkFill' : 'bookmark')}</button>
+        <button class="icon-btn" data-act="settings" aria-label="Reading settings">${ic('type')}</button>
+      </div>
+      ${st.areaMode ? '<div class="float-hint">Drag over a figure or region</div>' : ''}
+      <div class="scroller" id="scroller">${pages.map(pageHTML).join('')}</div>
+      <div class="r-bottom">
+        <div class="r-range">
+          <input type="range" id="pg-range" min="1" max="${TOTAL}" value="${st.page}" aria-label="Go to page">
+          ${st.progressMode === 'marked' ? `<button class="pill ${read ? 'on' : ''}" data-act="markread" aria-pressed="${read}">${ic('check', 15)}${read ? 'Read' : 'Mark read'}</button>` : ''}
+        </div>
+        <div class="r-row">
+          <button class="icon-btn" data-act="prev" aria-label="Previous page">${ic('chevL')}</button>
+          <div class="pg" id="pg-label">${pgLabel(st.page)}</div>
+          <button class="pill" data-act="panel" data-tab="notes">${ic('list', 16)}Contents &amp; notes${here ? `<span class="badge" aria-label="${here} on this page">${here}</span>` : ''}</button>
+          <button class="icon-btn" data-act="next" aria-label="Next page">${ic('chevR')}</button>
+        </div>
+      </div>
+      <div id="float"></div>
+    </div>`;
+    const sc = $('#scroller');
+    sc.scrollTop = prevScroll;
+    sc.addEventListener('scroll', () => { if (!ps && (st.sel || st.peek || $('#float').innerHTML)) clearFloat(); }, { passive: true });
+    const r = $('#pg-range');
+    r.oninput = () => { $('#pg-label').innerHTML = `<b>${r.value}</b> of ${TOTAL} <span>· ${esc(chapterOf(+r.value))}</span>`; };
+    r.onchange = () => gotoPage(+r.value);
+  }
+  function pgLabel(p) {
+    return st.progressMode === 'marked'
+      ? `<b>${p}</b> of ${TOTAL} <span>· ${st.readPages.size} read</span>`
+      : `<b>${p}</b> of ${TOTAL} <span>· ${Math.round(Math.max(ORIGIN.page, p) / TOTAL * 100)}%</span>`;
+  }
+  function gotoPage(p, opts = {}) {
+    st.page = Math.min(TOTAL, Math.max(1, p)); st.sel = null; st.peek = null; st.draft = null;
+    if (st.progressMode === 'last') ORIGIN.page = Math.max(ORIGIN.page, st.page);
+    renderReader(); $('#scroller').scrollTop = 0;
+    if (opts.flash) flash(opts.flash);
+  }
+  function flash(sel) {
+    const els = $$(sel); if (!els.length) return;
+    els[0].scrollIntoView({ block: 'center' });
+    els.forEach(el => { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); });
+  }
+  const hlSelector = h => h.type === 'area' ? `.area[data-id="${h.id}"]` : Array.from({ length: h.r[1] - h.r[0] + 1 }, (_, k) => `.page[data-page="${h.page}"] .w[data-i="${h.r[0] + k}"]`).join(',');
+  function clearFloat() {
+    st.sel = null; st.peek = null; st.draft = null;
+    paintSel();
+    $$('.area-draft').forEach(n => n.remove());
+    const f = $('#float'); if (f) f.innerHTML = '';
+  }
+  function paintSel() {
+    $$('#scroller .sel').forEach(n => n.classList.remove('sel'));
+    if (!st.sel) return;
+    const pg = $(`.page[data-page="${st.sel.page}"]`); if (!pg) return;
+    for (let i = st.sel.a; i <= st.sel.b; i++) {
+      pg.querySelector(`.w[data-i="${i}"]`)?.classList.add('sel');
+      if (i < st.sel.b) pg.querySelector(`.sp[data-i="${i}"]`)?.classList.add('sel');
+    }
+  }
+  function selRects() {
+    const pg = $(`.page[data-page="${st.sel.page}"]`);
+    return [pg.querySelector(`.w[data-i="${st.sel.a}"]`).getBoundingClientRect(), pg.querySelector(`.w[data-i="${st.sel.b}"]`).getBoundingClientRect()];
+  }
+  function placeFloat(el, rects) {
+    const R = $('#reader').getBoundingClientRect();
+    const first = rects[0], last = rects[rects.length - 1];
+    const w = el.offsetWidth, h = el.offsetHeight;
+    let top = first.top - R.top - h - 10;
+    if (top < (st.chrome ? 66 : 10)) top = last.bottom - R.top + 10;
+    if (top + h > R.height - 10) top = Math.max(10, R.height - h - 10);
+    if (!el.classList.contains('tpop')) {
+      const left = (first.left + (rects.length > 1 && last.top === first.top ? last.right : first.right)) / 2 - R.left - w / 2;
+      el.style.left = Math.max(8, Math.min(R.width - w - 8, left)) + 'px';
+    }
+    el.style.top = top + 'px';
+  }
+  const SW = (act, cur, extra = '', sm = '') => ['yellow', 'green', 'blue', 'pink'].map(c => `<button class="sw sw-${c} ${sm} ${cur === c ? 'cur' : ''}" data-act="${act}" data-color="${c}" ${extra} aria-label="${c}"></button>`).join('');
+  function containingHL() {
+    const { page, a, b } = st.sel; const h = hlAt(page, a);
+    return h && h.r[0] <= a && h.r[1] >= b ? h : null;
+  }
+  function showSelTool() {
+    const h = containingHL();
+    $('#float').innerHTML = `<div class="seltool" role="toolbar" aria-label="Selected text">
+      ${SW('hl', h?.color)}
+      <span class="vr"></span>
+      <button class="tbtn" data-act="note">${ic('note', 18)}<span>Note</span></button>
+      <button class="tbtn" data-act="tag">${ic('tag', 18)}<span>Tag</span></button>
+      <button class="tbtn" data-act="translate">${ic('translate', 18)}<span>Arabic</span></button>
+      <button class="tbtn" data-act="copy">${ic('copy', 18)}<span>Copy</span></button>
+    </div>`;
+    placeFloat($('#float').firstElementChild, selRects());
+  }
+  /* Tapping highlighted text (or an area) shows its note in place */
+  function openPeek(h) {
+    clearFloat(); st.peek = h.id;
+    const quote = h.type === 'area' ? `Region on page ${h.page}` : quoteOf(h.page, h.r[0], h.r[1]);
+    $('#float').innerHTML = `<div class="tpop" role="dialog" aria-label="Note">
+      <div class="meta"><span>${h.type === 'area' ? 'Area' : h.color === 'none' ? 'Note' : 'Highlight'} · page ${h.page}</span></div>
+      <p class="pq"><mark class="hlm-${h.color}">${esc(quote)}</mark></p>
+      ${h.note ? `<p class="pn ${isArabic(h.note) ? 'arabic' : ''}" dir="auto">${esc(h.note)}</p>` : '<p class="pn muted">No note yet.</p>'}
+      ${h.tags.length ? `<div class="tags">${h.tags.map(t => `<span class="tagpill">#${esc(t)}</span>`).join('')}</div>` : ''}
+      <div class="tp-act">
+        <div class="sws">${SW('peek-color', h.color, '', 'sm')}</div>
+        <button class="btn-ghost sm danger" data-act="peek-del">Delete</button>
+        ${h.type !== 'area' ? '<button class="btn-ghost sm" data-act="peek-tr">Arabic</button>' : ''}
+        <button class="btn-primary sm" data-act="peek-edit">${h.note ? 'Edit' : 'Add note'}</button>
+      </div>
+    </div>`;
+    const el = $('#float').firstElementChild;
+    const anchor = h.type === 'area' ? [$(`.area[data-id="${h.id}"]`).getBoundingClientRect()] : [...$$(hlSelector(h))].map(n => n.getBoundingClientRect());
+    placeFloat(el, [anchor[0], anchor[anchor.length - 1]]);
+  }
+  function translationFor(pg, a, b) {
+    const text = quoteOf(pg, a, b), n = norm(text);
+    if (PHRASES[n]) return { en: text, ar: PHRASES[n], kind: 'phrase' };
+    if (a === b && DICT[n]) return { en: text, ar: DICT[n], kind: 'word' };
+    const sids = [...new Set(PT[pg].slice(a, b + 1).map(t => t.sid))];
+    return { en: sids.map(s => S[s].en).join(' '), ar: sids.map(s => S[s].ar).join(' '), kind: 'sentence', sel: text };
+  }
+  function showTranslation(pg, a, b) {
+    const tr = translationFor(pg, a, b);
+    st.tr = { ...tr, page: pg };
+    const has = words.some(w => w.en === (tr.kind === 'sentence' ? tr.en : tr.en));
+    const anchor = selRects ? null : null;
+    $('#float').innerHTML = `<div class="tpop" role="dialog" aria-label="Arabic translation">
+      <div class="meta"><span>English → Arabic</span><span>${tr.kind === 'word' ? 'Word' : tr.kind === 'phrase' ? 'Phrase' : 'Sentence'}</span></div>
+      <p class="src">${esc(tr.kind === 'sentence' ? tr.sel : tr.en)}</p>
+      <p class="ar" dir="rtl" lang="ar">${tr.ar}</p>
+      ${tr.kind === 'sentence' ? '<p class="fine">Sample shows the whole sentence. The app translates exactly what you select.</p>' : ''}
+      <div class="tp-act"><button class="btn-ghost sm" data-act="closefloat">Close</button><button class="btn-primary sm" data-act="saveword" ${has ? 'disabled' : ''}>${ic(has ? 'check' : 'plus', 16)}${has ? 'In Words' : 'Save to Words'}</button></div>
+    </div>`;
+    const ws = [...$$(`.page[data-page="${pg}"] .w`)].filter(n => +n.dataset.i >= a && +n.dataset.i <= b);
+    placeFloat($('#float').firstElementChild, [ws[0].getBoundingClientRect(), ws[ws.length - 1].getBoundingClientRect()]);
+  }
+
+  /* Word selection: tap a word, drag with a mouse, or long-press then drag on touch */
+  let ps = null, suppressClick = false;
+  const wordAt = (x, y) => document.elementFromPoint(x, y)?.closest?.('.w');
+  device.addEventListener('pointerdown', e => {
+    if (st.screen !== 'reader' || st.areaMode || e.button > 0) return;
+    const w = e.target.closest('.w'); if (!w) return;
+    const page = +w.closest('.page').dataset.page, i = +w.dataset.i;
+    ps = { page, i0: i, x: e.clientX, y: e.clientY, mouse: e.pointerType === 'mouse', selecting: false };
+    if (!ps.mouse) ps.timer = setTimeout(() => {
+      if (!ps) return;
+      ps.selecting = true; clearFloat(); st.sel = { page, a: i, b: i }; paintSel();
+      try { navigator.vibrate && navigator.vibrate(8); } catch (_) {}
+    }, 320);
+  });
+  device.addEventListener('pointermove', e => {
+    if (!ps) return;
+    const dist = Math.hypot(e.clientX - ps.x, e.clientY - ps.y);
+    if (!ps.selecting) {
+      if (dist < 6) return;
+      if (ps.mouse) { ps.selecting = true; clearFloat(); st.sel = { page: ps.page, a: ps.i0, b: ps.i0 }; }
+      else { clearTimeout(ps.timer); ps = null; return; }
+    }
+    const w = wordAt(e.clientX, e.clientY);
+    if (w && +w.closest('.page').dataset.page === ps.page) {
+      const i = +w.dataset.i;
+      st.sel = { page: ps.page, a: Math.min(ps.i0, i), b: Math.max(ps.i0, i) }; paintSel();
+    }
+  });
+  device.addEventListener('touchmove', e => { if (ps && ps.selecting) e.preventDefault(); }, { passive: false });
+  device.addEventListener('pointerup', () => {
+    if (!ps) return;
+    const p = ps; ps = null; clearTimeout(p.timer);
+    suppressClick = true; setTimeout(() => suppressClick = false, 60);
+    if (p.selecting) { showSelTool(); return; }
+    const h = hlAt(p.page, p.i0);
+    if (h) { st.peek === h.id ? clearFloat() : openPeek(h); return; }
+    if (st.sel && st.sel.page === p.page && p.i0 >= st.sel.a && p.i0 <= st.sel.b) { clearFloat(); return; }
+    clearFloat(); st.sel = { page: p.page, a: p.i0, b: p.i0 }; paintSel(); showSelTool();
+  });
+  device.addEventListener('pointercancel', () => { if (ps) { clearTimeout(ps.timer); ps = null; } });
+
+  /* Area drawing (page view only) */
+  let drag = null;
+  device.addEventListener('pointerdown', e => {
+    if (st.screen !== 'reader' || !st.areaMode) return;
+    const pg = e.target.closest('.page.pdf[data-real]'); if (!pg) return;
+    e.preventDefault(); clearFloat();
+    const r = pg.getBoundingClientRect();
+    const el = document.createElement('div'); el.className = 'area-draft'; pg.appendChild(el);
+    drag = { pg, r, x0: (e.clientX - r.left) / r.width * 100, y0: (e.clientY - r.top) / r.height * 100, el, rect: null };
+    try { pg.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  device.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const { r } = drag;
+    const x = Math.max(0, Math.min(100, (e.clientX - r.left) / r.width * 100));
+    const y = Math.max(0, Math.min(100, (e.clientY - r.top) / r.height * 100));
+    const rect = { x: Math.min(x, drag.x0), y: Math.min(y, drag.y0), w: Math.abs(x - drag.x0), h: Math.abs(y - drag.y0) };
+    drag.rect = rect;
+    Object.assign(drag.el.style, { left: rect.x + '%', top: rect.y + '%', width: rect.w + '%', height: rect.h + '%' });
+  });
+  device.addEventListener('pointerup', () => {
+    if (!drag) return;
+    const d = drag; drag = null; suppressClick = true; setTimeout(() => suppressClick = false, 60);
+    if (!d.rect || d.rect.w < 4 || d.rect.h < 3) { d.el.remove(); return; }
+    st.draft = { page: +d.pg.dataset.page, rect: d.rect };
+    $('#float').innerHTML = `<div class="seltool" role="toolbar" aria-label="Selected area">
+      ${SW('area-save', null)}
+      <span class="vr"></span>
+      <button class="tbtn" data-act="area-note">${ic('note', 18)}<span>Note</span></button>
+      <button class="tbtn" data-act="area-cancel">${ic('x', 18)}<span>Cancel</span></button>
+    </div>`;
+    placeFloat($('#float').firstElementChild, [d.el.getBoundingClientRect()]);
+  });
+
+  /* Create or merge a highlight for the current selection */
+  function upsertHighlight(color, note, tags) {
+    const { page, a, b } = st.sel;
+    const over = anns.filter(h => h.type === 'highlight' && h.book === 'origin' && h.page === page && h.r && h.r[0] <= b && h.r[1] >= a);
+    if (over.length === 1 && over[0].r[0] <= a && over[0].r[1] >= b) {
+      const h = over[0];
+      if (color) h.color = color;
+      if (note !== undefined) { h.note = note; h.tags = tags; }
+      return { h, created: false, removed: [] };
+    }
+    const r = [Math.min(a, ...over.map(h => h.r[0])), Math.max(b, ...over.map(h => h.r[1]))];
+    const h = {
+      id: nid(), book: 'origin', type: 'highlight', page, r, color: color || over[0]?.color || 'none',
+      note: note !== undefined ? note : over.map(o => o.note).filter(Boolean).join('\n'),
+      tags: tags || [...new Set(over.flatMap(o => o.tags))]
+    };
+    anns = anns.filter(x => !over.includes(x)); anns.push(h);
+    return { h, created: true, removed: over };
+  }
+
+  /* ---------- Sheets ---------- */
+  function openSheet(html, mount, opts = {}) {
+    const already = layer.classList.contains('open') && opts.keep;
+    layer.innerHTML = `<div class="scrim" data-act="sheet-close"></div><div class="sheet ${opts.tall ? 'tall' : ''}" role="dialog" aria-modal="true"><div class="grab" aria-hidden="true"></div>${html}</div>`;
+    layer.setAttribute('aria-hidden', 'false');
+    if (already) layer.classList.add('open');
+    else { layer.classList.remove('open'); void layer.offsetWidth; requestAnimationFrame(() => layer.classList.add('open')); }
+    mount && mount();
+  }
+  function closeSheet(instant) {
+    if (!layer.classList.contains('open')) return;
+    layer.classList.remove('open'); layer.setAttribute('aria-hidden', 'true'); editor = null; details = null;
+    if (instant) layer.innerHTML = '';
+    else setTimeout(() => { if (!layer.classList.contains('open')) layer.innerHTML = ''; }, 300);
+  }
+
+  /* Note / summary editor */
+  let editor = null;
+  const allTags = () => [...new Set(anns.flatMap(a => a.tags))].sort();
+  function openEditor(o) {
+    editor = { o, tags: [...(o.tags || [])] };
+    openSheet(`<div class="sh-head"><h3>${esc(o.title)}</h3><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('x')}</button></div>
+      <div class="sh-body">
+        ${o.quote ? `<blockquote class="quote"><mark class="hlm-${o.color || 'none'}">${esc(o.quote)}</mark></blockquote>` : ''}
+        ${o.range ? `<span class="lbl">Pages</span><div class="range-row"><label>From<input id="ed-from" class="field sm" type="number" inputmode="numeric" value="${o.range[0]}"></label><label>To<input id="ed-to" class="field sm" type="number" inputmode="numeric" value="${o.range[1]}"></label></div>` : ''}
+        <label class="lbl" for="ed-note">${esc(o.noteLabel || 'Note')}</label>
+        <textarea id="ed-note" class="field" dir="auto" placeholder="${esc(o.placeholder || 'A thought, a question, a connection…')}">${esc(o.note || '')}</textarea>
+        <span class="lbl">Tags</span>
+        <div class="tagpick" id="tagpick"></div>
+        <input id="ed-tag" class="field sm" style="margin-top:8px" placeholder="New tag, then press Enter" autocomplete="off" enterkeyhint="done">
+      </div>
+      <div class="sh-foot">${o.onDelete ? '<button class="btn-ghost danger" data-act="ed-del">Delete</button>' : ''}<span style="flex:1"></span><button class="btn-ghost" data-act="sheet-close">Cancel</button><button class="btn-primary" data-act="ed-save">Save</button></div>`,
+      () => {
+        paintTags();
+        const inp = $('#ed-tag');
+        inp.addEventListener('keydown', e => {
+          if (e.key !== 'Enter') return; e.preventDefault();
+          const t = inp.value.trim().toLowerCase().replace(/\s+/g, '-').replace(/^#/, '');
+          if (t && !editor.tags.includes(t)) editor.tags.push(t);
+          inp.value = ''; paintTags();
+        });
+        setTimeout(() => (o.focusTags ? inp : $('#ed-note'))?.focus({ preventScroll: true }), 320);
+      });
+  }
+  function paintTags() {
+    const pool = [...new Set([...allTags(), ...editor.tags])];
+    $('#tagpick').innerHTML = pool.map(t => `<button class="chip" data-act="ed-tag" data-t="${esc(t)}" aria-pressed="${editor.tags.includes(t)}">#${esc(t)}</button>`).join('');
+  }
+  function editSelection(focusTags) {
+    const sel = { ...st.sel }, h = containingHL();
+    openEditor({
+      title: h?.note ? 'Edit note' : 'Add note', quote: quoteOf(sel.page, sel.a, sel.b), color: h?.color || 'none', note: h?.note, tags: h?.tags, focusTags,
+      onSave(note, tags) { st.sel = sel; const res = upsertHighlight(null, note, tags); st.sel = null; renderReader(); toast(h ? 'Note updated' : 'Note added'); }
+    });
+  }
+  function editAnn(a) {
+    const titles = { side: `Side note · page ${a.page}`, summary: a.chapter ? `Summary · ${a.chapter}` : a.range ? 'Section summary' : 'Book summary', area: `Area · page ${a.page}`, highlight: a.color === 'none' ? 'Note' : 'Highlight' };
+    const quote = a.r ? quoteOf(a.page, a.r[0], a.r[1]) : a.quote;
+    openEditor({
+      title: titles[a.type], quote, color: a.color, note: a.note, tags: a.tags, range: a.range,
+      noteLabel: a.type === 'summary' ? 'Summary' : a.type === 'side' ? 'Side note' : 'Note',
+      onSave(note, tags, range) { a.note = note; a.tags = tags; if (range) a.range = range; toast('Saved'); },
+      onDelete: () => removeAnn(a, 'Deleted')
+    });
+  }
+  function removeAnn(a, msg) {
+    const i = anns.indexOf(a); anns.splice(i, 1); closeSheet(); saved(); refresh();
+    toast(msg, () => { anns.splice(i, 0, a); saved(); refresh(); });
+  }
+  function refresh() {
+    if (st.screen === 'reader') { st.sel = null; st.peek = null; renderReader(); } else render();
+    if ($('#pbody')) paintPanel();
+  }
+
+  /* Book panel */
+  const PTABS = [['contents', 'Contents'], ['notes', 'Notes'], ['bookmarks', 'Bookmarks'], ['search', 'Search']];
+  function openPanel(tab) {
+    if (tab) st.panelTab = tab;
+    clearFloat();
+    openSheet(`<div class="sh-head"><div style="min-width:0"><h3>${esc(ORIGIN.title)}</h3><div data-sync>${syncHTML()}</div></div>
+        <div class="acts"><button class="icon-btn" data-act="details" data-id="origin" aria-label="Edit book details">${ic('edit')}</button><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('x')}</button></div></div>
+      <div class="seg" role="tablist" id="ptabs"></div>
+      <div class="sh-body" id="pbody"></div>`, paintPanel, { tall: true });
+  }
+  const bookAnns = () => anns.filter(a => a.book === 'origin' && a.type !== 'bookmark');
+  const typeMatch = (a, f) => f === 'All' || (f === 'Highlights' && a.type === 'highlight' && a.color !== 'none') || (f === 'Notes' && (a.type === 'side' || a.note) && a.type !== 'summary') || (f === 'Summaries' && a.type === 'summary') || (f === 'Areas' && a.type === 'area');
+  function annItem(a) {
+    const quote = a.r ? quoteOf(a.page, a.r[0], a.r[1]) : a.quote;
+    const kind = a.type === 'highlight' ? (a.color === 'none' ? 'Note' : 'Highlight') : { side: 'Side note', summary: 'Summary', area: 'Area' }[a.type];
+    let body = '';
+    if (a.type === 'highlight') body = `<p class="q"><mark class="hlm-${a.color}">${esc(quote)}</mark></p>`;
+    if (a.type === 'area') body = `<div class="areathumb hlm-${a.color}">${ic('area', 16)}Region on page ${a.page}</div>`;
+    if (a.note) body += `<p class="nt ${isArabic(a.note) ? 'arabic' : ''}" dir="auto">${esc(a.note)}</p>`;
+    const where = a.type === 'summary' ? (a.chapter || (a.range ? `Pages ${a.range[0]}–${a.range[1]}` : 'Whole book')) : `Page ${a.page}`;
+    return `<li><div class="ann" role="button" tabindex="0" data-act="jump" data-id="${a.id}">
+      <div class="kind">${kind}</div>${body}
+      <div class="meta"><span>${esc(where)}</span>${a.tags.map(t => `<span class="tagpill">#${esc(t)}</span>`).join('')}</div>
+    </div></li>`;
+  }
+  function paintPanel() {
+    const counts = { notes: bookAnns().length, bookmarks: anns.filter(a => a.book === 'origin' && a.type === 'bookmark').length };
+    $('#ptabs').innerHTML = PTABS.map(([k, l]) => `<button role="tab" aria-selected="${st.panelTab === k}" data-act="ptab" data-v="${k}">${l}${counts[k] ? `<span class="ct">${counts[k]}</span>` : ''}</button>`).join('');
+    const body = $('#pbody');
+    if (st.panelTab === 'contents') {
+      const bookSum = anns.find(a => a.book === 'origin' && a.type === 'summary' && !a.chapter && !a.range);
+      const cur = chapterOf(st.page);
+      body.innerHTML = `
+        <button class="book-sum" data-act="${bookSum ? 'jump' : 'add-booksum'}" ${bookSum ? `data-id="${bookSum.id}"` : ''}>
+          <span class="k">Book summary</span>
+          <p>${bookSum ? esc(bookSum.note) : '<span class="muted">Add your summary of the whole book</span>'}</p>
+        </button>
+        <ol class="toc">${CHAPTERS.map((c, i) => {
+          const sum = anns.find(a => a.book === 'origin' && a.type === 'summary' && a.chapter === c.t);
+          return `<li class="${c.t === cur ? 'cur' : ''}">
+            ${st.progressMode === 'marked' ? `<button class="rd" data-act="chapread" data-i="${i}" aria-pressed="${st.readChapters.has(i)}" aria-label="Mark ${esc(c.t)} as read">${ic('check', 14)}</button>` : ''}
+            <button class="toc-go" data-act="chap" data-p="${c.p}"><span class="tt">${esc(c.t)}</span><span class="tp">${c.p}</span></button>
+            <button class="sum-pill ${sum ? 'has' : ''}" data-act="${sum ? 'jump' : 'add-chapsum'}" ${sum ? `data-id="${sum.id}"` : `data-i="${i}"`}>${sum ? 'Summary' : '+ Summary'}</button>
+          </li>`;
+        }).join('')}</ol>`;
+    } else if (st.panelTab === 'notes') {
+      const f = st.panelFilter;
+      const list = bookAnns().filter(a => typeMatch(a, f));
+      const here = list.filter(a => a.type !== 'summary' && a.page === st.page);
+      const rest = list.filter(a => !here.includes(a)).sort((x, y) => x.page - y.page);
+      body.innerHTML = `
+        <div class="pn-actions">
+          <button class="pill" data-act="add-side">${ic('plus', 15)}Side note on p. ${st.page}</button>
+          <button class="pill" data-act="add-secsum">${ic('plus', 15)}Section summary</button>
+        </div>
+        <div class="chips">${['All', 'Highlights', 'Notes', 'Summaries', 'Areas'].map(x => `<button class="chip" data-act="pfilter" data-v="${x}" aria-pressed="${f === x}">${x}</button>`).join('')}</div>
+        <h4 class="grp">On this page</h4>
+        ${here.length ? `<ul class="anns">${here.map(annItem).join('')}</ul>` : '<p class="help">Nothing on this page yet. Tap a word or drag across words to highlight, or add a side note.</p>'}
+        ${rest.length ? `<h4 class="grp">Rest of the book</h4><ul class="anns">${rest.map(annItem).join('')}</ul>` : ''}`;
+    } else if (st.panelTab === 'bookmarks') {
+      const bms = anns.filter(a => a.book === 'origin' && a.type === 'bookmark').sort((x, y) => x.page - y.page);
+      body.innerHTML = bms.length ? bms.map(a => `<button class="res" data-act="goto" data-p="${a.page}"><div class="rp">Page ${a.page}</div><div class="rs">${esc(chapterOf(a.page))}</div></button>`).join('')
+        : '<p class="empty">No bookmarks yet.<br>Tap the bookmark icon at the top of any page.</p>';
+    } else {
+      body.innerHTML = `<label class="search-field" style="margin:0 0 6px">${ic('search', 18)}<input id="bsearch" type="search" placeholder="Search this book" autocomplete="off" value="${esc(st.bq || '')}"></label><div id="bres"></div>`;
+      const inp = $('#bsearch');
+      const run = () => {
+        st.bq = inp.value; const q = inp.value.trim().toLowerCase();
+        if (q.length < 2) { $('#bres').innerHTML = '<p class="help">Type at least two letters. Try “species” or “facts”.</p>'; return; }
+        const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        const hits = [];
+        for (const pg of Object.keys(PT)) {
+          const text = PT[pg].map(t => t.t).join(' '); let m; re.lastIndex = 0;
+          while ((m = re.exec(text))) hits.push({ pg, i: m.index, text });
+        }
+        $('#bres').innerHTML = `<p class="help">${hits.length} ${hits.length === 1 ? 'match' : 'matches'} in pages 11–12</p>` + hits.map(h => {
+          const start = Math.max(0, h.i - 50), snip = (start ? '…' : '') + h.text.slice(start, h.i + q.length + 60) + '…';
+          const wi = h.text.slice(0, h.i).split(' ').length - 1;
+          return `<button class="res" data-act="goto" data-p="${h.pg}" data-wi="${wi}"><div class="rp">Page ${h.pg} · ${esc(chapterOf(+h.pg))}</div><div class="rs">${esc(snip).replace(re, m => `<mark class="hit">${m}</mark>`)}</div></button>`;
+        }).join('');
+      };
+      inp.oninput = run; run(); setTimeout(() => inp.focus({ preventScroll: true }), 320);
+    }
+  }
+
+  function openReadingSettings() {
+    clearFloat();
+    const segs = (k, opts) => `<div class="seg">${opts.map(([v, l]) => `<button data-act="set" data-k="${k}" data-v="${v}" aria-pressed="${st[k] === v}">${l}</button>`).join('')}</div>`;
+    openSheet(`<div class="sh-head"><h3>Reading settings</h3><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('x')}</button></div>
+      <div class="sh-body">
+        <span class="lbl">View</span>${segs('view', [['page', 'Page'], ['read', 'Reading mode']])}
+        <p class="help">${st.view === 'page' ? 'The PDF page exactly as printed. Zoom in for small text.' : 'The page’s text, reflowed at a comfortable size. Best for simple, single-column books.'}</p>
+        <span class="lbl">Page color</span>${segs('readerTheme', [['paper', 'Paper'], ['sepia', 'Sepia'], ['night', 'Night']])}
+        <span class="lbl">Layout</span>${segs('layout', [['paged', 'One page at a time'], ['scroll', 'Continuous']])}
+        <span class="lbl">${st.view === 'page' ? 'Zoom' : 'Text size'}</span>
+        <div class="stepper"><button data-act="zoom" data-d="-1" aria-label="Smaller">A−</button><span>${Math.round(st.zoom * 100)}%</span><button data-act="zoom" data-d="1" aria-label="Larger">A+</button></div>
+        <span class="lbl">Track progress by</span>${segs('progressMode', [['last', 'Last page reached'], ['marked', 'Pages I mark as read']])}
+        <p class="help">${st.progressMode === 'last'
+          ? 'Progress follows the furthest page you’ve opened. Good for reading front to back.'
+          : 'Progress counts only pages and chapters you mark as read. Good for reading chapters out of order.'}</p>
+      </div>`, null, { keep: true });
+  }
+
+  /* ---------- Notes hub ---------- */
+  function renderHub() {
+    const q = st.hubQuery.trim().toLowerCase();
+    let list = anns.filter(a => a.type !== 'bookmark' && typeMatch(a, st.hubType));
+    if (st.hubTag) list = list.filter(a => a.tags.includes(st.hubTag));
+    if (q) list = list.filter(a => {
+      const b = BOOKS.find(x => x.id === a.book);
+      return [a.r ? quoteOf(a.page, a.r[0], a.r[1]) : a.quote, a.note, a.chapter, b.title, ...a.tags].join(' ').toLowerCase().includes(q);
+    });
+    const byBook = BOOKS.map(b => [b, list.filter(a => a.book === b.id)]).filter(([, l]) => l.length);
+    screen.innerHTML = `<div class="scroll">
+      <header class="hdr"><div><div data-sync>${syncHTML()}</div><h1>Notes</h1></div></header>
+      <label class="search-field">${ic('search', 18)}<input id="hub-q" type="search" placeholder="Search notes, highlights and tags" value="${esc(st.hubQuery)}" autocomplete="off"></label>
+      <div class="chips" role="group" aria-label="Type">${['All', 'Highlights', 'Notes', 'Summaries', 'Areas'].map(x => `<button class="chip" data-act="hubtype" data-v="${x}" aria-pressed="${st.hubType === x}">${x}</button>`).join('')}</div>
+      <div class="chips" role="group" aria-label="Tags" style="padding-top:0">${allTags().map(t => `<button class="chip" data-act="hubtag" data-v="${esc(t)}" aria-pressed="${st.hubTag === t}">#${esc(t)}</button>`).join('')}</div>
+      <div style="padding:0 18px 24px">
+        ${byBook.length ? byBook.map(([b, l]) => `<h4 class="grp ${b.rtl ? 'ar' : ''}" ${RTL(b)}>${esc(b.title)} <span class="muted" style="font-weight:500">· ${l.length}</span></h4><ul class="anns">${l.map(annItem).join('')}</ul>`).join('')
+          : `<p class="empty">Nothing matches${q ? ` “${esc(st.hubQuery)}”` : ''}.<br>Try another word or clear the filters.</p>`}
+      </div>
+    </div>`;
+    const inp = $('#hub-q');
+    inp.oninput = () => { st.hubQuery = inp.value; renderHub(); const n = $('#hub-q'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); };
+  }
+
+  /* ---------- Words ---------- */
+  function renderWords() {
+    const due = words.filter(w => w.due).length;
+    screen.innerHTML = `<div class="scroll">
+      <header class="hdr"><div><div data-sync>${syncHTML()}</div><h1>Words</h1></div></header>
+      <section class="review-cta">
+        <div><b>${due ? `${due} to review` : 'All caught up'}</b><span>${due ? `From ${new Set(words.filter(w => w.due).map(w => w.src)).size} books · about ${Math.max(1, Math.round(due * 0.6))} min` : 'Phrases you save while reading show up here.'}</span></div>
+        <button class="btn-primary" data-act="review" ${due ? '' : 'disabled'}>Review</button>
+      </section>
+      <ul class="words">${words.map(w => `<li class="word">
+        <div class="en">${esc(w.en)}</div>
+        <div class="ar" dir="rtl" lang="ar">${esc(w.ar)}</div>
+        <div class="wm"><span>${esc(w.src)} · p. ${w.page}</span><span class="${w.due ? 'due' : ''}">${w.due ? 'Due now' : esc(w.next)}</span></div>
+      </li>`).join('')}</ul>
+    </div>`;
+  }
+  let rv = null;
+  function openReview() { rv = { list: words.filter(w => w.due), i: 0, shown: false }; paintReview(); }
+  function paintReview() {
+    const { list, i, shown } = rv;
+    const dirSeg = `<div class="seg" style="margin:0 18px">${[['en-ar', 'English → Arabic'], ['ar-en', 'Arabic → English'], ['mixed', 'Mixed']].map(([v, l]) => `<button data-act="carddir" data-v="${v}" aria-pressed="${st.cardDir === v}">${l}</button>`).join('')}</div>`;
+    const head = `<div class="sh-head"><h3>Review</h3><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('x')}</button></div>`;
+    if (i >= list.length) {
+      openSheet(`${head}<div class="sh-body"><div class="card"><div class="en">Done for now</div><div class="src">${list.length} reviewed. The next ones come back on their own schedule.</div></div></div>
+        <div class="sh-foot"><span style="flex:1"></span><button class="btn-primary" data-act="sheet-close">Close</button></div>`, null, { keep: true });
+      renderWords(); return;
+    }
+    const w = list[i];
+    const front = st.cardDir === 'ar-en' || (st.cardDir === 'mixed' && i % 2 === 1) ? 'ar' : 'en';
+    const side = k => k === 'en' ? `<div class="en">${esc(w.en)}</div>` : `<div class="ar" dir="rtl" lang="ar">${esc(w.ar)}</div>`;
+    openSheet(`${head}${dirSeg}
+      <div class="sh-body">
+        <div class="progress-dots">${list.map((_, k) => `<i class="${k < i ? 'done' : ''}"></i>`).join('')}</div>
+        <div class="card">
+          ${side(front)}
+          ${shown ? `<div class="ans">${side(front === 'en' ? 'ar' : 'en')}</div>` : ''}
+          <div class="src">${esc(w.src)} · p. ${w.page}</div>
+        </div>
+        ${shown ? `<div class="rate">${[['Again', '1 min'], ['Hard', '6 hours'], ['Good', '2 days'], ['Easy', '5 days']].map(([l, t]) => `<button data-act="rate" data-t="${t}">${l}<small>${t}</small></button>`).join('')}</div>`
+          : `<div style="display:flex;justify-content:center;margin-top:14px"><button class="btn-primary" data-act="reveal">${front === 'en' ? 'Show Arabic' : 'Show English'}</button></div>`}
+      </div>`, null, { keep: true });
+  }
+
+  /* ---------- Stats ---------- */
+  const goalLabel = g => `${g.cat === 'All' ? 'All books' : g.cat + ' books'}`;
+  const goalVal = (g, v) => g.measure === 'time' ? fmtMin(v) : `${v} pages`;
+  function renderStats() {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const pages = [28, 16, 40, 0, 46, 44, 40], mins = [35, 20, 48, 0, 62, 55, 50];
+    const vals = st.chartMetric === 'pages' ? pages : mins;
+    const W = 340, H = 140, top = 18, base = 112, max = Math.max(...vals) * 1.15, bw = 28, gap = (W - 7 * bw) / 8;
+    const y = v => base - v / max * (base - top);
+    const bars = days.map((d, i) => {
+      const x = gap + i * (bw + gap), v = vals[i];
+      return `<rect class="b ${i === 6 ? 'today' : ''}" x="${x}" y="${y(v)}" width="${bw}" height="${Math.max(0, base - y(v))}" rx="4"/>
+        ${v ? `<text class="${i === 6 ? 'val' : ''}" x="${x + bw / 2}" y="${y(v) - 5}" text-anchor="middle">${st.chartMetric === 'pages' ? v : v + 'm'}</text>` : ''}
+        <text x="${x + bw / 2}" y="${base + 16}" text-anchor="middle">${d}</text>`;
+    }).join('');
+    const totalP = pages.reduce((a, b) => a + b), totalM = mins.reduce((a, b) => a + b);
+    const inProgress = BOOKS.filter(b => b.status === 'reading' || b.status === 'paused').sort((a, b) => b.last - a.last);
+    screen.innerHTML = `<div class="scroll">
+      <header class="hdr"><div><div class="sync">This week · Nov 9–15</div><h1>Stats</h1></div></header>
+      <div class="totals">
+        <div class="total"><div class="k">Pages read</div><div class="v">${totalP}</div><div class="d">Last week 188</div></div>
+        <div class="total"><div class="k">Time spent</div><div class="v">${fmtMin(totalM)}</div><div class="d">Last week 3h 50m</div></div>
+      </div>
+      <section class="sec">
+        <div class="sec-h"><h3>Weekly goals</h3><button class="btn-line" data-act="goal-add">${ic('plus', 14)} Add goal</button></div>
+        <div class="sub">Reset every Monday</div>
+        ${goals.map(g => { const p = Math.min(100, Math.round(g.done / g.target * 100)), met = g.done >= g.target; return `<button class="goal" data-act="goal-edit" data-id="${g.id}">
+          <div class="gt"><span>${esc(goalLabel(g))} · ${goalVal(g, g.target)}</span><span>${goalVal(g, g.done)}</span></div>
+          <div class="bar"><i style="width:${Math.max(2, p)}%"></i></div>
+          <div class="gs ${met ? 'met' : ''}">${met ? 'Goal met this week' : `${goalVal(g, g.target - g.done)} to go · week ends today`}</div>
+        </button>`; }).join('')}
+      </section>
+      <section class="sec">
+        <div class="sec-h"><h3>Day by day</h3>
+          <div class="seg">${[['pages', 'Pages'], ['time', 'Time']].map(([v, l]) => `<button data-act="chart" data-v="${v}" aria-pressed="${st.chartMetric === v}">${l}</button>`).join('')}</div>
+        </div>
+        <div class="sub">${st.chartMetric === 'pages' ? `${totalP} pages · ${Math.round(totalP / 7)} a day on average` : `${fmtMin(totalM)} · ${Math.round(totalM / 7)} min a day on average`}</div>
+        <div style="overflow-x:auto"><svg class="chart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${st.chartMetric === 'pages' ? 'Pages' : 'Minutes'} read per day this week">
+          <line class="base" x1="0" x2="${W}" y1="${base}" y2="${base}"/>
+          ${bars}
+        </svg></div>
+      </section>
+      <section class="sec">
+        <h3>Books in progress</h3>
+        <div class="sub">Pages read and time spent in each book</div>
+        ${inProgress.map(b => `<div class="brow">${cover(b)}<div style="min-width:0"><div class="t" ${RTL(b)}>${esc(b.title)}</div><div class="d">p. ${b.page} of ${b.pages} · ${pct(b)}% · ${fmtMin(b.spent)} spent</div><div class="bar"><i style="width:${pct(b)}%"></i></div></div></div>`).join('')}
+      </section>
+    </div>`;
+  }
+  let goalDraft = null;
+  function openGoal(g) {
+    goalDraft = g ? { ...g } : { id: null, cat: 'All', measure: 'time', target: 120, done: 0 };
+    paintGoal();
+  }
+  function paintGoal() {
+    const g = goalDraft, isTime = g.measure === 'time';
+    const shown = isTime ? +(g.target / 60).toFixed(1) : g.target;
+    openSheet(`<div class="sh-head"><h3>${g.id ? 'Edit goal' : 'New weekly goal'}</h3><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('x')}</button></div>
+      <div class="sh-body">
+        <span class="lbl">Books</span>
+        <div class="tagpick">${['All', ...CATS].map(c => `<button class="chip" data-act="gd-cat" data-v="${esc(c)}" aria-pressed="${g.cat === c}">${c === 'All' ? 'All books' : esc(c)}</button>`).join('')}</div>
+        <span class="lbl">Measure</span>
+        <div class="seg">${[['time', 'Time spent'], ['pages', 'Pages read']].map(([v, l]) => `<button data-act="gd-measure" data-v="${v}" aria-pressed="${g.measure === v}">${l}</button>`).join('')}</div>
+        <label class="lbl" for="gd-target">Target per week</label>
+        <div style="display:flex;gap:10px;align-items:center"><input id="gd-target" class="field" style="max-width:120px" type="number" inputmode="decimal" min="1" step="${isTime ? '0.5' : '10'}" value="${shown}"><span class="muted">${isTime ? 'hours' : 'pages'}</span></div>
+        <p class="help">For example: Tech books, 4 hours a week. Progress counts reading time or pages in books from that category.</p>
+      </div>
+      <div class="sh-foot">${g.id ? '<button class="btn-ghost danger" data-act="gd-del">Delete</button>' : ''}<span style="flex:1"></span><button class="btn-ghost" data-act="sheet-close">Cancel</button><button class="btn-primary" data-act="gd-save">Save goal</button></div>`, null, { keep: true });
+  }
+
+  /* ---------- Settings ---------- */
+  function renderSettings() {
+    const driveTotal = 15, driveOther = 8.4;
+    const folioMB = BOOKS.reduce((s, b) => s + b.size, 0);
+    const offlineBooks = BOOKS.filter(b => b.offline);
+    const offMB = offlineBooks.reduce((s, b) => s + b.size, 0);
+    const dataMB = 1.2, appMB = 3.1;
+    const usedGB = driveOther + folioMB / 1024;
+    const pc = v => (v / driveTotal * 100).toFixed(2);
+    const seg = (k, opts) => `<div class="seg">${opts.map(([v, l]) => `<button data-act="pref" data-k="${k}" data-v="${v}" aria-pressed="${st[k] === v}">${l}</button>`).join('')}</div>`;
+    screen.innerHTML = `<div class="scroll">
+      <div class="subhdr"><button class="icon-btn" data-act="go" data-to="library" aria-label="Back to library">${ic('back')}</button><h1>Settings</h1></div>
+
+      <section class="set-sec"><h3>Account</h3><div class="set-card">
+        <div class="set-row"><div class="avatar" aria-hidden="true">G</div><div class="grow"><div class="k">Signed in with Google</div><div class="d">Books are stored in your own Google Drive</div></div><button class="btn-line" data-act="todo" data-msg="You’d be signed out. Books stay in your Drive.">Sign out</button></div>
+        <div class="set-row"><div class="grow"><div class="k">Sync</div><div class="d" data-sync>${syncHTML()}</div></div><button class="btn-line" data-act="sync-now">Sync now</button></div>
+        <div class="set-row"><div class="grow"><div class="k">Sync on mobile data</div><div class="d">Off means sync waits for Wi-Fi</div></div><button class="switch" role="switch" aria-checked="${st.mobileData}" data-act="toggle" data-k="mobileData" aria-label="Sync on mobile data"></button></div>
+      </div></section>
+
+      <section class="set-sec"><h3>Storage</h3><div class="set-card">
+        <div class="set-col">
+          <div class="k">Google Drive</div>
+          <div class="big-num">${usedGB.toFixed(1)} GB <small>of ${driveTotal} GB used</small></div>
+          <div class="stack" role="img" aria-label="Drive usage"><i class="s1" style="width:${pc(folioMB / 1024)}%"></i><i class="s2" style="width:${pc(driveOther)}%"></i></div>
+          <div class="legend"><span><i class="l1"></i>Folio books ${folioMB.toFixed(0)} MB</span><span><i class="l2"></i>Other files ${driveOther} GB</span><span><i class="l3"></i>Free ${(driveTotal - usedGB).toFixed(1)} GB</span></div>
+          <p class="help" style="margin-top:6px">${BOOKS.length} PDFs in Drive › Folio › Books. Notes and progress take under 1 MB.</p>
+        </div>
+        <div class="set-col">
+          <div class="k">This device</div>
+          <div class="big-num">${(offMB + dataMB + appMB).toFixed(0)} MB <small>used by Folio</small></div>
+          <div class="legend" style="margin-top:6px"><span>Offline books ${offMB.toFixed(1)} MB (${offlineBooks.length})</span><span>Reading data ${dataMB} MB</span><span>App ${appMB} MB</span></div>
+        </div>
+        <div class="set-row"><div class="grow"><div class="k">Keep new books offline</div><div class="d">Uploaded or opened books stay on this device</div></div><button class="switch" role="switch" aria-checked="${st.autoOffline}" data-act="toggle" data-k="autoOffline" aria-label="Keep new books offline"></button></div>
+        <div class="set-row"><div class="grow"><div class="k">Remove finished books from this device</div><div class="d">They stay in Drive and download again when opened</div></div><button class="btn-line" data-act="free-finished">Free up</button></div>
+      </div></section>
+
+      <section class="set-sec"><h3>Offline books</h3><div class="set-card">
+        ${[...BOOKS].sort((a, b) => b.size - a.size).map(b => `<div class="set-row"><div class="grow"><div class="k" ${RTL(b)}>${esc(b.title)}</div><div class="d">${b.size} MB${b.offline ? ' · on this device' : ' · in Drive only'}</div></div><button class="switch" role="switch" aria-checked="${b.offline}" data-act="book-offline" data-id="${b.id}" aria-label="Keep ${esc(b.title)} offline"></button></div>`).join('')}
+      </div></section>
+
+      <section class="set-sec"><h3>Categories</h3><div class="set-card">
+        ${CATS.map(c => `<div class="set-row"><div class="grow"><div class="k">${esc(c)}</div><div class="d">${BOOKS.filter(b => b.cats.includes(c)).length} books</div></div><button class="icon-btn" data-act="cat-rename" data-v="${esc(c)}" aria-label="Rename ${esc(c)}">${ic('edit', 18)}</button><button class="icon-btn" data-act="cat-del" data-v="${esc(c)}" aria-label="Delete ${esc(c)}">${ic('trash', 18)}</button></div>`).join('')}
+        <div class="set-row"><input id="cat-new" class="field sm" placeholder="New category" autocomplete="off"><button class="btn-line" data-act="cat-add">Add</button></div>
+      </div></section>
+
+      <section class="set-sec"><h3>Reading</h3><div class="set-card">
+        <div class="set-col"><div class="k">Open books in</div>${seg('defaultView', [['page', 'Page view'], ['read', 'Reading mode']])}</div>
+        <div class="set-col"><div class="k">Page color</div>${seg('readerTheme', [['paper', 'Paper'], ['sepia', 'Sepia'], ['night', 'Night']])}</div>
+        <div class="set-col"><div class="k">Track progress by</div>${seg('progressMode', [['last', 'Last page reached'], ['marked', 'Pages I mark as read']])}</div>
+        <div class="set-col"><div class="k">Flashcards show first</div>${seg('cardDir', [['en-ar', 'English'], ['ar-en', 'Arabic'], ['mixed', 'Mixed']])}</div>
+      </div></section>
+
+      <section class="set-sec" style="padding-bottom:28px"><h3>Your data</h3><div class="set-card">
+        <div class="set-row"><div class="grow"><div class="k">Export notes</div><div class="d">All highlights, notes and summaries as Markdown, one file per book</div></div><button class="btn-line" data-act="todo" data-msg="Notes would be saved as Markdown files">Export</button></div>
+        <div class="set-row"><div class="grow"><div class="k">Back up everything</div><div class="d">One file with notes, progress, words and goals</div></div><button class="btn-line" data-act="todo" data-msg="A backup file would be saved">Back up</button></div>
+      </div></section>
+    </div>`;
+  }
+  function openCatRename(old) {
+    openSheet(`<div class="sh-head"><h3>Rename category</h3><button class="icon-btn" data-act="sheet-close" aria-label="Close">${ic('x')}</button></div>
+      <div class="sh-body"><label class="lbl" for="cat-name">Name</label><input id="cat-name" class="field" value="${esc(old)}" autocomplete="off"><p class="help">Books and goals in this category move with it.</p></div>
+      <div class="sh-foot"><span style="flex:1"></span><button class="btn-ghost" data-act="sheet-close">Cancel</button><button class="btn-primary" data-act="cat-save" data-v="${esc(old)}">Save</button></div>`,
+      () => setTimeout(() => $('#cat-name')?.select(), 320));
+  }
+
+  /* ---------- Actions ---------- */
+  const A = {
+    go: el => go(el.dataset.to),
+    undo: () => { const f = undoFn; $('#toast').hidden = true; undoFn = null; f && f(); },
+    'sheet-close': () => closeSheet(),
+    todo: el => toast(el.dataset.msg),
+    fstatus: el => { st.fStatus = el.dataset.v; renderLibrary(); },
+    fcat: el => { st.fCat = el.dataset.v; renderLibrary(); },
+    'lib-search': () => { st.libQuery = st.libQuery === null ? '' : null; renderLibrary(); },
+    upload: () => toast('You’d pick a PDF. It uploads to Drive and is readable offline right away.'),
+    'open-book': el => {
+      if (el.dataset.id !== 'origin') { toast('Only On the Origin of Species opens in this sample'); return; }
+      st.screen = 'reader'; st.chrome = true; st.view = st.defaultView; render();
+    },
+    details: el => openDetails(el.dataset.id),
+    'bd-status': el => { details.status = el.dataset.v; paintDetails(); },
+    'bd-cat': el => { const c = el.dataset.v; details.cats = details.cats.includes(c) ? details.cats.filter(x => x !== c) : [...details.cats, c]; paintDetails(); },
+    'bd-offline': () => { details.offline = !details.offline; paintDetails(); },
+    'bd-save': () => {
+      const b = BOOKS.find(x => x.id === details.id);
+      b.title = $('#bd-title').value.trim() || b.title; b.author = $('#bd-author').value.trim();
+      b.cats = details.cats; b.status = details.status; b.offline = details.offline;
+      b.rtl = isArabic(b.title);
+      closeSheet(); saved(); refresh(); if ($('#pbody')) paintPanel(); toast('Book details saved');
+    },
+    'bd-remove': () => {
+      const b = BOOKS.find(x => x.id === details.id);
+      if (b.id === 'origin') { toast('Keeping the sample book so the demo still works'); return; }
+      const i = BOOKS.indexOf(b); BOOKS.splice(i, 1); closeSheet(); saved(); render();
+      toast(`Removed ${b.title}`, () => { BOOKS.splice(i, 0, b); render(); });
+    },
+    prev: () => gotoPage(st.page - 1),
+    next: () => gotoPage(st.page + 1),
+    view: () => {
+      st.view = st.view === 'page' ? 'read' : 'page'; st.areaMode = false; clearFloat(); renderReader();
+      toast(st.view === 'read' ? 'Reading mode: text reflowed from the PDF' : 'Page view: the PDF as printed');
+    },
+    area: () => { st.areaMode = !st.areaMode; clearFloat(); renderReader(); if (st.areaMode && !PB[st.page]) toast('Area highlights work on pages 11–12 in this sample'); },
+    bookmark: () => {
+      const ex = anns.find(a => a.book === 'origin' && a.type === 'bookmark' && a.page === st.page);
+      if (ex) { anns = anns.filter(a => a !== ex); saved(); renderReader(); toast('Bookmark removed', () => { anns.push(ex); saved(); renderReader(); }); }
+      else { anns.push({ id: nid(), book: 'origin', type: 'bookmark', page: st.page, tags: [] }); saved(); renderReader(); toast(`Page ${st.page} bookmarked`); }
+    },
+    markread: () => { st.readPages.has(st.page) ? st.readPages.delete(st.page) : st.readPages.add(st.page); saved(); renderReader(); },
+    settings: () => openReadingSettings(),
+    set: el => { st[el.dataset.k] = el.dataset.v; if (el.dataset.k === 'view') st.areaMode = false; saved(); renderReader(); openReadingSettings(); },
+    zoom: el => { st.zoom = Math.min(2, Math.max(.8, +(st.zoom + .1 * +el.dataset.d).toFixed(2))); renderReader(); openReadingSettings(); },
+    panel: el => openPanel(el.dataset.tab),
+    ptab: el => { st.panelTab = el.dataset.v; paintPanel(); },
+    pfilter: el => { st.panelFilter = el.dataset.v; paintPanel(); },
+    chap: el => { closeSheet(); gotoPage(+el.dataset.p); },
+    goto: el => {
+      closeSheet(); const p = +el.dataset.p, wi = el.dataset.wi;
+      gotoPage(p, wi !== undefined ? { flash: `.page[data-page="${p}"] .w[data-i="${wi}"]` } : {});
+    },
+    chapread: el => { const i = +el.dataset.i; st.readChapters.has(i) ? st.readChapters.delete(i) : st.readChapters.add(i); saved(); paintPanel(); },
+    'add-chapsum': el => {
+      const c = CHAPTERS[+el.dataset.i];
+      openEditor({ title: `Summary · ${c.t}`, noteLabel: 'Summary', placeholder: 'What is this chapter about, in your own words?', tags: ['chapter-summary'],
+        onSave(note, tags) { anns.push({ id: nid(), book: 'origin', type: 'summary', chapter: c.t, page: c.p, note, tags }); toast('Summary saved'); } });
+    },
+    'add-booksum': () => openEditor({ title: 'Book summary', noteLabel: 'Summary', placeholder: 'What did this book teach you?', tags: [],
+      onSave(note, tags) { anns.push({ id: nid(), book: 'origin', type: 'summary', page: 1, note, tags }); toast('Summary saved'); } }),
+    'add-secsum': () => openEditor({ title: 'Section summary', noteLabel: 'Summary', placeholder: 'Summarize these pages in your own words', range: [st.page, st.page + 3], tags: [],
+      onSave(note, tags, range) { anns.push({ id: nid(), book: 'origin', type: 'summary', range, page: range[0], note, tags }); toast('Summary saved'); } }),
+    'add-side': () => openEditor({ title: `Side note · page ${st.page}`, noteLabel: 'Side note', placeholder: 'Stays in your notes. Never drawn on the page.', tags: [],
+      onSave(note, tags) { anns.push({ id: nid(), book: 'origin', type: 'side', page: st.page, note, tags }); toast('Side note added'); } }),
+    jump: el => {
+      const a = anns.find(x => x.id === el.dataset.id); if (!a) return;
+      if (a.type === 'summary' || a.type === 'side') { editAnn(a); return; }
+      if (a.book !== 'origin') { const b = BOOKS.find(x => x.id === a.book); toast(`Would open ${b.title} at page ${a.page}`); return; }
+      closeSheet(true);
+      if (a.type === 'area' && st.view !== 'page') st.view = 'page';
+      if (st.screen !== 'reader') { st.screen = 'reader'; st.chrome = true; paintTabs(); }
+      gotoPage(a.page, { flash: hlSelector(a) });
+    },
+    peek: el => { const a = anns.find(x => x.id === el.dataset.id); if (a) (st.peek === a.id ? clearFloat() : openPeek(a)); },
+    'peek-color': el => { const a = anns.find(x => x.id === st.peek); if (!a) return; a.color = el.dataset.color; saved(); renderReader(); openPeek(a); },
+    'peek-edit': () => { const a = anns.find(x => x.id === st.peek); clearFloat(); editAnn(a); },
+    'peek-del': () => { const a = anns.find(x => x.id === st.peek); clearFloat(); removeAnn(a, a.type === 'area' ? 'Area removed' : 'Highlight removed'); },
+    'peek-tr': () => { const a = anns.find(x => x.id === st.peek); st.peek = null; showTranslation(a.page, a.r[0], a.r[1]); },
+    hl: el => {
+      const res = upsertHighlight(el.dataset.color);
+      saved(); st.sel = null; renderReader();
+      toast(res.created ? 'Highlighted' : 'Color changed', () => { anns = anns.filter(a => a !== res.h); anns.push(...res.removed); renderReader(); });
+    },
+    note: () => editSelection(false),
+    tag: () => editSelection(true),
+    copy: () => {
+      const t = quoteOf(st.sel.page, st.sel.a, st.sel.b); clearFloat();
+      try { navigator.clipboard.writeText(t).then(() => toast('Copied'), () => toast('Copied')); } catch (e) { toast('Copied'); }
+    },
+    translate: () => { const { page, a, b } = st.sel; showTranslation(page, a, b); },
+    saveword: () => {
+      const tr = st.tr; words.unshift({ en: tr.en, ar: tr.ar, src: ORIGIN.title, page: tr.page, due: true });
+      saved(); clearFloat(); toast('Saved to Words', () => { words.shift(); });
+    },
+    closefloat: () => clearFloat(),
+    'area-save': el => {
+      const d = st.draft; if (!d) return;
+      const n = { id: nid(), book: 'origin', type: 'area', page: d.page, rect: d.rect, color: el.dataset.color, note: '', tags: [] };
+      anns.push(n); st.areaMode = false; st.draft = null; saved(); renderReader();
+      toast('Area highlighted', () => { anns = anns.filter(a => a !== n); renderReader(); });
+    },
+    'area-note': () => {
+      const d = st.draft; if (!d) return;
+      openEditor({ title: `Area · page ${d.page}`, tags: [], onSave(note, tags) {
+        anns.push({ id: nid(), book: 'origin', type: 'area', page: d.page, rect: d.rect, color: 'yellow', note, tags });
+        st.areaMode = false; st.draft = null; toast('Area saved with note');
+      } });
+    },
+    'area-cancel': () => clearFloat(),
+    'ed-tag': el => { const t = el.dataset.t; editor.tags = editor.tags.includes(t) ? editor.tags.filter(x => x !== t) : [...editor.tags, t]; paintTags(); },
+    'ed-save': () => {
+      const note = $('#ed-note').value.trim();
+      const range = $('#ed-from') ? [+$('#ed-from').value, +$('#ed-to').value].sort((a, b) => a - b) : null;
+      const pending = $('#ed-tag').value.trim().toLowerCase().replace(/\s+/g, '-');
+      if (pending && !editor.tags.includes(pending)) editor.tags.push(pending);
+      if (!note && !editor.tags.length) { $('#ed-note').focus(); $('#ed-note').placeholder = 'Write something or pick a tag first'; return; }
+      const { o, tags } = editor; closeSheet(); saved(); o.onSave(note, tags, range); refresh();
+    },
+    'ed-del': () => editor.o.onDelete(),
+    hubtype: el => { st.hubType = el.dataset.v; renderHub(); },
+    hubtag: el => { st.hubTag = st.hubTag === el.dataset.v ? null : el.dataset.v; renderHub(); },
+    review: () => openReview(),
+    reveal: () => { rv.shown = true; paintReview(); },
+    carddir: el => { st.cardDir = el.dataset.v; rv.shown = false; paintReview(); },
+    rate: el => { const w = rv.list[rv.i]; w.due = false; w.next = 'In ' + el.dataset.t; saved(); rv.i++; rv.shown = false; paintReview(); },
+    chart: el => { st.chartMetric = el.dataset.v; renderStats(); },
+    'goal-add': () => openGoal(null),
+    'goal-edit': el => openGoal(goals.find(g => g.id === el.dataset.id)),
+    'gd-cat': el => { goalDraft.target = readTarget(); goalDraft.cat = el.dataset.v; paintGoal(); },
+    'gd-measure': el => { if (goalDraft.measure === el.dataset.v) return; goalDraft.measure = el.dataset.v; goalDraft.target = el.dataset.v === 'time' ? 120 : 150; goalDraft.done = 0; paintGoal(); },
+    'gd-save': () => {
+      goalDraft.target = readTarget(); if (!goalDraft.target) { $('#gd-target').focus(); return; }
+      if (goalDraft.id) Object.assign(goals.find(g => g.id === goalDraft.id), goalDraft);
+      else goals.push({ ...goalDraft, id: nid(), done: goalDraft.measure === 'time' ? 45 : 60 });
+      closeSheet(); saved(); renderStats(); toast('Goal saved');
+    },
+    'gd-del': () => {
+      const g = goals.find(x => x.id === goalDraft.id), i = goals.indexOf(g);
+      goals.splice(i, 1); closeSheet(); renderStats(); toast('Goal deleted', () => { goals.splice(i, 0, g); renderStats(); });
+    },
+    pref: el => { st[el.dataset.k] = el.dataset.v; if (el.dataset.k === 'defaultView') st.view = el.dataset.v; saved(); renderSettings(); },
+    toggle: el => { st[el.dataset.k] = !st[el.dataset.k]; saved(); renderSettings(); },
+    'book-offline': el => { const b = BOOKS.find(x => x.id === el.dataset.id); b.offline = !b.offline; renderSettings(); toast(b.offline ? `Downloading ${b.title}` : `Removed from this device. Still in Drive.`); },
+    'free-finished': () => {
+      const f = BOOKS.filter(b => b.status === 'finished' && b.offline);
+      if (!f.length) { toast('No finished books are stored on this device'); return; }
+      f.forEach(b => b.offline = false); renderSettings();
+      toast(`Freed ${f.reduce((s, b) => s + b.size, 0).toFixed(1)} MB`, () => { f.forEach(b => b.offline = true); renderSettings(); });
+    },
+    'sync-now': () => { saved(); },
+    'cat-add': () => {
+      const v = $('#cat-new').value.trim(); if (!v) { $('#cat-new').focus(); return; }
+      if (CATS.includes(v)) { toast(`${v} already exists`); return; }
+      CATS.push(v); saved(); renderSettings(); toast(`Added ${v}`);
+    },
+    'cat-rename': el => openCatRename(el.dataset.v),
+    'cat-save': el => {
+      const old = el.dataset.v, v = $('#cat-name').value.trim(); if (!v) return;
+      CATS = CATS.map(c => c === old ? v : c);
+      BOOKS.forEach(b => b.cats = b.cats.map(c => c === old ? v : c));
+      goals.forEach(g => { if (g.cat === old) g.cat = v; });
+      if (st.fCat === old) st.fCat = v;
+      closeSheet(); saved(); renderSettings(); toast(`Renamed to ${v}`);
+    },
+    'cat-del': el => {
+      const c = el.dataset.v, i = CATS.indexOf(c), had = BOOKS.filter(b => b.cats.includes(c));
+      CATS.splice(i, 1); had.forEach(b => b.cats = b.cats.filter(x => x !== c)); if (st.fCat === c) st.fCat = 'All';
+      saved(); renderSettings();
+      toast(`Deleted ${c}. Books kept.`, () => { CATS.splice(i, 0, c); had.forEach(b => b.cats.push(c)); renderSettings(); });
+    }
+  };
+  function readTarget() {
+    const v = parseFloat($('#gd-target')?.value);
+    if (!v || v <= 0) return 0;
+    return goalDraft.measure === 'time' ? Math.round(v * 60) : Math.round(v);
+  }
+
+  device.addEventListener('click', e => {
+    if (suppressClick) { suppressClick = false; return; }
+    if (lpFired) { lpFired = false; e.preventDefault(); return; }
+    const t = e.target.closest('[data-act]');
+    if (t && device.contains(t)) { A[t.dataset.act]?.(t, e); return; }
+    if (st.screen !== 'reader' || st.areaMode) return;
+    if (e.target.closest('.seltool, .tpop, .r-top, .r-bottom, .w')) return;
+    if (st.sel || st.peek || st.draft || $('#float')?.innerHTML) { clearFloat(); return; }
+    st.chrome = !st.chrome; $('#reader').classList.toggle('immersive', !st.chrome);
+  });
+  device.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.matches('[role="button"]')) { e.preventDefault(); e.target.click(); }
+    if (e.key === 'Enter' && e.target.id === 'cat-new') A['cat-add']();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (layer.classList.contains('open')) return closeSheet();
+      if (st.sel || st.peek || st.draft) return clearFloat();
+      if (st.areaMode) { st.areaMode = false; renderReader(); }
+      return;
+    }
+    if (st.screen === 'reader' && !layer.classList.contains('open') && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName)) {
+      if (e.key === 'ArrowRight') gotoPage(st.page + 1);
+      if (e.key === 'ArrowLeft') gotoPage(st.page - 1);
+    }
+  });
+
+  /* Long-press (or right-click) on a book to edit its details */
+  let lpT = null, lpFired = false, lpStart = null;
+  device.addEventListener('pointerdown', e => {
+    const bk = e.target.closest('[data-book]'); if (!bk || e.button > 0) return;
+    lpStart = [e.clientX, e.clientY];
+    lpT = setTimeout(() => { lpFired = true; openDetails(bk.dataset.book); }, 480);
+  });
+  device.addEventListener('pointermove', e => { if (lpT && lpStart && Math.hypot(e.clientX - lpStart[0], e.clientY - lpStart[1]) > 8) { clearTimeout(lpT); lpT = null; } });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(n => device.addEventListener(n, () => { clearTimeout(lpT); lpT = null; }));
+  device.addEventListener('contextmenu', e => {
+    const bk = e.target.closest('[data-book]');
+    if (bk) { e.preventDefault(); clearTimeout(lpT); openDetails(bk.dataset.book); return; }
+    if (e.target.closest('.w')) e.preventDefault();
+  });
+
+  render();
+})();
+</script>
