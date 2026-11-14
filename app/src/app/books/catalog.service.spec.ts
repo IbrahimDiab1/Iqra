@@ -50,6 +50,12 @@ describe('CatalogService', () => {
       expect(await db.categories.count()).toBe(1);
     });
 
+    it('rejects a blank name and writes nothing', async () => {
+      await expect(catalog.addCategory('   ')).rejects.toThrow('Category name is empty');
+
+      expect(await db.categories.count()).toBe(0);
+    });
+
     it('orders a new category after the highest existing order', async () => {
       const a = await catalog.addCategory('A');
       const b = await catalog.addCategory('B');

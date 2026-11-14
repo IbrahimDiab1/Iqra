@@ -28,6 +28,7 @@ export class CatalogService {
    */
   async addCategory(name: string): Promise<Category> {
     const trimmed = name.trim();
+    if (trimmed === '') throw new Error('Category name is empty');
     const key = trimmed.toLowerCase();
     const store = this.db.categories;
     return this.db.transaction('rw', store, async () => {
