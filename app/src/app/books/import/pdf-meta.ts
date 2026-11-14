@@ -64,6 +64,7 @@ export function detectLanguage(text: string): Book['language'] {
 /**
  * Converts a pdf.js outline into OutlineNodes. Top-level keys are their index ("0", "1");
  * a child's key is its parent's key plus its 1-based position ("0.1", "0.2"), as the brief specifies.
+ * Keys only need to be unique and stable; nothing depends on the exact scheme.
  * An item whose destination cannot be resolved takes the page of its parent.
  */
 export async function mapOutline(
@@ -82,12 +83,22 @@ export async function mapOutline(
   return nodes;
 }
 
+let pdfjsReady: Promise<typeof import('pdfjs-dist')> | undefined;
+
+/** Loads pdf.js on first use (keeps it out of the initial bundle) and sets its worker once. */
+function loadPdfjs(): Promise<typeof import('pdfjs-dist')> {
+  pdfjsReady ??= import('pdfjs-dist').then((pdfjs) => {
+    pdfjs.GlobalWorkerOptions.workerSrc = 'assets/pdf.worker.min.mjs';
+    return pdfjs;
+  });
+  return pdfjsReady;
+}
+
 /**
  * Starts loading a PDF with pdf.js. Await `task.promise`, and call `task.destroy()` when done.
- * pdf.js is loaded on first use so that importing this module stays cheap.
  */
 export async function openPdf(blob: Blob): Promise<PDFDocumentLoadingTask> {
-  const { getDocument } = await import('pdfjs-dist');
+  const { getDocument } = await loadPdfjs();
   const data = new Uint8Array(await blob.arrayBuffer());
   return getDocument({ data });
 }
