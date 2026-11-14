@@ -182,9 +182,9 @@ export class BookCardComponent {
   }
 
   protected onPointerDown(e: PointerEvent): void {
+    this.suppressClick = false;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     this.cancelPress();
-    this.suppressClick = false;
     this.pressOrigin = { x: e.clientX, y: e.clientY };
     const id = this.view().book.id;
     this.pressTimer = setTimeout(() => {
@@ -202,9 +202,16 @@ export class BookCardComponent {
     if (Math.hypot(dx, dy) > LONG_PRESS_SLOP_PX) this.cancelPress();
   }
 
+  /**
+   * Right-click, or the context menu that Android sends after a long press. A long press has
+   * already opened the details, so the menu event only has to be swallowed.
+   */
   protected onContextMenu(e: Event): void {
     e.preventDefault();
+    const alreadyOpen = this.suppressClick;
     this.cancelPress();
+    if (alreadyOpen) return;
+    this.suppressClick = true;
     this.details.open(this.view().book.id);
   }
 

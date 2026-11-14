@@ -59,6 +59,7 @@ import { bookLine, type BookView } from './book-card.component';
     .row { display: flex; align-items: center; gap: 10px; }
     .resume {
       flex: none;
+      min-height: 40px;
       padding: 8px 12px;
       border: 0;
       border-radius: var(--radius-control);

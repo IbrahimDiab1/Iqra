@@ -255,6 +255,7 @@ function isPdf(file: File): boolean {
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      min-height: 40px;
       margin-inline-start: 4px;
       padding: 8px 12px;
       border: 0;
@@ -286,6 +287,8 @@ function isPdf(file: File): boolean {
       font: inherit;
       outline: none;
     }
+    /* The field's outline stands in for the input's own focus ring. */
+    .search:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 
     .seg {
       display: flex;
@@ -298,7 +301,7 @@ function isPdf(file: File): boolean {
     .seg-tab {
       flex: 1;
       min-width: 0;
-      min-height: 36px;
+      min-height: 40px;
       padding: 8px 4px;
       border: 0;
       border-radius: 9px;
@@ -342,7 +345,7 @@ function isPdf(file: File): boolean {
       align-items: center;
       gap: 2px;
       max-width: 220px;
-      padding: 2px 2px 2px 12px;
+      padding: 0 0 0 12px;
       border-radius: 999px;
       background: var(--accent-soft);
       color: var(--accent);
@@ -358,8 +361,8 @@ function isPdf(file: File): boolean {
       display: grid;
       flex: none;
       place-items: center;
-      width: 32px;
-      height: 32px;
+      width: 40px;
+      height: 40px;
       border: 0;
       border-radius: 50%;
       background: none;
@@ -376,7 +379,7 @@ function isPdf(file: File): boolean {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      min-height: 36px;
+      min-height: 40px;
       padding: 6px 12px;
       border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
       border-radius: 999px;
@@ -424,6 +427,7 @@ function isPdf(file: File): boolean {
     }
     .empty p { margin: 0 0 14px; }
     .link {
+      min-height: 40px;
       padding: 8px;
       border: 0;
       background: none;

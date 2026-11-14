@@ -95,6 +95,7 @@ function toggled<T>(list: readonly T[], item: T): T[] {
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .chip {
       max-width: 100%;
+      min-height: 40px;
       padding: 6px 12px;
       border: 1px solid var(--line);
       border-radius: 999px;
@@ -111,13 +112,22 @@ function toggled<T>(list: readonly T[], item: T): T[] {
       margin-top: 18px;
       font-size: 14px;
     }
+    /* The button is 40px tall for touch; the 26px track is drawn inside it. */
     .switch {
       position: relative;
       flex: none;
       width: 44px;
-      height: 26px;
+      height: 40px;
       padding: 0;
       border: 0;
+      background: none;
+    }
+    .switch::before {
+      content: '';
+      position: absolute;
+      inset-inline: 0;
+      top: 7px;
+      height: 26px;
       border-radius: 999px;
       background: var(--line);
       transition: background 0.2s;
@@ -125,8 +135,8 @@ function toggled<T>(list: readonly T[], item: T): T[] {
     .switch::after {
       content: '';
       position: absolute;
-      top: 3px;
-      left: 3px;
+      top: 10px;
+      inset-inline-start: 3px;
       width: 20px;
       height: 20px;
       border-radius: 50%;
@@ -134,8 +144,9 @@ function toggled<T>(list: readonly T[], item: T): T[] {
       box-shadow: 0 1px 3px color-mix(in srgb, var(--fg) 25%, transparent);
       transition: transform 0.2s;
     }
-    .switch[aria-checked='true'] { background: var(--accent); }
+    .switch[aria-checked='true']::before { background: var(--accent); }
     .switch[aria-checked='true']::after { transform: translateX(18px); }
+    .switch[aria-checked='true']:dir(rtl)::after { transform: translateX(-18px); }
     .foot { display: flex; align-items: center; gap: 6px; width: 100%; }
     .spacer { flex: 1; }
     .btn-primary, .btn-ghost {
@@ -165,10 +176,10 @@ export class FilterSheetComponent {
 
   constructor() {
     // Each opening starts from the applied filters, so an abandoned draft leaves no trace.
+    // Tracks only the open state. A change to `value` while open must not discard the draft.
     effect(() => {
       if (!this.open()) return;
-      const value = this.value();
-      untracked(() => this.draft.set(copyOf(value)));
+      untracked(() => this.draft.set(copyOf(this.value())));
     });
   }
 
