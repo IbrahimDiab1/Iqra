@@ -83,9 +83,6 @@ const MIB = 1024 * 1024;
     }
     .bar span { display: block; height: 100%; background: var(--accent); transition: width 0.2s; }
     .offline { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
-    @media (prefers-reduced-motion: reduce) {
-      .bar span { transition: none; }
-    }
   `,
 })
 export class OpenBookSheetComponent {

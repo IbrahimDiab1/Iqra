@@ -141,10 +141,6 @@ const FOCUSABLE =
       border-top: 1px solid var(--line);
     }
     .foot:empty { display: none; }
-
-    @media (prefers-reduced-motion: reduce) {
-      .scrim, .panel { transition: none; }
-    }
   `,
 })
 export class SheetComponent {

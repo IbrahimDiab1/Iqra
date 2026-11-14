@@ -280,12 +280,15 @@ function draftOf(b: Book): Draft {
       border-color: var(--fg);
     }
     .chip.add { color: var(--accent); border-style: dashed; }
-    .chip.tag { display: inline-flex; align-items: center; gap: 4px; cursor: default; min-height: 0; padding: 4px 6px 4px 12px; }
+    .chip.tag { display: inline-flex; align-items: center; gap: 2px; cursor: default; min-height: 0; padding: 4px 4px 4px 12px; }
+    /* 40px hit area; the negative margin keeps the visual chip compact. */
     .tag-x {
       display: grid;
       place-items: center;
-      width: 28px;
-      height: 28px;
+      width: 40px;
+      height: 40px;
+      margin: -8px -4px -8px 0;
+      flex: none;
       border: 0;
       border-radius: 50%;
       background: none;
@@ -335,7 +338,6 @@ function draftOf(b: Book): Draft {
       position: relative;
       flex: none;
       padding: 0;
-      transition: background .2s;
     }
     .switch::after {
       content: "";
@@ -347,7 +349,6 @@ function draftOf(b: Book): Draft {
       border-radius: 50%;
       background: var(--surface);
       box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
-      transition: transform .2s;
     }
     .switch[aria-checked="true"] { background: var(--accent); }
     .switch[aria-checked="true"]::after { transform: translateX(18px); }

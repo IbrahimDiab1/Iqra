@@ -55,9 +55,6 @@ import { ToastService } from './toast.service';
       from { opacity: 0; transform: translate(-50%, 6px); }
       to { opacity: 1; transform: translate(-50%, 0); }
     }
-    @media (prefers-reduced-motion: reduce) {
-      .toast { animation: none; }
-    }
   `,
 })
 export class ToastComponent {
