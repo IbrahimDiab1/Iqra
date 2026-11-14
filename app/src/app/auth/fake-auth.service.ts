@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { AuthApi, AuthState, Profile } from './auth.service';
 
-const FAKE_PROFILE: Profile = { name: 'Test reader', email: 'reader@example.test' };
+const FAKE_PROFILE: Profile = { name: 'Test User', email: 'reader@example.test' };
 
 /** In-memory AuthApi for tests and e2e runs. Nothing is stored between page loads. */
 @Injectable()

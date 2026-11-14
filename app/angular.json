@@ -82,6 +82,9 @@
             },
             "development": {
               "buildTarget": "app:build:development"
+            },
+            "e2e": {
+              "buildTarget": "app:build:e2e"
             }
           },
           "defaultConfiguration": "development"

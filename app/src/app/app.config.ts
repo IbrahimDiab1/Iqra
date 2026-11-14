@@ -9,6 +9,7 @@ import { DRIVE_ADAPTER } from './sync/drive-adapter';
 import { SyncEngine } from './sync/sync-engine';
 import { FakeDrive } from './sync/fake-drive';
 import { GoogleDrive } from './sync/google-drive';
+import { exposeE2eHandles } from './e2e-hooks';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -16,13 +17,19 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     provideAppInitializer(() => {
       const auth = inject(AuthApi);
-      if (auth.state() === 'signed-out') return;
       const sync = inject(SyncEngine);
+      if (environment.fakeDrive) {
+        // e2e only: start signed in, and expose the engine and fake Drive to the tests.
+        void auth.signIn();
+        exposeE2eHandles({ __iqraSync: sync, __iqraDrive: inject(DRIVE_ADAPTER) as FakeDrive });
+      }
+      if (auth.state() === 'signed-out') return;
       sync.start();
       void sync.syncNow();
     }),
     provideServiceWorker('ngsw-worker.js', {
-      enabled: !isDevMode(),
+      // The e2e build runs in dev mode for Angular but has no real Drive; keep the worker out of its way.
+      enabled: !isDevMode() && !environment.fakeDrive,
       registrationStrategy: 'registerWhenStable:30000',
     }),
     { provide: AuthApi, useClass: environment.fakeDrive ? FakeAuthService : GisAuthService },
