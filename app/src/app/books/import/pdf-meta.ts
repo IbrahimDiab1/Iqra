@@ -3,8 +3,8 @@ import type { Book, OutlineNode } from '../../core/models';
 
 /** A PDF that cannot be opened: password-protected, invalid, or with no pages. */
 export class UnreadablePdfError extends Error {
-  constructor(message = 'PDF is unreadable') {
-    super(message);
+  constructor(message = 'PDF is unreadable', options?: { cause?: unknown }) {
+    super(message, options);
     this.name = 'UnreadablePdfError';
   }
 }
@@ -28,7 +28,8 @@ export interface PdfMeta {
 const UNTITLED = 'untitled';
 const WORD_PREFIX = /^Microsoft Word - /;
 const TITLE_EXTENSION = /\.(doc|docx|pdf)$/i;
-const ARABIC_LETTER = /[؀-ۿ]/;
+// Arabic block, plus Arabic Presentation Forms A and B (pdf.js often extracts these).
+const ARABIC_LETTER = /[؀-ۿﭐ-﷿ﹰ-﻿]/;
 const LATIN_LETTER = /\p{Script=Latin}/u;
 const LETTER = /\p{L}/gu;
 
@@ -130,17 +131,27 @@ export async function readPdfMeta(blob: Blob): Promise<PdfMeta> {
     return { pageCount, title, author, outline, language: detectLanguage(sample) };
   } catch (err) {
     if (err instanceof UnreadablePdfError) throw err;
-    throw new UnreadablePdfError();
+    throw new UnreadablePdfError('PDF could not be read', { cause: err });
   } finally {
     await task.destroy();
   }
 }
 
-async function resolveDest(doc: PDFDocumentProxy, dest: unknown): Promise<number | null> {
+/**
+ * The 1-based page of an outline destination, or null when it cannot be resolved.
+ * Accepts a named destination, or an explicit destination whose first element is a page ref
+ * or a 0-based page index.
+ */
+export async function resolveDest(
+  doc: Pick<PDFDocumentProxy, 'getDestination' | 'getPageIndex'>,
+  dest: unknown,
+): Promise<number | null> {
   try {
     const explicit = typeof dest === 'string' ? await doc.getDestination(dest) : dest;
     if (!Array.isArray(explicit) || explicit.length === 0) return null;
-    return (await doc.getPageIndex(explicit[0])) + 1;
+    const target = explicit[0];
+    if (typeof target === 'number') return Number.isInteger(target) && target >= 0 ? target + 1 : null;
+    return (await doc.getPageIndex(target)) + 1;
   } catch {
     return null;
   }
