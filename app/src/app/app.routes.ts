@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
 import { signedInGuard, signedOutGuard } from './auth/auth.guard';
 import { ComingSoonPage } from './pages/coming-soon.component';
-import { LibraryPage } from './pages/library.component';
+import { LibraryPage } from './pages/library/library.page';
 import { ReaderStubPage } from './reader/reader-stub.page';
 import { WelcomePage } from './pages/welcome.component';
 
