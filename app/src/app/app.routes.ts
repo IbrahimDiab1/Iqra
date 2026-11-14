@@ -2,7 +2,7 @@ import { Routes } from '@angular/router';
 import { signedInGuard, signedOutGuard } from './auth/auth.guard';
 import { ComingSoonPage } from './pages/coming-soon.component';
 import { LibraryPage } from './pages/library.component';
-import { ReadPage } from './pages/read.component';
+import { ReaderStubPage } from './reader/reader-stub.page';
 import { WelcomePage } from './pages/welcome.component';
 
 export const routes: Routes = [
@@ -11,6 +11,6 @@ export const routes: Routes = [
   { path: 'library', component: LibraryPage, canActivate: [signedInGuard] },
   { path: 'notes', component: ComingSoonPage, canActivate: [signedInGuard] },
   { path: 'stats', component: ComingSoonPage, canActivate: [signedInGuard] },
-  { path: 'read/:bookId', component: ReadPage, canActivate: [signedInGuard] },
+  { path: 'read/:bookId', component: ReaderStubPage, canActivate: [signedInGuard] },
   { path: '**', redirectTo: 'library' },
 ];

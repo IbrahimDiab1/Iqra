@@ -10,6 +10,7 @@ export const COPY = {
   details: { title: 'Book details', tabDetails: 'Details', tabStats: 'Stats', titleLabel: 'Title', author: 'Author', status: 'Status', categories: 'Categories', newCategory: 'New category', tags: 'Tags', tagPlaceholder: 'New tag, then press Enter', rating: 'Rating', review: 'Review', reviewPlaceholder: 'What did you think?', upNext: 'In Up next', progressMode: 'Track progress by', lastPage: 'Last page reached', marked: 'Pages I mark as read', pageMode: 'Turn pages by', swipe: 'Swiping', scroll: 'Scrolling', file: 'File', onDevice: 'On this device', notDownloaded: 'Not downloaded', download: 'Download', removeDownload: 'Remove download', remove: 'Remove book', save: 'Save', saved: 'Book details saved', statsSoon: 'Reading stats arrive with Plan 4.' },
   status: { reading: 'Reading', 'to-read': 'To read', paused: 'Paused', finished: 'Finished' },
   common: { undo: 'Undo', cancel: 'Cancel', close: 'Close' },
+  reader: { loading: 'Loading…', failed: 'This book couldn\'t be opened.', back: 'Back to library', pageOf: (n: number) => `Page 1 of ${n}` },
   // Added in Task 2 for the app shell and placeholder pages.
   nav: { library: 'Library', notes: 'Notes', stats: 'Stats' },
   placeholder: { soon: 'Coming soon' },

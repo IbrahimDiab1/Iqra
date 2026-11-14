@@ -87,7 +87,7 @@ export async function mapOutline(
 let pdfjsReady: Promise<typeof import('pdfjs-dist')> | undefined;
 
 /** Loads pdf.js on first use (keeps it out of the initial bundle) and sets its worker once. */
-function loadPdfjs(): Promise<typeof import('pdfjs-dist')> {
+export function loadPdfjs(): Promise<typeof import('pdfjs-dist')> {
   pdfjsReady ??= import('pdfjs-dist').then((pdfjs) => {
     pdfjs.GlobalWorkerOptions.workerSrc = 'assets/pdf.worker.min.mjs';
     return pdfjs;
