@@ -69,6 +69,17 @@ describe('ImportService', () => {
     expect(titles).toEqual(['good.pdf', 'good2.pdf']);
   });
 
+  it('names every failed file in one toast when several fail', async () => {
+    inspector.readMeta.mockImplementation(async (blob: Blob) => {
+      if ((blob as File).name.startsWith('b')) throw new UnreadablePdfError();
+      return { pageCount: 3, title: '', author: '', outline: [], language: 'en' };
+    });
+
+    await service.importFiles([pdf('b1.pdf', 'a'), pdf('b2.pdf', 'b'), pdf('g.pdf', 'c')]);
+
+    expect(toast.show).toHaveBeenLastCalledWith("Book added. 2 files couldn't be added: b1.pdf, b2.pdf.");
+  });
+
   it('skips a second import of the same content as a duplicate', async () => {
     const first = await service.importFiles([pdf('one.pdf', 'same bytes')]);
     const second = await service.importFiles([pdf('copy.pdf', 'same bytes')]);

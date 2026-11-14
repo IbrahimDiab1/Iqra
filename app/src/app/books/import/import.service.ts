@@ -38,32 +38,35 @@ export class ImportService {
   private readonly uploads = inject(UploadQueue);
 
   /**
-   * Imports files in order. A file that fails is skipped and the rest still import. Failures are
-   * reported in one final toast, so a success toast cannot hide them.
+   * Imports files in order. A file that fails is skipped and the rest still import. One final toast
+   * reports the outcome, so a success toast cannot hide a failure: the message for a single failure,
+   * or a summary naming the failed files. A success count is prefixed when anything was added.
    */
   async importFiles(files: File[]): Promise<ImportResult> {
     const settings = await this.db.settings.get('settings');
     const added: ID[] = [];
     const skipped: string[] = [];
-    let lastFailure: string | null = null;
+    const failures: { name: string; message: string }[] = [];
 
     for (const file of files) {
       try {
         const id = await this.importOne(file, settings);
         if (id) added.push(id);
         else {
-          lastFailure = COPY.import.duplicate(file.name);
+          failures.push({ name: file.name, message: COPY.import.duplicate(file.name) });
           skipped.push(file.name);
         }
       } catch (err) {
         if (!(err instanceof UnreadablePdfError)) console.error('Import failed', err);
-        lastFailure = COPY.import.unreadable(file.name);
+        failures.push({ name: file.name, message: COPY.import.unreadable(file.name) });
         skipped.push(file.name);
       }
     }
 
-    if (lastFailure !== null) {
-      this.toast.show(added.length > 0 ? `${COPY.import.added(added.length)}. ${lastFailure}` : lastFailure);
+    if (failures.length > 0) {
+      const failure =
+        failures.length === 1 ? failures[0].message : COPY.import.importFailedMany(failures.map((f) => f.name));
+      this.toast.show(added.length > 0 ? `${COPY.import.added(added.length)}. ${failure}` : failure);
     } else if (added.length > 0) {
       this.toast.show(COPY.import.added(added.length));
     }
