@@ -1,3 +1,4 @@
+import { COPY } from '../../ui/copy';
 import type { Book, ID } from '../../core/models';
 
 export type LibraryTab = 'reading' | 'to-read' | 'finished' | 'all';
@@ -39,8 +40,8 @@ export function bookProgress(b: Book, markedCount: number): number {
 }
 
 export function statusLine(b: Book, progress: number): string {
-  if (b.status === 'finished') return 'Finished';
-  if (b.status === 'to-read' && b.lastPageReached === 0) return `Not started · ${b.pageCount} pages`;
+  if (b.status === 'finished') return COPY.library.finished;
+  if (b.status === 'to-read' && b.lastPageReached === 0) return `${COPY.library.notStarted} · ${b.pageCount} pages`;
   return `p. ${b.lastPageReached} of ${b.pageCount} · ${Math.round(progress * 100)}%`;
 }
 
