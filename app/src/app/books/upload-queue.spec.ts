@@ -131,19 +131,29 @@ describe('UploadQueue', () => {
     expect(await pendingFor(book.id)).toEqual([]);
   });
 
-  it('drops an entry whose local blob is missing so the entries behind it still upload', async () => {
+  it('drops an entry whose local blob is missing before uploading the entries behind it', async () => {
     const [badId] = (await importer.importFiles([pdf('bad.pdf', 'bad')])).added;
     const [goodId] = (await importer.importFiles([pdf('good.pdf', 'good')])).added;
     withoutBlob.add(badId);
+    // The queue takes entries in key order, so the bad book's rows get the lower keys.
+    for (const [bookId, prefix] of [
+      [badId, '0-bad'],
+      [goodId, '1-good'],
+    ] as const) {
+      const rows = await pendingFor(bookId);
+      await db.pendingUploads.bulkDelete(rows.map((r) => r.id));
+      await db.pendingUploads.bulkPut(rows.map((r) => ({ ...r, id: `${prefix}-${r.kind}` })));
+    }
     await auth.signIn();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const upload = vi.spyOn(drive, 'uploadPdf');
 
     await queue.run();
 
+    expect(warn.mock.invocationCallOrder[0]).toBeLessThan(upload.mock.invocationCallOrder[0]);
     expect(await pendingFor(badId)).toEqual([]);
     expect(await pendingFor(goodId)).toEqual([]);
     expect((await db.books.get(goodId))!.driveFileId).not.toBe('');
-    expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
 
