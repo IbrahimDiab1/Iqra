@@ -45,7 +45,7 @@ class HostComponent {
 }
 
 function pointer(type: string, x: number, y = 0, id = 1): Event {
-  const init = { clientX: x, clientY: y, pointerId: id, bubbles: true, cancelable: true };
+  const init = { clientX: x, clientY: y, pointerId: id, isPrimary: id === 1, bubbles: true, cancelable: true };
   if (typeof PointerEvent !== 'undefined') return new PointerEvent(type, init);
   const e = new MouseEvent(type, init);
   Object.defineProperty(e, 'pointerId', { value: id });
@@ -147,6 +147,16 @@ describe('PagerComponent', () => {
     await settle();
     expect(host.changes).toEqual([]);
     // A fresh single-finger swipe works again afterwards.
+    await drag(-120, 400);
+    await settle();
+    expect(host.changes).toEqual([6]);
+  });
+
+  it('a stale pointer id left behind does not turn later swipes into pinches', async () => {
+    // A second finger goes down and its up never arrives (its element was destroyed).
+    viewport().dispatchEvent(pointer('pointerdown', 100, 100, 1));
+    viewport().dispatchEvent(pointer('pointerdown', 300, 100, 2));
+    viewport().dispatchEvent(pointer('pointerup', 100, 100, 1));
     await drag(-120, 400);
     await settle();
     expect(host.changes).toEqual([6]);

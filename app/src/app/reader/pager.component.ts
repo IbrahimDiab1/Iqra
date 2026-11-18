@@ -135,6 +135,13 @@ export class PagerComponent implements OnDestroy {
   private observer: ResizeObserver | undefined;
 
   constructor() {
+    // Switching between the zoomed and unzoomed templates destroys the element that got the pointer's up/cancel.
+    effect(() => {
+      this.zoomed();
+      this.activeIds.clear();
+      this.start = undefined;
+      this.dragging = false;
+    });
     // A newly shown page starts at its top, and the current page's slot takes keyboard focus so ArrowUp/ArrowDown scroll it.
     effect(() => {
       this.page();
@@ -173,6 +180,8 @@ export class PagerComponent implements OnDestroy {
 
   protected down(e: PointerEvent): void {
     if (this.animating()) return;
+    // A new primary pointer starts a fresh gesture: ids left behind by a destroyed element must not count.
+    if (e.isPrimary) this.activeIds.clear();
     this.activeIds.add(e.pointerId);
     if (this.activeIds.size > 1) {
       // A second finger: this is a pinch, not a swipe.
