@@ -222,6 +222,8 @@ export class PagerComponent implements OnDestroy {
   private turn(dir: 1 | -1): void {
     if (this.animating() || !this.hasPage(dir)) return;
     if (this.zoomed()) {
+      const pan = this.pan()?.nativeElement;
+      if (pan) pan.scrollTop = pan.scrollLeft = 0;
       this.pageChange.emit(this.page() + dir);
       return;
     }
@@ -230,10 +232,19 @@ export class PagerComponent implements OnDestroy {
     this.settle(toLeft ? -width : width, this.page() + dir);
   }
 
+  /** True when the element handles keys itself (form fields, buttons, links, dialogs). */
+  private ownsFocus(node: EventTarget | Element | null): boolean {
+    const el = node as HTMLElement | null;
+    if (!el || typeof el.closest !== 'function') return false;
+    return (
+      el.isContentEditable === true ||
+      el.closest('input, textarea, select, button, a[href], [role=button], [contenteditable]:not([contenteditable=false]), [role=dialog]') !== null
+    );
+  }
+
   @HostListener('document:keydown', ['$event'])
   protected onKey(e: KeyboardEvent): void {
-    const t = e.target as HTMLElement | null;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    if (this.ownsFocus(e.target) || this.ownsFocus(document.activeElement)) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const arrowNext = this.rtl() ? 'ArrowLeft' : 'ArrowRight';
     const arrowPrev = this.rtl() ? 'ArrowRight' : 'ArrowLeft';

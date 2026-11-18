@@ -102,6 +102,7 @@ export class PageViewComponent implements OnDestroy {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private lastPage: number | undefined;
   private generation = 0;
+  private started = false;
 
   constructor() {
     // Re-render on every change of page, width or zoom. Page changes draw at once; zoom/width changes wait 60 ms.
@@ -118,8 +119,7 @@ export class PageViewComponent implements OnDestroy {
         this.controller?.abort();
         this.controller = undefined;
         this.generation++;
-        if (pageChanged) {
-          this.failed.set(false);
+        if (pageChanged || !this.started) {
           void renderer.pageSize(page).then((s) => {
             if (this.page() === page) this.ratio.set(s.heightPt / s.widthPt);
           }, () => undefined);
@@ -132,13 +132,14 @@ export class PageViewComponent implements OnDestroy {
   }
 
   protected retry(): void {
-    this.failed.set(false);
     this.start(this.renderer(), this.page(), this.cssWidth());
   }
 
   private start(renderer: PageRenderer, page: number, width: number): void {
     this.controller?.abort();
+    this.failed.set(false);
     if (width <= 0) return;
+    this.started = true;
     const controller = new AbortController();
     this.controller = controller;
     const generation = ++this.generation;

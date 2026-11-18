@@ -128,6 +128,18 @@ describe('PageViewComponent', () => {
     expect(host.done).toEqual([1]);
   });
 
+  it('clears the failure overlay when a later render succeeds', async () => {
+    host.renderer.calls[0].reject(new Error('boom'));
+    await settle();
+    expect(el.textContent).toContain(COPY.reader.pageFailed);
+    host.zoom.set(2);
+    await settle();
+    await vi.waitFor(() => expect(host.renderer.calls).toHaveLength(2));
+    host.renderer.calls[1].resolve();
+    await settle();
+    expect(el.textContent).not.toContain(COPY.reader.pageFailed);
+  });
+
   it('ignores abort rejections', async () => {
     host.page.set(2);
     await settle();

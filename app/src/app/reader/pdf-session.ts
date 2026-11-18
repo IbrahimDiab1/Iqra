@@ -40,13 +40,25 @@ export function setPdfjsLoaderForTests(fn: (() => Promise<PdfjsModule>) | undefi
 }
 
 const TEXT_CACHE_PAGES = 200;
-const CORRUPT_NAMES = new Set(['InvalidPDFException', 'FormatError', 'MissingPDFException']);
 
-function failureReason(err: unknown): OpenFailure {
-  const name = (err as { name?: unknown } | null)?.name;
-  if (name === 'PasswordException') return 'password';
-  if (typeof name === 'string' && CORRUPT_NAMES.has(name)) return 'corrupt';
-  return 'network';
+type CanvasFactory = () => HTMLCanvasElement;
+let makeCanvas: CanvasFactory = () => document.createElement('canvas');
+
+/** Replaces the offscreen canvas factory in tests; call with undefined to restore it. */
+export function setCanvasFactoryForTests(fn: CanvasFactory | undefined): void {
+  makeCanvas = fn ?? (() => document.createElement('canvas'));
+}
+
+/**
+ * pdf.js 6.5 reports HTTP failures as ResponseException (`missing` for a 404), and a worker-side
+ * FormatError can arrive wrapped as UnknownErrorException. A local blob cannot fail by network.
+ */
+function failureReason(err: unknown, kind: PdfSource['kind']): OpenFailure {
+  const e = err as { name?: unknown; missing?: unknown } | null;
+  if (e?.name === 'PasswordException') return 'password';
+  if (e?.name === 'InvalidPDFException' || e?.name === 'FormatError') return 'corrupt';
+  if (e?.name === 'ResponseException' && e.missing === true) return 'corrupt';
+  return kind === 'local' ? 'corrupt' : 'network';
 }
 
 function abortError(): Error {
@@ -58,6 +70,7 @@ function abortError(): Error {
 export class PdfSession implements PageRenderer {
   private readonly sizes = new Map<number, Promise<PageSize>>();
   private readonly texts = new Map<number, string>();
+  private destroyed = false;
 
   private constructor(
     private readonly doc: PDFDocumentProxy,
@@ -70,8 +83,9 @@ export class PdfSession implements PageRenderer {
 
   static async open(src: PdfSource): Promise<PdfSession> {
     const { getDocument } = await loader();
+    let task: PDFDocumentLoadingTask | undefined;
     try {
-      const task =
+      task =
         src.kind === 'local'
           ? getDocument({ data: new Uint8Array(await src.blob.arrayBuffer()) })
           : getDocument({
@@ -82,7 +96,8 @@ export class PdfSession implements PageRenderer {
             });
       return new PdfSession(await task.promise, task);
     } catch (err) {
-      throw new ReaderOpenError(failureReason(err));
+      void task?.destroy();
+      throw new ReaderOpenError(failureReason(err, src.kind));
     }
   }
 
@@ -108,20 +123,37 @@ export class PdfSession implements PageRenderer {
     const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
     const scale = canvasScale(cssScale, base.width, base.height, dpr);
     const viewport = p.getViewport({ scale });
-    canvas.width = Math.max(1, Math.floor(viewport.width));
-    canvas.height = Math.max(1, Math.floor(viewport.height));
-    const canvasContext = canvas.getContext('2d');
+    // Draw offscreen: assigning canvas.width/height clears the bitmap, and the old one must stay visible meanwhile.
+    const work = makeCanvas();
+    work.width = Math.max(1, Math.floor(viewport.width));
+    work.height = Math.max(1, Math.floor(viewport.height));
+    const canvasContext = work.getContext('2d');
     if (!canvasContext) throw new Error('Canvas is not available');
     const task = p.render({ canvasContext, viewport } as unknown as Parameters<typeof p.render>[0]);
     const onAbort = () => task.cancel();
     signal.addEventListener('abort', onAbort, { once: true });
     try {
-      await task.promise;
-    } catch (err) {
+      try {
+        await task.promise;
+      } catch (err) {
+        if (signal.aborted || this.destroyed) throw abortError();
+        throw err;
+      }
       if (signal.aborted) throw abortError();
-      throw err;
+      const target = canvas.getContext('2d');
+      if (!target) throw new Error('Canvas is not available');
+      // Resize and draw in the same task so the visible canvas never shows a blank frame.
+      if (canvas.width !== work.width || canvas.height !== work.height) {
+        canvas.width = work.width;
+        canvas.height = work.height;
+      } else {
+        target.clearRect(0, 0, work.width, work.height);
+      }
+      target.drawImage(work, 0, 0);
     } finally {
       signal.removeEventListener('abort', onAbort);
+      work.width = 0;
+      work.height = 0;
     }
   }
 
@@ -143,6 +175,7 @@ export class PdfSession implements PageRenderer {
   }
 
   destroy(): void {
+    this.destroyed = true;
     // pdf.js exposes teardown on the loading task: it also stops the worker's network requests.
     void this.task.destroy();
   }

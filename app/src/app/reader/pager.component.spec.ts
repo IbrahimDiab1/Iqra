@@ -159,6 +159,24 @@ describe('PagerComponent', () => {
     expect(host.changes).toEqual([6, 4]);
   });
 
+  it('ignores keys aimed at buttons, dialogs and links, without preventing default', async () => {
+    const button = document.createElement('button');
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    const inner = document.createElement('span');
+    dialog.appendChild(inner);
+    document.body.append(button, dialog);
+    for (const target of [button, inner]) {
+      const e = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+      target.dispatchEvent(e);
+      expect(e.defaultPrevented).toBe(false);
+    }
+    button.remove();
+    dialog.remove();
+    await settle();
+    expect(host.changes).toEqual([]);
+  });
+
   it('a short quick press is a tap, once', async () => {
     await drag(2, 100);
     expect(host.taps).toBe(1);

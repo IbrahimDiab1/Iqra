@@ -1,4 +1,4 @@
-import { PdfSession, ReaderOpenError, setPdfjsLoaderForTests } from './pdf-session';
+import { PdfSession, ReaderOpenError, setCanvasFactoryForTests, setPdfjsLoaderForTests } from './pdf-session';
 
 interface Calls {
   getDocument: ReturnType<typeof vi.fn>;
@@ -34,7 +34,16 @@ function install(failWith?: unknown): Calls {
 const local = () => ({ kind: 'local' as const, blob: new Blob([new Uint8Array([1, 2, 3])]) });
 
 describe('PdfSession', () => {
-  afterEach(() => setPdfjsLoaderForTests(undefined));
+  afterEach(() => {
+    setPdfjsLoaderForTests(undefined);
+    setCanvasFactoryForTests(undefined);
+  });
+
+  function fakeCanvas(w = 0, h = 0) {
+    const ctx = { drawImage: vi.fn(), clearRect: vi.fn() };
+    const c = { width: w, height: h, getContext: vi.fn(() => ctx) };
+    return { c: c as unknown as HTMLCanvasElement, ctx, raw: c };
+  }
 
   it('opens a local blob with data', async () => {
     const c = install();
@@ -66,11 +75,26 @@ describe('PdfSession', () => {
     install({ name: 'FormatError' });
     await expect(PdfSession.open(local())).rejects.toMatchObject({ reason: 'corrupt' });
     install(new TypeError('Failed to fetch'));
-    const err = await PdfSession.open(local()).catch((e: unknown) => e);
+    const err = await PdfSession.open({ kind: 'drive', url: 'u', httpHeaders: {} }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ReaderOpenError);
     expect((err as ReaderOpenError).reason).toBe('network');
-    install({ name: 'UnexpectedResponseException' });
-    await expect(PdfSession.open(local())).rejects.toMatchObject({ reason: 'network' });
+  });
+
+  it('maps pdf.js 6.5 failure shapes', async () => {
+    const drive = { kind: 'drive' as const, url: 'u', httpHeaders: {} };
+    install({ name: 'ResponseException', status: 404, missing: true });
+    await expect(PdfSession.open(drive)).rejects.toMatchObject({ reason: 'corrupt' });
+    install({ name: 'ResponseException', status: 503, missing: false });
+    await expect(PdfSession.open(drive)).rejects.toMatchObject({ reason: 'network' });
+    install(new TypeError('Failed to fetch'));
+    await expect(PdfSession.open(drive)).rejects.toMatchObject({ reason: 'network' });
+    install({ name: 'UnknownErrorException' });
+    await expect(PdfSession.open(drive)).rejects.toMatchObject({ reason: 'network' });
+    // A local blob cannot fail by network: a wrapped worker FormatError is corrupt.
+    install({ name: 'UnknownErrorException' });
+    await expect(PdfSession.open(local())).rejects.toMatchObject({ reason: 'corrupt' });
+    install({ name: 'ResponseException', status: 500, missing: false });
+    await expect(PdfSession.open(local())).rejects.toMatchObject({ reason: 'corrupt' });
   });
 
   it('fetches a page size once per page', async () => {
@@ -97,14 +121,42 @@ describe('PdfSession', () => {
     const c = install();
     const s = await PdfSession.open(local());
     const ac = new AbortController();
-    const canvas = { width: 0, height: 0, getContext: () => ({}) } as unknown as HTMLCanvasElement;
-    const p = s.renderPage(1, canvas, 300, ac.signal);
-    const settled = p.catch((e: unknown) => e);
+    const work = fakeCanvas();
+    setCanvasFactoryForTests(() => work.c);
+    const visible = fakeCanvas(10, 10);
+    const settled = s.renderPage(1, visible.c, 300, ac.signal).catch((e: unknown) => e);
     await vi.waitFor(() => expect(c.render).toHaveBeenCalled());
-    expect(canvas.width).toBeGreaterThan(0);
     ac.abort();
     expect(c.cancel).toHaveBeenCalled();
     expect(await settled).toMatchObject({ name: 'AbortError' });
+    expect(visible.ctx.drawImage).not.toHaveBeenCalled();
+    expect(visible.raw.width).toBe(10);
+  });
+
+  it('leaves the visible canvas untouched until the render finishes, then draws in one step', async () => {
+    const c = install();
+    c.render.mockImplementation(() => {
+      let done!: () => void;
+      const promise = new Promise<void>((r) => (done = r));
+      finish = done;
+      return { promise, cancel: c.cancel };
+    });
+    let finish!: () => void;
+    const s = await PdfSession.open(local());
+    const work = fakeCanvas();
+    setCanvasFactoryForTests(() => work.c);
+    const visible = fakeCanvas(50, 60);
+    const p = s.renderPage(1, visible.c, 300, new AbortController().signal);
+    await vi.waitFor(() => expect(c.render).toHaveBeenCalled());
+    expect(work.raw.width).toBeGreaterThan(0);
+    expect(visible.raw.width).toBe(50);
+    expect(visible.raw.height).toBe(60);
+    expect(visible.ctx.drawImage).not.toHaveBeenCalled();
+    const target = work.raw.width;
+    finish();
+    await p;
+    expect(visible.raw.width).toBe(target);
+    expect(visible.ctx.drawImage).toHaveBeenCalledWith(work.c, 0, 0);
   });
 
   it('caches page text', async () => {
