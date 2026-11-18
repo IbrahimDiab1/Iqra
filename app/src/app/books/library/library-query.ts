@@ -116,9 +116,9 @@ function matchesFilters(b: Book, s: LibraryState, ctx: LibraryCtx): boolean {
   return true;
 }
 
-/** Lowercases and strips Latin combining marks. Arabic harakat sit outside that range and are kept. */
+/** Lowercases and strips Latin combining marks, Arabic harakat (U+064B-U+065F, U+0670) and tatweel (U+0640). */
 function foldText(text: string): string {
-  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  return text.normalize('NFD').replace(/[\u0300-\u036F\u064B-\u065F\u0670\u0640]/g, '').toLowerCase();
 }
 
 function titleCompare(a: Book, b: Book): number {

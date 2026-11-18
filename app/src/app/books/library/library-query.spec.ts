@@ -133,10 +133,11 @@ describe('library query', () => {
     expect(ids(queryLibrary(books, state({ query: 'emile' }), ctx).main)).toEqual(['b3']);
   });
 
-  it('matches Arabic query as-is, keeping harakat', () => {
+  it('matches Arabic queries ignoring harakat and tatweel', () => {
     const arabic = [book({ id: 'a1', title: 'القُرْآن الكريم', author: 'مجهول' })];
     expect(ids(queryLibrary(arabic, state({ query: 'القُرْآن' }), ctx).main)).toEqual(['a1']);
-    expect(ids(queryLibrary(arabic, state({ query: 'قرآن' }), ctx).main)).toEqual([]);
+    expect(ids(queryLibrary(arabic, state({ query: 'قرآن' }), ctx).main)).toEqual(['a1']);
+    expect(ids(queryLibrary(arabic, state({ query: 'الكـــريم' }), ctx).main)).toEqual(['a1']);
   });
 
   it('sorts priority with Up next rank first, then recent-read, ignoring direction', () => {

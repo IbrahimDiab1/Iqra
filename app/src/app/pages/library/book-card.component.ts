@@ -40,7 +40,7 @@ const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
     <button
       type="button"
       class="book"
-      (click)="onClick()"
+      (click)="onClick($event)"
       (pointerdown)="onPointerDown($event)"
       (pointermove)="onPointerMove($event)"
       (pointerup)="cancelPress()"
@@ -173,10 +173,11 @@ export class BookCardComponent {
     return RING_LENGTH * (1 - (this.view().uploading ?? 0));
   }
 
-  protected onClick(): void {
+  protected onClick(e: MouseEvent): void {
     if (this.suppressClick) {
       this.suppressClick = false;
-      return;
+      // A pointer click right after a long press is the release. A keyboard click (detail 0) is a real tap.
+      if (e.detail !== 0) return;
     }
     this.files.openBook(this.view().book);
   }

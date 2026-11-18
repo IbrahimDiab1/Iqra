@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthApi } from '../../auth/auth.service';
+import { FilesService } from '../../books/files.service';
 import { FakeAuthService } from '../../auth/fake-auth.service';
 import { BookDetailsService } from '../../books/details/book-details.service';
 import { CLOCK } from '../../core/clock';
@@ -168,6 +169,25 @@ describe('LibraryPage', () => {
 
     card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
     expect(open).toHaveBeenCalledWith('r');
+  });
+
+  it('opens details once for a long press followed by contextmenu, and a keyboard Enter still opens the book', async () => {
+    await seed([reading]);
+    await create();
+    await waitFor(() => mainCards().length === 1);
+    const details = TestBed.inject(BookDetailsService);
+    const open = vi.spyOn(details, 'open');
+    const openBook = vi.spyOn(TestBed.inject(FilesService), 'openBook').mockImplementation(() => undefined);
+    const card = mainCards()[0];
+
+    card.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));
+    await new Promise((resolve) => setTimeout(resolve, 520));
+    card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    expect(open).toHaveBeenCalledTimes(1);
+
+    // The release click never arrived; a later keyboard click (detail 0) must not be swallowed.
+    card.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+    expect(openBook).toHaveBeenCalledTimes(1);
   });
 
   it('moves an Up next row with Alt+ArrowDown and saves the order', async () => {
