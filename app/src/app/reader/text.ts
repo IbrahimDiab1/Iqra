@@ -173,7 +173,7 @@ function joinLines(acc: string, next: string): string {
   return acc + ' ' + next;
 }
 
-function isArabicParagraph(text: string): boolean {
+export function isArabicParagraph(text: string): boolean {
   const letters = text.match(/\p{L}/gu) ?? [];
   if (letters.length === 0) return false;
   const arabic = letters.filter((ch) => ARABIC.test(ch)).length;
