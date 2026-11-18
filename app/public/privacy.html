@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy · Iqra</title>
+<meta name="description" content="How Iqra handles your data: no server, no tracking, everything stays in your own Google Drive and on your devices.">
+<meta name="theme-color" content="#1E6B64">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+:root{--bg:#E9ECEA;--surface:#FBFCFB;--fg:#19211F;--muted:#5D6A66;--accent:#1E6B64;--line:#DCE2DF}
+@media (prefers-color-scheme:dark){:root{--bg:#0E1211;--surface:#161B1A;--fg:#E6ECEA;--muted:#97A5A1;--accent:#63BDB2;--line:#2B3533}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.65 "Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:720px;margin:0 auto;padding:24px max(18px,env(safe-area-inset-left)) 64px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:28px}
+.brand{display:inline-flex;align-items:center;gap:10px;color:var(--fg);text-decoration:none;font-weight:600;min-height:44px}
+.brand img{width:36px;height:auto}
+nav a{color:var(--muted);text-decoration:none;display:inline-flex;align-items:center;min-height:44px;padding:0 6px}
+nav a:hover,nav a[aria-current]{color:var(--fg);text-decoration:underline;text-underline-offset:4px}
+main{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:28px clamp(18px,5vw,40px)}
+h1{font:600 clamp(28px,6vw,38px)/1.15 Georgia,"Times New Roman",serif;margin:0 0 6px;text-wrap:balance}
+h2{font-size:19px;margin:32px 0 8px}
+p,li{margin:0 0 12px}
+ul{padding-left:22px;margin:0 0 12px}
+.meta{color:var(--muted);font-size:14px;margin-bottom:20px}
+.summary{background:color-mix(in srgb,var(--accent) 10%,transparent);border-radius:12px;padding:14px 16px;margin:18px 0 6px}
+.summary p{margin:0}
+a{color:var(--accent);text-underline-offset:3px}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+footer{color:var(--muted);font-size:14px;margin-top:24px;display:flex;flex-wrap:wrap;gap:4px 16px}
+footer a{color:var(--muted);display:inline-flex;align-items:center;min-height:40px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<a class="brand" href="./"><img src="favicon.svg" alt="" width="36" height="23"><span>Iqra</span></a>
+<nav aria-label="Legal"><a href="privacy.html" aria-current="page">Privacy</a><a href="terms.html">Terms</a></nav>
+</header>
+<main>
+<h1>Privacy Policy</h1>
+<p class="meta">Effective 18 November 2026 · Last updated 18 November 2026</p>
+<div class="summary"><p><strong>In short:</strong> Iqra is a personal, open-source PDF reader that runs in your browser. It has no server of its own. Your books and notes live in your own Google Drive and on your own devices. Iqra does not collect, sell or share your personal data, and it has no ads, analytics or trackers.</p></div>
+
+<h2>Who runs Iqra</h2>
+<p>Iqra is an open-source project maintained on GitHub by IbrahimDiab1 (<a href="https://github.com/IbrahimDiab1/Iqra" target="_blank" rel="noopener noreferrer">github.com/IbrahimDiab1/Iqra</a>). To ask a question or raise a concern, open an issue at <a href="https://github.com/IbrahimDiab1/Iqra/issues" target="_blank" rel="noopener noreferrer">github.com/IbrahimDiab1/Iqra/issues</a>.</p>
+
+<h2>What Iqra accesses in your Google account</h2>
+<ul>
+<li><strong>Basic profile</strong> (name, email address and picture) when you sign in with Google. It is used only to show which account is signed in and to make sure the same account is used on all your devices. It is kept on your device.</li>
+<li><strong>Google Drive, with two narrow permissions:</strong>
+<ul>
+<li><em>Files created by Iqra</em> (<code>drive.file</code>): the PDFs you add are stored in a folder named “Iqra/Books”. Iqra cannot see any other file in your Drive.</li>
+<li><em>Hidden app data</em> (<code>drive.appdata</code>): a private folder, invisible in the normal Drive view, where Iqra keeps its sync data: your library, reading positions, highlights, notes and cover images.</li>
+</ul></li>
+</ul>
+
+<h2>Where your data is stored</h2>
+<ul>
+<li>In your Google Drive, as described above.</li>
+<li>In your browser on each device you use (IndexedDB, local storage and the app cache), so that reading works offline.</li>
+<li>Nowhere else. Iqra has no server, no database and no third-party storage. The sign-in access token is held in memory only and is not written to disk.</li>
+</ul>
+
+<h2>How your data is used</h2>
+<p>Only to provide Iqra's features: adding PDFs, reading them, and keeping your library, positions, highlights and notes in sync between your devices. Your data is not used for advertising, profiling, or training machine-learning models, is never sold, and is not read by any person.</p>
+<p>Iqra's use and transfer of information received from Google APIs to any other app will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+<h2>Third parties</h2>
+<ul>
+<li><strong>Google</strong> provides sign-in and Drive storage, under <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google's Privacy Policy</a>.</li>
+<li><strong>GitHub Pages</strong> serves the website's files. Like any web host, GitHub may log standard request information such as IP address, under <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener noreferrer">GitHub's privacy statement</a>.</li>
+</ul>
+<p>Iqra loads no advertising or analytics code and does not use tracking cookies.</p>
+
+<h2>Your choices and deleting your data</h2>
+<ul>
+<li>Remove a book from within Iqra. “Delete everywhere” removes the book, its notes and its PDF from Drive on all your devices.</li>
+<li>Revoke Iqra's access at any time in your Google Account under <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">Security → Third-party access</a>.</li>
+<li>Delete the “Iqra” folder in Google Drive, and delete Iqra's hidden app data in Drive under Settings → Manage apps.</li>
+<li>Clear the site's data in your browser to remove everything stored on that device.</li>
+</ul>
+
+<h2>Security</h2>
+<p>All communication with Google uses HTTPS. Because your data stays in your own Google account and on your own devices, it is protected by the security of those. Keep your Google account secure, for example with 2-step verification.</p>
+
+<h2>Children</h2>
+<p>Iqra is a general-purpose reading tool and is not directed at children.</p>
+
+<h2>Changes to this policy</h2>
+<p>If this policy changes, the new version will be published on this page with an updated date. The full history is public in the project's repository.</p>
+
+<h2>Contact</h2>
+<p>Open an issue at <a href="https://github.com/IbrahimDiab1/Iqra/issues" target="_blank" rel="noopener noreferrer">github.com/IbrahimDiab1/Iqra/issues</a>.</p>
+</main>
+<footer>
+<a href="./">Back to Iqra</a>
+<a href="https://github.com/IbrahimDiab1/Iqra" target="_blank" rel="noopener noreferrer">Source code on GitHub</a>
+</footer>
+</div>
+</body>
+</html>

@@ -100,8 +100,22 @@ describe('WelcomePage', () => {
 
   it('opens the source link safely', () => {
     create();
-    const link = el.querySelector<HTMLAnchorElement>('footer a')!;
+    const link = el.querySelector<HTMLAnchorElement>('footer a[href^="https://github.com"]')!;
     expect(link.href).toBe('https://github.com/IbrahimDiab1/Iqra');
     expect(link.rel).toContain('noopener');
+  });
+
+  it('links to the privacy policy and the terms of use', () => {
+    create();
+    const privacy = el.querySelector<HTMLAnchorElement>('footer a[href="privacy.html"]')!;
+    const terms = el.querySelector<HTMLAnchorElement>('footer a[href="terms.html"]')!;
+    expect(privacy.textContent).toContain(COPY.welcome.privacy);
+    expect(terms.textContent).toContain(COPY.welcome.terms);
+  });
+
+  it('shows the logo in the brand row', () => {
+    create();
+    const logo = el.querySelector<HTMLImageElement>('.brand img.mark')!;
+    expect(logo.getAttribute('src')).toBe('favicon.svg');
   });
 });

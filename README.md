@@ -62,6 +62,13 @@ Pushing to `main` runs `.github/workflows/deploy.yml`, which tests, builds and p
 - Plan 1: `docs/superpowers/plans/2026-11-14-iqra-plan-1-foundation-library.md`
 - `folio-prototype.html`: the clickable UI prototype, made before the app was named Iqra.
 
+## Links
+
+- App: https://ibrahimdiab1.github.io/Iqra/
+- Privacy Policy: https://ibrahimdiab1.github.io/Iqra/privacy.html
+- Terms of Use: https://ibrahimdiab1.github.io/Iqra/terms.html
+- Logo files (SVG and transparent PNGs): [`brand/`](brand)
+
 ## License
 
 [MIT](LICENSE). Iqra depends on open-source packages (Angular, pdf.js, Dexie and others) that keep their own licenses. The bundled fonts (Literata, Instrument Sans, IBM Plex Sans Arabic) are under the SIL Open Font License.

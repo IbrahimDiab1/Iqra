@@ -12,7 +12,7 @@ import { icon, type IconName } from '../ui/icons';
   template: `
     <main class="page">
       <div class="brand">
-        <span class="mark" [innerHTML]="markIcon"></span>
+        <img class="mark" src="favicon.svg" alt="" width="38" height="24" />
         <span class="name">Iqra</span>
       </div>
 
@@ -92,6 +92,8 @@ import { icon, type IconName } from '../ui/icons';
 
       <footer>
         {{ copy.footer }}
+        <a href="privacy.html">{{ copy.privacy }}</a>
+        <a href="terms.html">{{ copy.terms }}</a>
         <a href="https://github.com/IbrahimDiab1/Iqra" target="_blank" rel="noopener noreferrer">{{ copy.source }}</a>
       </footer>
     </main>
@@ -101,7 +103,7 @@ import { icon, type IconName } from '../ui/icons';
     .page { min-height: 100dvh; max-width: 1080px; margin: 0 auto; padding: 20px var(--gutter) 28px; display: flex; flex-direction: column; gap: 32px; }
     p, h1, h2 { margin: 0; }
     .brand { display: flex; align-items: center; gap: 10px; }
-    .mark { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--accent); color: var(--accent-fg); }
+    .mark { width: 38px; height: auto; display: block; }
     .name { font-weight: 600; font-size: 17px; letter-spacing: -0.01em; }
     .top { display: grid; gap: 40px; flex: 1; align-content: start; }
     .hero { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
@@ -164,7 +166,7 @@ import { icon, type IconName } from '../ui/icons';
     h2 { font-size: 15px; font-weight: 600; line-height: 1.3; }
     .features p { margin-top: 2px; color: var(--muted); font-size: 14px; line-height: 1.45; }
     footer { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
-    footer a { color: var(--muted); text-underline-offset: 3px; display: inline-flex; align-items: center; min-height: 24px; }
+    footer a { color: var(--muted); text-underline-offset: 3px; display: inline-flex; align-items: center; min-height: 40px; }
 
     @media (min-width: 600px) { .features { grid-template-columns: 1fr 1fr; gap: 24px 32px; } }
     @media (min-width: 900px) {
@@ -184,7 +186,6 @@ export class WelcomePage {
 
   private readonly sanitizer = inject(DomSanitizer);
   protected readonly copy = COPY.welcome;
-  protected readonly markIcon = this.svg('bookmark', 16);
   protected readonly lockIcon = this.svg('lock', 14);
   protected readonly chevIcon = this.svg('chevD', 16);
   protected readonly features = COPY.welcome.features.map((f) => ({ ...f, svg: this.svg(f.icon, 20) }));

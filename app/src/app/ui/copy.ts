@@ -19,6 +19,8 @@ export const COPY = {
     previewNote: 'The question the whole book is trying to answer.',
     footer: 'Free and open source.',
     source: 'View the code on GitHub',
+    privacy: 'Privacy',
+    terms: 'Terms',
   },
   sync: { synced: 'Synced with Google Drive', saving: 'Saved on this device · syncing', offline: 'Offline · changes are saved on this device', paused: 'Sync paused · Tap to reconnect', error: 'Sync failed · Tap to retry', unreadable: (name: string) => `${name} can't be read. It may have been made by a newer version of Iqra.`, driveFull: 'Your Google Drive is full. Free up space to keep syncing.', wrongAccount: (other: string, stored: string) => `You picked ${other}. Iqra is linked to ${stored}.` },
   library: { title: 'Library', add: 'Add PDF', tabs: { reading: 'Reading', 'to-read': 'To read', finished: 'Finished', all: 'All' }, paused: 'Paused', upNext: 'Up next', continue: 'Continue reading', resume: 'Resume', filter: 'Filter', sort: 'Sort', emptyTitle: 'Your library is empty', emptyBody: 'Add a PDF and Iqra saves it to your Drive and opens it on every device.', addFirst: 'Add your first PDF', emptyDropHint: 'You can also drop PDF files anywhere on this page.', emptyFiltered: 'No books match these filters.', clearFilters: 'Clear filters', uploadingElsewhere: 'Uploading from another device', notStarted: 'Not started', finished: 'Finished', settings: 'Settings', search: 'Search library', searchPlaceholder: 'Title or author', notDownloaded: 'Not downloaded', reorder: 'Reorder', removeFilter: (name: string) => `Remove filter ${name}`, sortBy: 'Sort by', dropHint: 'Drop PDFs to add them to your library' },
