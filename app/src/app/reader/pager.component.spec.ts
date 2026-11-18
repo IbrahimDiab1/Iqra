@@ -159,19 +159,38 @@ describe('PagerComponent', () => {
     expect(host.changes).toEqual([6, 4]);
   });
 
-  it('ignores keys aimed at buttons, dialogs and links, without preventing default', async () => {
+  it('arrow keys still turn the page with a toolbar button focused', async () => {
     const button = document.createElement('button');
+    document.body.appendChild(button);
+    const e = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true });
+    button.dispatchEvent(e);
+    button.remove();
+    await settle();
+    expect(host.changes).toEqual([6]);
+  });
+
+  it('Space on a focused button neither turns the page nor is default-prevented', async () => {
+    const button = document.createElement('button');
+    document.body.appendChild(button);
+    const e = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+    button.dispatchEvent(e);
+    button.remove();
+    await settle();
+    expect(e.defaultPrevented).toBe(false);
+    expect(host.changes).toEqual([]);
+  });
+
+  it('ignores every key inside a dialog', async () => {
     const dialog = document.createElement('div');
     dialog.setAttribute('role', 'dialog');
     const inner = document.createElement('span');
     dialog.appendChild(inner);
-    document.body.append(button, dialog);
-    for (const target of [button, inner]) {
-      const e = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
-      target.dispatchEvent(e);
+    document.body.appendChild(dialog);
+    for (const key of ['ArrowRight', ' ', 'PageDown']) {
+      const e = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      inner.dispatchEvent(e);
       expect(e.defaultPrevented).toBe(false);
     }
-    button.remove();
     dialog.remove();
     await settle();
     expect(host.changes).toEqual([]);

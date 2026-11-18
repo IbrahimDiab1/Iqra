@@ -232,19 +232,25 @@ export class PagerComponent implements OnDestroy {
     this.settle(toLeft ? -width : width, this.page() + dir);
   }
 
-  /** True when the element handles keys itself (form fields, buttons, links, dialogs). */
-  private ownsFocus(node: EventTarget | Element | null): boolean {
+  /**
+   * Whether the key belongs to the focused element (the event target) rather than the pager.
+   * Fields and dialogs own every key; buttons and links own only their activation keys.
+   */
+  private ownsKey(node: EventTarget | null, key: string): boolean {
     const el = node as HTMLElement | null;
     if (!el || typeof el.closest !== 'function') return false;
-    return (
+    if (
       el.isContentEditable === true ||
-      el.closest('input, textarea, select, button, a[href], [role=button], [contenteditable]:not([contenteditable=false]), [role=dialog]') !== null
-    );
+      el.closest('input, textarea, select, [contenteditable]:not([contenteditable=false]), [role=dialog]') !== null
+    ) {
+      return true;
+    }
+    return (key === ' ' || key === 'Enter') && el.closest('button, a[href], [role=button]') !== null;
   }
 
   @HostListener('document:keydown', ['$event'])
   protected onKey(e: KeyboardEvent): void {
-    if (this.ownsFocus(e.target) || this.ownsFocus(document.activeElement)) return;
+    if (this.ownsKey(e.target, e.key)) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const arrowNext = this.rtl() ? 'ArrowLeft' : 'ArrowRight';
     const arrowPrev = this.rtl() ? 'ArrowRight' : 'ArrowLeft';
