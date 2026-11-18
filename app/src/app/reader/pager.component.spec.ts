@@ -44,11 +44,11 @@ class HostComponent {
   taps = 0;
 }
 
-function pointer(type: string, x: number, y = 0): Event {
-  const init = { clientX: x, clientY: y, pointerId: 1, bubbles: true, cancelable: true };
+function pointer(type: string, x: number, y = 0, id = 1): Event {
+  const init = { clientX: x, clientY: y, pointerId: id, bubbles: true, cancelable: true };
   if (typeof PointerEvent !== 'undefined') return new PointerEvent(type, init);
   const e = new MouseEvent(type, init);
-  Object.defineProperty(e, 'pointerId', { value: 1 });
+  Object.defineProperty(e, 'pointerId', { value: id });
   return e;
 }
 
@@ -124,6 +124,46 @@ describe('PagerComponent', () => {
     await drag(-120, 400);
     await settle();
     expect(host.changes).toEqual([]);
+  });
+
+  it('a second pointer cancels the swipe: no track movement and no page turn (pinch)', async () => {
+    const t = viewport();
+    now = 1000;
+    t.dispatchEvent(pointer('pointerdown', 200, 100, 1));
+    t.dispatchEvent(pointer('pointermove', 150, 100, 1));
+    fixture.detectChanges();
+    expect(track().style.transform).toContain('-450px');
+    t.dispatchEvent(pointer('pointerdown', 300, 100, 2));
+    fixture.detectChanges();
+    expect(track().style.transform).toContain('-400px');
+    // Fingers spread apart far more than a quarter of the width.
+    now = 1100;
+    t.dispatchEvent(pointer('pointermove', 20, 100, 1));
+    t.dispatchEvent(pointer('pointermove', 380, 100, 2));
+    fixture.detectChanges();
+    expect(track().style.transform).toContain('-400px');
+    t.dispatchEvent(pointer('pointerup', 20, 100, 1));
+    t.dispatchEvent(pointer('pointerup', 380, 100, 2));
+    await settle();
+    expect(host.changes).toEqual([]);
+    // A fresh single-finger swipe works again afterwards.
+    await drag(-120, 400);
+    await settle();
+    expect(host.changes).toEqual([6]);
+  });
+
+  it('keeps a touch-action that forbids browser pinch-zoom in every state', () => {
+    expect(getComputedStyle(viewport()).touchAction).toBe('pan-y');
+    host.zoom.set(2);
+    fixture.detectChanges();
+    expect(getComputedStyle(viewport()).touchAction).toBe('pan-x pan-y');
+    expect(getComputedStyle(el.querySelector('.pan') as HTMLElement).touchAction).toBe('pan-x pan-y');
+  });
+
+  it('every slot scrolls vertically so a tall page is reachable, and the current one is focusable', () => {
+    const slot = el.querySelector('[data-slot="cur"]') as HTMLElement;
+    expect(getComputedStyle(slot).overflowY).toBe('auto');
+    expect(slot.getAttribute('tabindex')).toBe('0');
   });
 
   it('does not page when zoomed in', async () => {

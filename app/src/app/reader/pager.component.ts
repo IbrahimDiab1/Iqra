@@ -3,9 +3,12 @@ import {
   Component,
   ElementRef,
   HostListener,
+  Injector,
   OnDestroy,
   afterNextRender,
   computed,
+  effect,
+  inject,
   input,
   output,
   signal,
@@ -60,7 +63,7 @@ interface Slot {
           [style.touch-action]="'pan-y'"
         >
           @for (slot of slots(); track slot.page ?? slot.role) {
-            <div class="slot" [attr.data-slot]="slot.role" [style.width.px]="width()">
+            <div class="slot" [attr.data-slot]="slot.role" [attr.tabindex]="slot.role === 'cur' ? 0 : -1" [style.width.px]="width()">
               @if (slot.page !== null) {
                 <iqra-page-view
                   [renderer]="renderer()"
@@ -79,10 +82,16 @@ interface Slot {
   styles: `
     :host { display: block; width: 100%; height: 100%; }
     .viewport { position: relative; width: 100%; height: 100%; overflow: hidden; user-select: none; touch-action: pan-y; }
-    .viewport.zoomed { touch-action: auto; }
+    /* Zoomed: the browser may pan but never pinch-zooms the whole app (that is the directive's job). */
+    .viewport.zoomed { touch-action: pan-x pan-y; }
     .track { display: flex; height: 100%; will-change: transform; }
-    .slot { flex: none; height: 100%; display: flex; align-items: flex-start; justify-content: center; overflow: hidden; }
-    .pan { width: 100%; height: 100%; overflow: auto; }
+    /* A page taller than the viewport scrolls inside its slot; the bars' space is reserved as padding. */
+    .slot {
+      flex: none; box-sizing: border-box; height: 100%; display: flex; align-items: flex-start; justify-content: center;
+      overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; outline: none;
+      padding: var(--reader-top, 0px) 0 var(--reader-bottom, 0px);
+    }
+    .pan { box-sizing: border-box; width: 100%; height: 100%; overflow: auto; touch-action: pan-x pan-y; padding: var(--reader-top, 0px) 0 var(--reader-bottom, 0px); }
   `,
 })
 export class PagerComponent implements OnDestroy {
@@ -116,11 +125,31 @@ export class PagerComponent implements OnDestroy {
   });
 
   private start: { x: number; y: number; t: number } | undefined;
+  /** Pointers currently down; a second one means a pinch, which never moves the track or turns the page. */
+  private readonly activeIds = new Set<number>();
+  private primaryId: number | undefined;
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
   private dragging = false;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private observer: ResizeObserver | undefined;
 
   constructor() {
+    // A newly shown page starts at its top, and the current page's slot takes keyboard focus so ArrowUp/ArrowDown scroll it.
+    effect(() => {
+      this.page();
+      afterNextRender(
+        () => {
+          const root = this.host.nativeElement;
+          root.querySelectorAll<HTMLElement>('.slot').forEach((el) => (el.scrollTop = 0));
+          const active = document.activeElement;
+          if (active === null || active === document.body || root.contains(active)) {
+            root.querySelector<HTMLElement>('.slot[data-slot="cur"]')?.focus({ preventScroll: true });
+          }
+        },
+        { injector: this.injector },
+      );
+    });
     afterNextRender(() => {
       const el = this.viewport().nativeElement;
       const measure = () => this.width.set(el.clientWidth);
@@ -144,6 +173,15 @@ export class PagerComponent implements OnDestroy {
 
   protected down(e: PointerEvent): void {
     if (this.animating()) return;
+    this.activeIds.add(e.pointerId);
+    if (this.activeIds.size > 1) {
+      // A second finger: this is a pinch, not a swipe.
+      this.start = undefined;
+      this.dragging = false;
+      this.offset.set(0);
+      return;
+    }
+    this.primaryId = e.pointerId;
     this.start = { x: e.clientX, y: e.clientY, t: performance.now() };
     this.dragging = false;
     if (!this.zoomed()) {
@@ -156,7 +194,7 @@ export class PagerComponent implements OnDestroy {
   }
 
   protected move(e: PointerEvent): void {
-    if (!this.start || this.zoomed()) return;
+    if (!this.start || this.zoomed() || e.pointerId !== this.primaryId || this.activeIds.size > 1) return;
     const dx = e.clientX - this.start.x;
     const dy = e.clientY - this.start.y;
     if (!this.dragging) {
@@ -170,7 +208,9 @@ export class PagerComponent implements OnDestroy {
   }
 
   protected up(e: PointerEvent): void {
+    this.activeIds.delete(e.pointerId);
     const s = this.start;
+    if (e.pointerId !== this.primaryId) return;
     this.start = undefined;
     if (!s) return;
     const dx = e.clientX - s.x;
@@ -201,7 +241,8 @@ export class PagerComponent implements OnDestroy {
     this.settle(toLeft ? -width : width, this.page() + dir);
   }
 
-  protected cancel(_e: PointerEvent): void {
+  protected cancel(e: PointerEvent): void {
+    this.activeIds.delete(e.pointerId);
     this.start = undefined;
     this.dragging = false;
     this.offset.set(0);
