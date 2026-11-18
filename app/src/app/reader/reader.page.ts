@@ -21,6 +21,7 @@ import { ToastService } from '../ui/toast.service';
 import type { Place } from './jump-history';
 import { isReaderKeyIgnored } from './keys';
 import { chapterTitleAt } from './outline';
+import { BookPanelSheetComponent } from './book-panel.sheet';
 import { PagerComponent } from './pager.component';
 import { PdfSession, ReaderOpenError, type PageRenderer, type PdfSource } from './pdf-session';
 import { PositionService } from './position.service';
@@ -43,7 +44,7 @@ const SYNC_TOAST_MS = 8000;
 
 @Component({
   selector: 'iqra-reader-page',
-  imports: [RouterLink, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective],
+  imports: [RouterLink, BookPanelSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @switch (statusKind()) {
@@ -160,6 +161,15 @@ const SYNC_TOAST_MS = 8000;
               <button type="button" class="ib" [attr.aria-label]="copy.nextPage" [disabled]="s.page() >= r.numPages" (click)="step(1)" [innerHTML]="ic('chevR')"></button>
             </div>
           </footer>
+          <iqra-book-panel-sheet
+            [open]="panel() !== null"
+            [tab]="panel() ?? 'contents'"
+            [book]="b"
+            [renderer]="r"
+            [page]="s.page()"
+            (closed)="panel.set(null)"
+            (jump)="jump($event)"
+          />
         </section>
       }
     }
@@ -370,7 +380,13 @@ export class ReaderPage implements OnDestroy {
 
   @HostListener('document:keydown', ['$event'])
   protected onKey(e: KeyboardEvent): void {
-    if (!this.state() || isReaderKeyIgnored(e) || !e.altKey || e.ctrlKey || e.metaKey) return;
+    if (!this.state() || isReaderKeyIgnored(e)) return;
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'f') {
+      this.openPanel('search');
+      e.preventDefault();
+      return;
+    }
+    if (!e.altKey || e.ctrlKey || e.metaKey) return;
     if (e.key === 'ArrowLeft') {
       this.historyBack();
       e.preventDefault();

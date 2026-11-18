@@ -254,4 +254,21 @@ describe('ReaderPage', () => {
     expect(el.querySelector('iqra-reflow-view')).not.toBeNull();
     expect(label()).toContain(COPY.reader.pageOf(7, 50));
   });
+
+  it('the Contents pill opens the sheet and an entry jumps', async () => {
+    await create();
+    Array.from(el.querySelectorAll<HTMLButtonElement>('.pill')).find((b) => b.textContent!.includes(COPY.reader.contents))!.click();
+    fixture.detectChanges();
+    el.querySelectorAll<HTMLButtonElement>('.row')[1].click();
+    fixture.detectChanges();
+    expect(label()).toContain(COPY.reader.pageOf(20, 50));
+    expect(btn(COPY.reader.jumpBack)!.disabled).toBe(false);
+  });
+
+  it('Ctrl+F opens the Search tab', async () => {
+    await create();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    expect(el.querySelector('input[type=search]')).not.toBeNull();
+  });
 });
