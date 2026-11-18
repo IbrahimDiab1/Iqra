@@ -1,5 +1,7 @@
-import { Injectable, OnDestroy, signal } from '@angular/core';
-import { compareCaret, quoteOf, type Caret } from '../annotations/anchor';
+import { Injectable, OnDestroy, inject, signal } from '@angular/core';
+import { compareCaret, locateQuote, quoteOf, type Caret } from '../annotations/anchor';
+import { COPY } from '../ui/copy';
+import { ToastService } from '../ui/toast.service';
 import type { TextItem } from './text';
 
 export interface PendingSelection {
@@ -22,6 +24,36 @@ interface Opts {
 function layerOf(node: Node | null): HTMLElement | null {
   const el = node instanceof Element ? node : (node?.parentElement ?? null);
   return el?.closest<HTMLElement>('.text-layer') ?? null;
+}
+
+/** The reading-mode article a node sits in, or null. */
+function articleOf(node: Node | null): HTMLElement | null {
+  const el = node instanceof Element ? node : (node?.parentElement ?? null);
+  return el?.closest<HTMLElement>('.reflow-article') ?? null;
+}
+
+const collapse = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+/**
+ * How many times the collapsed quote already occurs (non-overlapping, left to right) in the article's text
+ * before the selection start: the `nth` for locateQuote. Null when the start is not inside a paragraph.
+ */
+function occurrencesBefore(article: HTMLElement, range: Range, quote: string): number | null {
+  const paragraphs = Array.from(article.querySelectorAll('p'));
+  const startEl = range.startContainer instanceof Element ? range.startContainer : range.startContainer.parentElement;
+  const para = startEl?.closest('p');
+  const index = para ? paragraphs.indexOf(para) : -1;
+  if (!para || index < 0) return null;
+  const head = document.createRange();
+  head.setStart(para, 0);
+  head.setEnd(range.startContainer, range.startOffset);
+  const before = collapse([...paragraphs.slice(0, index).map((p) => p.textContent ?? ''), head.toString()].join(' '));
+  let count = 0;
+  for (let from = 0; ; count++) {
+    const at = before.indexOf(quote, from);
+    if (at < 0) return count;
+    from = at + quote.length;
+  }
 }
 
 /** The caret (item index + character offset) for a DOM boundary point inside a text layer. */
@@ -57,6 +89,7 @@ export class SelectionService implements OnDestroy {
   /** A non-collapsed selection exists inside the reader. */
   readonly active = this._active.asReadonly();
 
+  private readonly toast = inject(ToastService);
   private opts: Opts | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private token = 0;
@@ -87,7 +120,8 @@ export class SelectionService implements OnDestroy {
     const live = !!sel && !sel.isCollapsed && sel.rangeCount > 0;
     const range = live ? sel.getRangeAt(0) : null;
     // Gestures check `active` straight away; only the (async) anchor is debounced.
-    this._active.set(!!range && (!!layerOf(range.startContainer) || !!layerOf(range.endContainer)));
+    const inside = (n: Node) => !!layerOf(n) || !!articleOf(n);
+    this._active.set(!!range && (inside(range.startContainer) || inside(range.endContainer)));
     clearTimeout(this.timer);
     const token = ++this.token;
     if (!range || !this._active()) {
@@ -98,6 +132,11 @@ export class SelectionService implements OnDestroy {
   }
 
   private async publish(range: Range, token: number): Promise<void> {
+    const article = articleOf(range.startContainer);
+    if (article) {
+      await this.publishReflow(range, token, article);
+      return;
+    }
     const layer = layerOf(range.startContainer);
     if (!this.opts || !layer || layer !== layerOf(range.endContainer)) {
       this._pending.set(null);
@@ -128,6 +167,35 @@ export class SelectionService implements OnDestroy {
         ? range.getBoundingClientRect()
         : ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 } as DOMRect);
     this._pending.set({ page, start, end, quote, rect, source: 'page' });
+  }
+
+  /** A selection in reading mode: the quote is the selected text, located in the page's items. */
+  private async publishReflow(range: Range, token: number, article: HTMLElement): Promise<void> {
+    const page = Number(article.dataset['page']);
+    const quote = collapse(range.toString());
+    if (!this.opts || article !== articleOf(range.endContainer) || !Number.isFinite(page) || quote === '') {
+      this._pending.set(null);
+      return;
+    }
+    let items: TextItem[];
+    try {
+      items = await this.opts.items(page);
+    } catch {
+      return;
+    }
+    if (token !== this.token) return;
+    const nth = occurrencesBefore(article, range, quote);
+    const found = nth === null ? null : locateQuote(items, quote, nth);
+    if (!found) {
+      this._pending.set(null);
+      this.toast.show(COPY.annotations.cantAnchor);
+      return;
+    }
+    const rect =
+      typeof range.getBoundingClientRect === 'function'
+        ? range.getBoundingClientRect()
+        : ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 } as DOMRect);
+    this._pending.set({ page, start: found.start, end: found.end, quote, rect, source: 'reflow' });
   }
 }
 

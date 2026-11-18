@@ -57,6 +57,7 @@ export const COPY = {
     copied: 'Copied',
     copyFailed: 'Couldn’t copy.',
     saveFailed: 'Couldn’t save that. Try again.',
+    cantAnchor: 'Couldn’t attach this selection. Try selecting a little less.',
     addNote: 'Add a note',
     notePlaceholder: 'Write a note…',
     tags: 'Tags',

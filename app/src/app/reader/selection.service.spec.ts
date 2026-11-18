@@ -1,5 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { COPY } from '../ui/copy';
+import { ToastService } from '../ui/toast.service';
 import type { TextItem } from './text';
 import { SelectionService, selectWordIn, wordBounds } from './selection.service';
 
@@ -109,6 +111,61 @@ describe('SelectionService', () => {
     expect(svc.pending()).toBeNull();
     expect(svc.active()).toBe(false);
     expect(window.getSelection()!.isCollapsed).toBe(true);
+  });
+});
+
+describe('SelectionService in reading mode', () => {
+  let svc: SelectionService;
+  let article: HTMLElement;
+  let toast: ToastService;
+  const ITEMS2: TextItem[] = [item('the cat sat.'), item('the cat ran.')];
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    TestBed.configureTestingModule({ providers: [SelectionService] });
+    svc = TestBed.inject(SelectionService);
+    toast = TestBed.inject(ToastService);
+    svc.attach({ items: async () => ITEMS2 });
+    article = document.createElement('article');
+    article.className = 'reflow-article';
+    article.dataset['page'] = '4';
+    article.innerHTML = '<p>the cat sat.</p><p>the <mark class="hl-green">cat</mark> ran.</p>';
+    document.body.appendChild(article);
+  });
+
+  afterEach(() => {
+    window.getSelection()?.removeAllRanges();
+    article.remove();
+    vi.useRealTimers();
+  });
+
+  const p = (i: number) => article.querySelectorAll('p')[i];
+
+  it('maps a selection of text that appears twice to the correct occurrence', async () => {
+    select(p(1).firstChild!, 0, p(1).querySelector('mark')!.firstChild!, 3);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(svc.pending()).toMatchObject({
+      page: 4,
+      quote: 'the cat',
+      source: 'reflow',
+      start: { item: 1, offset: 0 },
+      end: { item: 1, offset: 7 },
+    });
+    expect(svc.active()).toBe(true);
+  });
+
+  it('maps the first occurrence to the first', async () => {
+    select(p(0).firstChild!, 0, p(0).firstChild!, 7);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(svc.pending()).toMatchObject({ start: { item: 0, offset: 0 }, end: { item: 0, offset: 7 }, source: 'reflow' });
+  });
+
+  it('keeps pending null and toasts when the quote cannot be located', async () => {
+    p(0).firstChild!.textContent = 'zzz sat.';
+    select(p(0).firstChild!, 0, p(0).firstChild!, 3);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(svc.pending()).toBeNull();
+    expect(toast.current()?.message).toBe(COPY.annotations.cantAnchor);
   });
 });
 

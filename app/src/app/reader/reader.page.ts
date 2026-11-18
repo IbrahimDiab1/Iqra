@@ -119,6 +119,9 @@ const SYNC_TOAST_MS = 8000;
                 [theme]="theme()"
                 (pageChange)="s.pageChange($event)"
                 (showPage)="showPage()"
+                [annotations]="annotations()"
+                [flashId]="s.flash()"
+                (annotationTap)="onAnnotationTap($event)"
                 (tap)="s.toggleChrome()"
               />
             } @else if (b.pageMode === 'scroll') {

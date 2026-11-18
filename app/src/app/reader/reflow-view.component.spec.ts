@@ -1,5 +1,6 @@
 import { Component, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { Annotation } from '../core/models';
 import { COPY } from '../ui/copy';
 import { PageRenderer, PageSize } from './pdf-session';
 import { ReflowViewComponent } from './reflow-view.component';
@@ -36,6 +37,9 @@ class FakeRenderer implements PageRenderer {
     (pageChange)="changes.push($event)"
     (showPage)="shown = shown + 1"
     (tap)="taps = taps + 1"
+    [annotations]="annotations()"
+    [flashId]="flashId()"
+    (annotationTap)="tapped.push($event)"
   />`,
 })
 class HostComponent {
@@ -45,6 +49,9 @@ class HostComponent {
   changes: number[] = [];
   shown = 0;
   taps = 0;
+  annotations = signal<Annotation[]>([]);
+  flashId = signal<string | null>(null);
+  tapped: Annotation[] = [];
 }
 
 describe('ReflowViewComponent', () => {
@@ -145,5 +152,50 @@ describe('ReflowViewComponent', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     input.remove();
     expect(host.changes).toEqual([4]);
+  });
+
+  describe('highlights', () => {
+    const ann = (over: Partial<Annotation>): Annotation => ({
+      id: 'h1', bookId: 'b', deviceId: 'd', updatedAt: 1, createdAt: 1, type: 'highlight', page: 3, color: 'green', tags: [],
+      text: { page: 3, start: { item: 0, offset: 0 }, end: { item: 0, offset: 5 }, rects: [], quote: 'second line of the same' },
+      ...over,
+    });
+
+    it('a highlighted phrase renders a colored <mark>', async () => {
+      host.annotations.set([ann({})]);
+      await settle();
+      const m = el.querySelector<HTMLElement>('article p mark')!;
+      expect(m.textContent).toBe('second line of the same');
+      expect(m.classList.contains('hl-green')).toBe(true);
+      expect(m.dataset['id']).toBe('h1');
+    });
+
+    it('clicking a mark emits annotationTap and does not toggle the bars', async () => {
+      const a = ann({});
+      host.annotations.set([a]);
+      await settle();
+      el.querySelector<HTMLElement>('mark')!.click();
+      expect(host.tapped).toEqual([a]);
+      expect(host.taps).toBe(0);
+    });
+
+    it('a note is underlined and a mark with a body shows a dot', async () => {
+      host.annotations.set([ann({ type: 'note', color: undefined, body: 'thought' })]);
+      await settle();
+      const m = el.querySelector<HTMLElement>('mark')!;
+      expect(m.classList.contains('underline')).toBe(true);
+      expect(m.querySelector('.dot')).not.toBeNull();
+    });
+
+    it('ignores annotations of other pages and non-text kinds', async () => {
+      host.annotations.set([ann({ text: { page: 4, start: { item: 0, offset: 0 }, end: { item: 0, offset: 1 }, rects: [], quote: 'second line' } }), ann({ id: 'x', type: 'area', text: undefined })]);
+      await settle();
+      expect(el.querySelector('mark')).toBeNull();
+    });
+
+    it('the article carries its page for the selection service', async () => {
+      await settle();
+      expect(el.querySelector<HTMLElement>('article.reflow-article')!.dataset['page']).toBe('3');
+    });
   });
 });
