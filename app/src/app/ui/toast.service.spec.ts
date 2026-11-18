@@ -35,4 +35,9 @@ describe('ToastService', () => {
     expect(spy).toHaveBeenCalledTimes(1);
     expect(service.current()).toBeNull();
   });
+
+  it('keeps an action label for the toast button', () => {
+    service.show('x', { undo: () => undefined, actionLabel: 'Back' });
+    expect(service.current()?.actionLabel).toBe('Back');
+  });
 });

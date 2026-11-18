@@ -3,10 +3,13 @@ import { Injectable, signal } from '@angular/core';
 export interface ToastState {
   message: string;
   undo?: () => void;
+  actionLabel?: string;
 }
 
 export interface ToastOptions {
   undo?: () => void;
+  /** Text of the action button; defaults to Undo. */
+  actionLabel?: string;
   durationMs?: number;
 }
 
@@ -22,7 +25,7 @@ export class ToastService {
 
   show(message: string, opts: ToastOptions = {}): void {
     clearTimeout(this.timer);
-    this.state.set({ message, undo: opts.undo });
+    this.state.set({ message, undo: opts.undo, actionLabel: opts.actionLabel });
     this.timer = setTimeout(() => this.dismiss(), opts.durationMs ?? DEFAULT_DURATION_MS);
   }
 

@@ -9,7 +9,7 @@ import { ToastService } from './toast.service';
       <div class="toast" role="status" aria-live="polite">
         <span dir="auto">{{ t.message }}</span>
         @if (t.undo) {
-          <button type="button" (click)="toast.undo()">{{ undoLabel }}</button>
+          <button type="button" (click)="toast.undo()">{{ t.actionLabel ?? undoLabel }}</button>
         }
       </div>
     }
