@@ -27,8 +27,6 @@ export interface PositionUpdate {
 
 interface PendingWrite extends PositionUpdate {
   bookId: ID;
-  /** Set on the first write of an open: the time the book was opened. */
-  openedAt?: number;
 }
 
 function clampPage(page: number, book: Book): number {
@@ -51,13 +49,10 @@ export class PositionService {
 
   private pending: PendingWrite | null = null;
   private timer: ReturnType<typeof setTimeout> | undefined;
-  /** True until the first schedule call of the current open. */
-  private firstOfOpen = true;
   private writes: Promise<void> = Promise.resolve();
 
   /** Where to open a book: the newest position of any device, or the last page reached. */
   async restore(book: Book): Promise<RestoredPosition> {
-    this.firstOfOpen = true;
     const positions = await this.db.positions.where('bookId').equals(book.id).toArray();
     const live = positions.filter((p) => !p.deleted).sort((a, b) => b.updatedAt - a.updatedAt);
     const newest = live[0];
@@ -90,12 +85,7 @@ export class PositionService {
   schedule(book: Book, p: PositionUpdate): void {
     if (this.pending && this.pending.bookId !== book.id) this.flushQuietly();
 
-    let openedAt = this.pending?.openedAt;
-    if (this.firstOfOpen) {
-      openedAt = this.clock.now();
-      this.firstOfOpen = false;
-    }
-    this.pending = { bookId: book.id, ...p, openedAt };
+    this.pending = { bookId: book.id, ...p };
 
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.flushQuietly(), SAVE_DELAY_MS);
@@ -108,6 +98,22 @@ export class PositionService {
     const snapshot = this.pending;
     this.pending = null;
     const run = this.writes.then(() => (snapshot ? this.write(snapshot) : undefined));
+    this.writes = run.catch(() => undefined);
+    return run;
+  }
+
+  /**
+   * Records that a book was opened: lastOpenedAt, and to-read becomes reading. Writes the Book only,
+   * never a Position, so merely opening a book cannot outrank real reading on another device.
+   */
+  markOpened(book: Book): Promise<void> {
+    const run = this.writes.then(async () => {
+      const current = await this.db.books.get(book.id);
+      if (!current || current.deleted) return;
+      const patch: Partial<Book> = { lastOpenedAt: this.clock.now() };
+      if (current.status === 'to-read') patch.status = 'reading';
+      await this.repo.put<Book>('books', { ...current, ...patch });
+    });
     this.writes = run.catch(() => undefined);
     return run;
   }
@@ -131,10 +137,6 @@ export class PositionService {
     if (!book || book.deleted) return;
     const patch: Partial<Book> = {};
     if (w.page > book.lastPageReached) patch.lastPageReached = w.page;
-    if (w.openedAt !== undefined) {
-      patch.lastOpenedAt = w.openedAt;
-      if (book.status === 'to-read') patch.status = 'reading';
-    }
     if (Object.keys(patch).length > 0) {
       await this.repo.put<Book>('books', { ...book, ...patch });
     }

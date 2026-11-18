@@ -73,7 +73,7 @@ describe('ReaderPage', () => {
   let el: HTMLElement;
   let session: FakeSession;
   let open: ReturnType<typeof vi.fn>;
-  let positions: { restore: ReturnType<typeof vi.fn>; schedule: ReturnType<typeof vi.fn>; flush: ReturnType<typeof vi.fn> };
+  let positions: { restore: ReturnType<typeof vi.fn>; schedule: ReturnType<typeof vi.fn>; markOpened: ReturnType<typeof vi.fn>; flush: ReturnType<typeof vi.fn> };
   let restored: RestoredPosition;
 
   beforeEach(async () => {
@@ -85,6 +85,7 @@ describe('ReaderPage', () => {
     positions = {
       restore: vi.fn(async () => restored),
       schedule: vi.fn(),
+      markOpened: vi.fn(async () => undefined),
       flush: vi.fn(async () => undefined),
     };
     await db.books.put(makeBook());
@@ -209,6 +210,12 @@ describe('ReaderPage', () => {
     fixture.detectChanges();
     expect(bars()).toHaveLength(2);
     expect(bars().every((b) => b.hasAttribute('inert'))).toBe(true);
+  });
+
+  it('opening marks the book opened and schedules no position', async () => {
+    await create();
+    expect(positions.markOpened).toHaveBeenCalledWith(expect.objectContaining({ id: 'book-1' }));
+    expect(positions.schedule).not.toHaveBeenCalled();
   });
 
   it('tapping the page toggles the immersive class', async () => {

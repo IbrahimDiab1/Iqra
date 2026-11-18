@@ -157,6 +157,12 @@ describe('PositionService', () => {
       expect(r.place.offset).toBe(0);
     });
 
+    it('sanitizes a non-finite stored zoom', async () => {
+      const book = await addBook();
+      await repo.put<Position>('positions', { id: `b1:${THIS_DEVICE}`, bookId: 'b1', page: 2, offset: 0, zoom: NaN, view: 'page' });
+      expect((await service.restore(book)).zoom).toBe(1);
+    });
+
     it('ignores a soft-deleted newest position', async () => {
       const book = await addBook();
       await repo.put<Position>('positions', {
@@ -206,23 +212,33 @@ describe('PositionService', () => {
       expect((await db.books.get('b1'))?.lastPageReached).toBe(12);
     });
 
-    it('moves a to-read book to reading and sets lastOpenedAt once per open', async () => {
+    it('does not change lastOpenedAt or status when only the place changes', async () => {
       await addBook();
-      clock.t = 4000;
       const b = (await db.books.get('b1'))!;
-
-      service.schedule(b, { page: 1, offset: 0, zoom: 1, view: 'page' });
       service.schedule(b, { page: 2, offset: 0, zoom: 1, view: 'page' });
       await service.flush();
+      const stored = await db.books.get('b1');
+      expect(stored?.status).toBe('to-read');
+      expect(stored?.lastOpenedAt).toBeUndefined();
+    });
+  });
 
-      let stored = await db.books.get('b1');
-      expect(stored).toMatchObject({ status: 'reading', lastOpenedAt: 4000 });
-
-      clock.t = 9000;
-      service.schedule(stored!, { page: 3, offset: 0, zoom: 1, view: 'page' });
+  describe('markOpened', () => {
+    it('sets lastOpenedAt and moves to-read to reading without writing a position', async () => {
+      await addBook({ lastPageReached: 5 });
+      clock.t = 4000;
+      const b = (await db.books.get('b1'))!;
+      await service.markOpened(b);
       await service.flush();
-      stored = await db.books.get('b1');
-      expect(stored?.lastOpenedAt).toBe(4000);
+
+      expect(await db.books.get('b1')).toMatchObject({ status: 'reading', lastOpenedAt: 4000, lastPageReached: 5 });
+      expect(await db.positions.count()).toBe(0);
+    });
+
+    it('keeps other statuses', async () => {
+      await addBook({ status: 'finished' });
+      await service.markOpened((await db.books.get('b1'))!);
+      expect((await db.books.get('b1'))?.status).toBe('finished');
     });
   });
 

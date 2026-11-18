@@ -320,7 +320,7 @@ export class ReaderPage implements OnDestroy {
       this.session.set(session);
       this.state.set(state);
       this.status.set('ready');
-      state.touch();
+      this.positions.markOpened(book).catch((err) => console.warn('Could not record the open', err));
       if (restored.fromOtherDevice && restored.previousLocal) {
         const back = restored.previousLocal;
         this.toast.show(COPY.reader.syncedFrom(back.page), {

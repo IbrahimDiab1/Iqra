@@ -41,11 +41,6 @@ export class ReaderState {
     if (r.view === 'page' && r.zoom > 1.05) this.lastCustomZoom.set(r.zoom);
   }
 
-  /** Records the opening place so the book counts as opened. */
-  touch(): void {
-    this.save();
-  }
-
   /** A page turn (swipe, keys, chevrons): not a jump. */
   pageChange(page: number): void {
     this.page.set(page);
