@@ -26,6 +26,7 @@ import { PagerComponent } from './pager.component';
 import { PdfSession, ReaderOpenError, type PageRenderer, type PdfSource } from './pdf-session';
 import { PositionService } from './position.service';
 import { ReaderState } from './reader.state';
+import { ReadingSettingsSheetComponent } from './reading-settings.sheet';
 import { ReflowViewComponent } from './reflow-view.component';
 import { ScrollerComponent } from './scroller.component';
 import { ZoomGesturesDirective } from './zoom-gestures.directive';
@@ -44,7 +45,7 @@ const SYNC_TOAST_MS = 8000;
 
 @Component({
   selector: 'iqra-reader-page',
-  imports: [RouterLink, BookPanelSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective],
+  imports: [RouterLink, BookPanelSheetComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @switch (statusKind()) {
@@ -169,6 +170,13 @@ const SYNC_TOAST_MS = 8000;
             [page]="s.page()"
             (closed)="panel.set(null)"
             (jump)="jump($event)"
+          />
+          <iqra-reading-settings-sheet
+            [open]="settingsOpen()"
+            [book]="b"
+            [state]="s"
+            (closed)="settingsOpen.set(false)"
+            (bookChange)="book.set($event)"
           />
         </section>
       }

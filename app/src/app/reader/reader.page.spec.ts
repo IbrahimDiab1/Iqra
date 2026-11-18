@@ -271,4 +271,16 @@ describe('ReaderPage', () => {
     fixture.detectChanges();
     expect(el.querySelector('input[type=search]')).not.toBeNull();
   });
+
+  it('the settings button opens the sheet and Scrolling switches to the scroller', async () => {
+    await create();
+    btn(COPY.reader.settings)!.click();
+    fixture.detectChanges();
+    Array.from(el.querySelectorAll<HTMLButtonElement>('[role=radio]')).find((b) => b.textContent!.trim() === COPY.reader.scroll)!.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(el.querySelector('iqra-scroller')).not.toBeNull();
+    });
+    expect(label()).toContain(COPY.reader.pageOf(7, 50));
+  });
 });
