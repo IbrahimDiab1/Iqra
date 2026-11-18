@@ -50,6 +50,7 @@ const DEFAULT_RATIO = 1.414;
             class="page"
             [attr.data-page]="box.index + 1"
             [style.top.px]="box.top"
+            [style.left.px]="pageLeft()"
             [style.width.px]="pageWidth()"
             [style.height.px]="box.height"
           >
@@ -69,9 +70,9 @@ const DEFAULT_RATIO = 1.414;
   `,
   styles: `
     :host { display: block; width: 100%; height: 100%; }
-    .viewport { width: 100%; height: 100%; overflow: auto; overscroll-behavior: contain; }
+    .viewport { width: 100%; height: 100%; overflow: auto; overscroll-behavior: contain; touch-action: pan-x pan-y; }
     .column { position: relative; margin: 0 auto; }
-    .page { position: absolute; left: 0; }
+    .page { position: absolute; }
   `,
 })
 export class ScrollerComponent implements OnDestroy {
@@ -96,6 +97,9 @@ export class ScrollerComponent implements OnDestroy {
 
   protected readonly pageWidth = computed(() => this.fitWidth() * this.zoom());
   protected readonly columnWidth = computed(() => Math.max(this.pageWidth(), this.fitWidth()));
+
+  /** Pages narrower than the viewport (zoom < 1) are centred; wider ones overflow from the left. */
+  protected readonly pageLeft = computed(() => (this.columnWidth() - this.pageWidth()) / 2);
 
   private readonly heights = computed(() => {
     const def = this.defaultRatio();
@@ -148,7 +152,7 @@ export class ScrollerComponent implements OnDestroy {
   private anchor: { index: number; frac: number } = { index: 0, frac: 0 };
   private lastZoom: number | undefined;
   private requested = new Set<number>();
-  protected press: { x: number; y: number; t: number } | undefined;
+  protected press: { id: number; x: number; y: number; t: number } | undefined;
 
   constructor() {
     afterNextRender(() => {
@@ -198,7 +202,7 @@ export class ScrollerComponent implements OnDestroy {
     effect(() => {
       const z = this.zoom();
       if (z > 1.05) this.lastCustomZoom.set(z);
-      if (this.lastZoom !== undefined && this.lastZoom !== z && this.heights().length > 0) {
+      if (this.lastZoom !== undefined && this.lastZoom !== z && untracked(() => this.heights().length) > 0) {
         afterNextRender(() => this.restoreAnchor(), { injector: this.injector });
       }
       this.lastZoom = z;
@@ -294,13 +298,14 @@ export class ScrollerComponent implements OnDestroy {
   }
 
   protected down(e: PointerEvent): void {
-    this.press = { x: e.clientX, y: e.clientY, t: performance.now() };
+    // A second finger (pinch) cancels the press so it cannot end as a tap.
+    this.press = this.press ? undefined : { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() };
   }
 
   protected up(e: PointerEvent): void {
     const p = this.press;
     this.press = undefined;
-    if (!p) return;
+    if (!p || p.id !== e.pointerId) return;
     if (Math.hypot(e.clientX - p.x, e.clientY - p.y) < TAP_MAX_MOVE_PX && performance.now() - p.t < TAP_MAX_MS) {
       this.tap.emit();
     }

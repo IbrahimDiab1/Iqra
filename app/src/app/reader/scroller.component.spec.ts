@@ -49,7 +49,6 @@ class HostComponent {
   taps = 0;
 }
 
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe('ScrollerComponent', () => {
   let fixture: ComponentFixture<HostComponent>;
@@ -66,19 +65,27 @@ describe('ScrollerComponent', () => {
     host = fixture.componentInstance;
     host.start = start;
     el = fixture.nativeElement as HTMLElement;
-    fixture.detectChanges();
+    // Start-up is async (page sizes, then the jump to the start place): wait for the page boxes.
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(el.querySelectorAll('[data-page]').length).toBe(100);
+    });
+    const target = Math.max(0, start.page - 1) * (RATIO * VIEW_W + GAP);
+    if (start.page > 1) await vi.waitFor(() => expect(viewport().scrollTop).toBeGreaterThanOrEqual(target));
     await fixture.whenStable();
-    await wait(30);
     fixture.detectChanges();
-    await fixture.whenStable();
   }
 
-  async function scrollTo(top: number, ms = 40) {
+  /** Scrolls and waits until the first rendered page reflects the new position (after the rAF throttle). */
+  async function scrollTo(top: number) {
     viewport().scrollTop = top;
     viewport().dispatchEvent(new Event('scroll'));
-    await wait(ms);
-    fixture.detectChanges();
-    await fixture.whenStable();
+    const step = RATIO * VIEW_W + GAP;
+    const centre = Math.min(99, Math.floor((top + VIEW_H / 2) / step)) + 1;
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(renderedPages()).toContain(centre);
+    });
   }
 
   beforeEach(() => {
@@ -96,12 +103,12 @@ describe('ScrollerComponent', () => {
 
   it('scrolling updates the rendered set and emits the page', async () => {
     await create();
-    await scrollTo(5000, 160);
+    await scrollTo(5000);
     const pages = renderedPages();
     const expectedCentre = Math.floor((5000 + VIEW_H / 2) / (RATIO * VIEW_W + GAP)) + 1;
     expect(pages).toContain(expectedCentre);
     expect(pages).not.toContain(1);
-    expect(host.places[host.places.length - 1].page).toBe(expectedCentre);
+    await vi.waitFor(() => expect(host.places[host.places.length - 1]?.page).toBe(expectedCentre));
   });
 
   it('a fast scroll through 50 pages never keeps more than visible + overscan canvases', async () => {
@@ -142,8 +149,24 @@ describe('ScrollerComponent', () => {
     host.zoom.set(2);
     fixture.detectChanges();
     await fixture.whenStable();
-    await wait(30);
+    await vi.waitFor(() => expect(Number(el.querySelector('.column')?.getAttribute('style')?.match(/height: (\d+)/)?.[1])).toBeGreaterThan(100 * 1200));
     expect(at(2)).toBe(before);
+  });
+
+  it('centres pages narrower than the viewport at zoom 0.5 and left-aligns wider ones', async () => {
+    await create();
+    host.zoom.set(0.5);
+    fixture.detectChanges();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect((el.querySelector('[data-page="1"]') as HTMLElement).style.left).toBe('100px');
+    });
+    host.zoom.set(2);
+    fixture.detectChanges();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect((el.querySelector('[data-page="1"]') as HTMLElement).style.left).toBe('0px');
+    });
   });
 
   it('emits tap for a stationary press', async () => {
