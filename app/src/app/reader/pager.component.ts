@@ -12,6 +12,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { resolveSwipe } from './gestures';
+import { isReaderKeyIgnored } from './keys';
 import { PageViewComponent, type PageTheme } from './page-view.component';
 import type { PageRenderer } from './pdf-session';
 
@@ -232,25 +233,9 @@ export class PagerComponent implements OnDestroy {
     this.settle(toLeft ? -width : width, this.page() + dir);
   }
 
-  /**
-   * Whether the key belongs to the focused element (the event target) rather than the pager.
-   * Fields and dialogs own every key; buttons and links own only their activation keys.
-   */
-  private ownsKey(node: EventTarget | null, key: string): boolean {
-    const el = node as HTMLElement | null;
-    if (!el || typeof el.closest !== 'function') return false;
-    if (
-      el.isContentEditable === true ||
-      el.closest('input, textarea, select, [contenteditable]:not([contenteditable=false]), [role=dialog]') !== null
-    ) {
-      return true;
-    }
-    return (key === ' ' || key === 'Enter') && el.closest('button, a[href], [role=button]') !== null;
-  }
-
   @HostListener('document:keydown', ['$event'])
   protected onKey(e: KeyboardEvent): void {
-    if (this.ownsKey(e.target, e.key)) return;
+    if (isReaderKeyIgnored(e)) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const arrowNext = this.rtl() ? 'ArrowLeft' : 'ArrowRight';
     const arrowPrev = this.rtl() ? 'ArrowRight' : 'ArrowLeft';
