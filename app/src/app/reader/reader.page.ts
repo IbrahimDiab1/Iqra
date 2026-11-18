@@ -463,6 +463,7 @@ export class ReaderPage implements OnDestroy {
       });
     } catch (err) {
       console.warn('Could not save the highlight', err);
+      this.toast.show(COPY.annotations.saveFailed);
     }
   }
 
@@ -477,6 +478,7 @@ export class ReaderPage implements OnDestroy {
       this.noteTarget.set(note);
     } catch (err) {
       console.warn('Could not save the note', err);
+      this.toast.show(COPY.annotations.saveFailed);
     }
   }
 
@@ -488,6 +490,7 @@ export class ReaderPage implements OnDestroy {
       this.toast.show(COPY.annotations.copied);
     } catch (err) {
       console.warn('Could not copy the selection', err);
+      this.toast.show(COPY.annotations.copyFailed);
     }
   }
 

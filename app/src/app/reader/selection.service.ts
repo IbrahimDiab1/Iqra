@@ -131,38 +131,38 @@ export class SelectionService implements OnDestroy {
   }
 }
 
-/**
- * Selects the word at a viewport point inside a text layer (a tap on text).
- * Uses Selection.modify where the browser has it, else expands to whitespace boundaries.
- */
-export function selectWordAt(x: number, y: number): void {
+/** The [start, end) of the word at `offset` in `text`: the word containing it, or the one ending exactly there. */
+export function wordBounds(text: string, offset: number): [number, number] | null {
+  const words: [number, number][] = [];
+  if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
+    for (const seg of new Intl.Segmenter(undefined, { granularity: 'word' }).segment(text)) {
+      if (seg.isWordLike) words.push([seg.index, seg.index + seg.segment.length]);
+    }
+  } else {
+    for (const m of text.matchAll(/\S+/g)) words.push([m.index, m.index + m[0].length]);
+  }
+  return words.find(([a, b]) => offset >= a && offset < b) ?? words.find(([, b]) => offset === b) ?? null;
+}
+
+/** Selects the word around `offset` in a text node of a text layer. */
+export function selectWordIn(node: Node, offset: number): void {
   const sel = window.getSelection();
-  if (!sel) return;
-  let node: Node | null = null;
-  let offset = 0;
+  if (!sel || node.nodeType !== Node.TEXT_NODE || !layerOf(node)) return;
+  const bounds = wordBounds(node.textContent ?? '', offset);
+  if (bounds) sel.setBaseAndExtent(node, bounds[0], node, bounds[1]);
+}
+
+/** Selects the word at a viewport point inside a text layer (a tap on text). */
+export function selectWordAt(x: number, y: number): void {
   const doc = document as Document & {
     caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
     caretRangeFromPoint?: (x: number, y: number) => Range | null;
   };
   if (doc.caretPositionFromPoint) {
     const p = doc.caretPositionFromPoint(x, y);
-    if (p) [node, offset] = [p.offsetNode, p.offset];
+    if (p) selectWordIn(p.offsetNode, p.offset);
   } else if (doc.caretRangeFromPoint) {
     const r = doc.caretRangeFromPoint(x, y);
-    if (r) [node, offset] = [r.startContainer, r.startOffset];
+    if (r) selectWordIn(r.startContainer, r.startOffset);
   }
-  if (!node || node.nodeType !== Node.TEXT_NODE || !layerOf(node)) return;
-  sel.collapse(node, offset);
-  const modify = (sel as Selection & { modify?: (a: string, d: string, g: string) => void }).modify;
-  if (typeof modify === 'function') {
-    sel.modify('move', 'backward', 'word');
-    sel.modify('extend', 'forward', 'word');
-    if (sel.toString().trim() !== '') return;
-  }
-  const text = node.textContent ?? '';
-  let from = offset;
-  let to = offset;
-  while (from > 0 && !/\s/.test(text[from - 1])) from--;
-  while (to < text.length && !/\s/.test(text[to])) to++;
-  if (to > from) sel.setBaseAndExtent(node, from, node, to);
 }

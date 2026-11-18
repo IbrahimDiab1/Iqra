@@ -68,9 +68,7 @@ const FILTERS: Record<PageTheme, string> = {
       color: transparent;
       user-select: text;
       -webkit-user-select: text;
-      --selection: rgba(42, 157, 143, 0.28);
     }
-    :host-context([data-rt='night']) .text-layer { --selection: rgba(99, 189, 178, 0.4); }
     .text-layer.inert { pointer-events: none; }
     .text-layer ::ng-deep span, .text-layer ::ng-deep br {
       position: absolute; margin: 0; padding: 0; color: transparent; white-space: pre; cursor: text; transform-origin: 0 0;
@@ -79,7 +77,7 @@ const FILTERS: Record<PageTheme, string> = {
       transform: rotate(var(--rotate, 0deg)) scaleX(var(--scale-x, 1));
     }
     .text-layer ::ng-deep .markedContent { display: contents; }
-    .text-layer ::ng-deep ::selection { background: var(--selection); color: transparent; }
+    .text-layer ::ng-deep ::selection { background: var(--sel); color: transparent; }
     .shimmer::after {
       content: '';
       position: absolute;

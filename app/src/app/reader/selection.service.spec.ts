@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TextItem } from './text';
-import { SelectionService } from './selection.service';
+import { SelectionService, selectWordIn, wordBounds } from './selection.service';
 
 function item(str: string): TextItem {
   return { str, width: 10, height: 10, transform: [1, 0, 0, 1, 0, 0] } as TextItem;
@@ -109,5 +109,45 @@ describe('SelectionService', () => {
     expect(svc.pending()).toBeNull();
     expect(svc.active()).toBe(false);
     expect(window.getSelection()!.isCollapsed).toBe(true);
+  });
+});
+
+describe('word at a tap', () => {
+  it('start of a word selects that word, not the previous one', () => {
+    expect(wordBounds('Hello world', 6)).toEqual([6, 11]);
+  });
+
+  it('middle of a word selects it without the trailing space', () => {
+    const b = wordBounds('Hello world', 2)!;
+    expect('Hello world'.slice(...b)).toBe('Hello');
+  });
+
+  it('end of a word (caret right after it) selects that word', () => {
+    expect(wordBounds('Hello world', 5)).toEqual([0, 5]);
+    expect(wordBounds('Hello world', 11)).toEqual([6, 11]);
+  });
+
+  it('whitespace between words, or an empty string, selects nothing', () => {
+    expect(wordBounds('Hello   world', 7)).toBeNull();
+    expect(wordBounds('', 0)).toBeNull();
+  });
+
+  it('finds an Arabic word', () => {
+    const text = 'كتاب جميل';
+    const b = wordBounds(text, 7)!;
+    expect(text.slice(...b)).toBe('جميل');
+  });
+
+  it('selectWordIn selects the DOM range of the word', () => {
+    const layer = document.createElement('div');
+    layer.className = 'text-layer';
+    const span = document.createElement('span');
+    span.textContent = 'Hello world';
+    layer.appendChild(span);
+    document.body.appendChild(layer);
+    selectWordIn(span.firstChild!, 6);
+    expect(window.getSelection()!.toString()).toBe('world');
+    window.getSelection()!.removeAllRanges();
+    layer.remove();
   });
 });

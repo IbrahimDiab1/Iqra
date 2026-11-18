@@ -55,6 +55,8 @@ export const COPY = {
     note: 'Note',
     copy: 'Copy',
     copied: 'Copied',
+    copyFailed: 'Couldn’t copy.',
+    saveFailed: 'Couldn’t save that. Try again.',
     addNote: 'Add a note',
     notePlaceholder: 'Write a note…',
     tags: 'Tags',

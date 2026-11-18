@@ -13,6 +13,7 @@ import { ToastService } from '../ui/toast.service';
 import { signal } from '@angular/core';
 import type { PendingSelection } from './selection.service';
 import { SelectionService } from './selection.service';
+import { AnnotationService } from '../annotations/annotation.service';
 import { PagerComponent } from './pager.component';
 import { PageRenderer, PageSize, ReaderOpenError } from './pdf-session';
 import { PositionService, type RestoredPosition } from './position.service';
@@ -367,6 +368,41 @@ describe('ReaderPage', () => {
     });
 
     const stored = () => db.annotations.toArray();
+
+    it('a failed save shows an error toast and keeps the selection', async () => {
+      await create();
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      vi.spyOn(TestBed.inject(AnnotationService), 'addHighlight').mockRejectedValue(new Error('db'));
+      fixture.detectChanges();
+      el.querySelector<HTMLButtonElement>(`button[aria-label="${COPY.annotations.colors.pink}"]`)!.click();
+      const toast = TestBed.inject(ToastService);
+      await vi.waitFor(() => expect(toast.current()?.message).toBe(COPY.annotations.saveFailed));
+      expect(fakeSelection.clear).not.toHaveBeenCalled();
+      expect(fakeSelection.pending()).not.toBeNull();
+    });
+
+    it('a failed copy shows an error toast; a good copy says Copied', async () => {
+      await create();
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const write = vi.fn().mockRejectedValue(new Error('denied'));
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText: write }, configurable: true });
+      fixture.detectChanges();
+      const copy = () => el.querySelector<HTMLButtonElement>('iqra-selection-toolbar button.copy')!.click();
+      copy();
+      const toast = TestBed.inject(ToastService);
+      await vi.waitFor(() => expect(toast.current()?.message).toBe(COPY.annotations.copyFailed));
+      write.mockResolvedValue(undefined);
+      copy();
+      await vi.waitFor(() => expect(toast.current()?.message).toBe(COPY.annotations.copied));
+      expect(write).toHaveBeenLastCalledWith('Hello');
+    });
+
+    it('with no selection (a page without text) no toolbar is shown', async () => {
+      fakeSelection.pending.set(null);
+      await create();
+      fixture.detectChanges();
+      expect(el.querySelector('iqra-selection-toolbar [role="toolbar"]')).toBeNull();
+    });
 
     it('a color creates one highlight with an Undo toast; Undo removes it', async () => {
       await create();

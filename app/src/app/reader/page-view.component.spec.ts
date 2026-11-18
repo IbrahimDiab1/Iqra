@@ -37,8 +37,9 @@ class FakeRenderer implements PageRenderer {
   async pageText() {
     return '';
   }
+  textLayerFails = false;
   renderTextLayer(): Promise<void> {
-    return Promise.resolve();
+    return this.textLayerFails ? Promise.reject(new Error('no text')) : Promise.resolve();
   }
 }
 
@@ -213,6 +214,18 @@ describe('PageViewComponent', () => {
       click(0.8, 0.8);
       expect(host.taps).toEqual([]);
       expect(host.pageTaps).toBe(1);
+    });
+
+    it('a page whose text layer failed still passes a tap through as pageTap', async () => {
+      host.page.set(2);
+      host.renderer.textLayerFails = true;
+      await settle();
+      host.renderer.calls[host.renderer.calls.length - 1].resolve();
+      await settle();
+      expect(el.querySelectorAll('.text-layer span')).toHaveLength(0);
+      click(0.8, 0.8);
+      expect(host.pageTaps).toBe(1);
+      expect(host.taps).toEqual([]);
     });
 
     it('emits neither while text is selected', () => {
