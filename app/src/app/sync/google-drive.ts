@@ -1,4 +1,11 @@
-import { DriveAdapter, DriveAuthError, DriveFileInfo, DriveTimeoutError } from './drive-adapter';
+import {
+  DriveAdapter,
+  DriveAuthError,
+  DriveFileInfo,
+  DriveQuotaError,
+  DriveTimeoutError,
+  DriveTransientError,
+} from './drive-adapter';
 
 export interface TokenSource {
   token(): string | null;
@@ -76,9 +83,23 @@ export class GoogleDrive implements DriveAdapter {
   }
 
   async listAppData(): Promise<DriveFileInfo[]> {
-    const url = `${BASE}/drive/v3/files?spaces=appDataFolder&fields=files(id,name,modifiedTime,size)&pageSize=1000`;
-    const json = await this.getJson<{ files?: DriveFileResource[] }>(url, 'list');
-    return (json.files ?? []).map(toInfo);
+    const all: DriveFileInfo[] = [];
+    let pageToken: string | undefined;
+    do {
+      const params = new URLSearchParams({
+        spaces: 'appDataFolder',
+        fields: 'nextPageToken,files(id,name,modifiedTime)',
+        pageSize: '1000',
+      });
+      if (pageToken) params.set('pageToken', pageToken);
+      const json = await this.getJson<{ files?: DriveFileResource[]; nextPageToken?: string }>(
+        `${BASE}/drive/v3/files?${params}`,
+        'list',
+      );
+      all.push(...(json.files ?? []).map(toInfo));
+      pageToken = json.nextPageToken;
+    } while (pageToken);
+    return all;
   }
 
   readText(fileId: string): Promise<string> {
@@ -276,7 +297,8 @@ export class GoogleDrive implements DriveAdapter {
         onProgress?.(1);
         return outcome.info;
       } catch (error) {
-        const retryable = error instanceof TypeError || error instanceof DriveTimeoutError;
+        const retryable =
+          error instanceof TypeError || error instanceof DriveTimeoutError || error instanceof DriveTransientError;
         if (!retryable || failures >= RETRY_DELAYS_MS.length) throw error;
         await this.sleep(RETRY_DELAYS_MS[failures]);
         failures += 1;
@@ -334,15 +356,36 @@ export class GoogleDrive implements DriveAdapter {
     });
   }
 
-  /** Adds the bearer token and maps 401/403 to DriveAuthError. Other statuses are left to the caller. */
+  /**
+   * Adds the bearer token and maps auth, quota and transient failures to their errors.
+   * Other statuses are left to the caller.
+   */
   private async request(url: string, init: RequestInit = {}): Promise<Response> {
     const token = this.tokens.token();
     if (!token) throw new DriveAuthError();
     const headers = { ...(init.headers as Record<string, string> | undefined), Authorization: `Bearer ${token}` };
     const res = await this.fetchFn(url, { ...init, headers });
-    if (res.status === 401 || res.status === 403) throw new DriveAuthError();
+    if (res.status === 401) throw new DriveAuthError();
+    if (res.status === 403) throw await classifyForbidden(res);
+    if (res.status === 429 || res.status >= 500) throw new DriveTransientError(`Drive failed with status ${res.status}`);
     return res;
   }
+}
+
+const TRANSIENT_REASONS = new Set(['rateLimitExceeded', 'userRateLimitExceeded', 'backendError']);
+
+/** Reads the Drive error reason of a 403. Only auth-type (or unknown) reasons mean a bad token. */
+async function classifyForbidden(res: Response): Promise<Error> {
+  let reasons: string[] = [];
+  try {
+    const body = (await res.clone().json()) as { error?: { errors?: { reason?: string }[]; status?: string } };
+    reasons = (body.error?.errors ?? []).map((e) => e.reason ?? '');
+  } catch {
+    // No readable body: treat as an auth failure.
+  }
+  if (reasons.includes('storageQuotaExceeded')) return new DriveQuotaError();
+  if (reasons.some((r) => TRANSIENT_REASONS.has(r))) return new DriveTransientError('Drive is busy, try again later');
+  return new DriveAuthError();
 }
 
 async function ensureOk(res: Response, what: string): Promise<void> {

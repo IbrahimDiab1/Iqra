@@ -165,4 +165,53 @@ describe('UploadQueue', () => {
     expect(await pendingFor(book.id)).toHaveLength(2);
     expect((await db.books.get(book.id))!.driveFileId).toBe('');
   });
+
+  it('queues a Drive delete, and keeps no id, when the book was deleted during its upload', async () => {
+    const book = await importBook();
+    await auth.signIn();
+    const realUpload = drive.uploadPdf.bind(drive);
+    vi.spyOn(drive, 'uploadPdf').mockImplementation(async (...args) => {
+      await db.books.put({ ...(await db.books.get(book.id))!, deleted: true });
+      return realUpload(...args);
+    });
+
+    await queue.run();
+
+    const stored = (await db.books.get(book.id))!;
+    expect(stored.driveFileId).toBe('');
+    expect(await db.pendingDriveDeletes.count()).toBeGreaterThan(0);
+  });
+
+  it('runs once more when run() is called while a run is in progress', async () => {
+    const book = await importBook();
+    await auth.signIn();
+    const realUpload = drive.uploadPdf.bind(drive);
+    let late: Promise<void> | undefined;
+    vi.spyOn(drive, 'uploadPdf').mockImplementation(async (...args) => {
+      // A second book is queued and run() requested while the first upload is running.
+      const [id2] = (await importer.importFiles([pdf('second.pdf', 'second')])).added;
+      late = queue.run();
+      void id2;
+      return realUpload(...args);
+    });
+
+    await queue.run();
+    await late;
+
+    expect(await db.pendingUploads.count()).toBe(0);
+    expect((await db.books.get(book.id))!.driveFileId).not.toBe('');
+  });
+
+  it('sets quotaFull and keeps the entry when Drive is full', async () => {
+    const book = await importBook();
+    await auth.signIn();
+    const { DriveQuotaError } = await import('../sync/drive-adapter');
+    vi.spyOn(drive, 'uploadPdf').mockRejectedValueOnce(new DriveQuotaError());
+
+    await queue.run();
+
+    expect(queue.quotaFull()).toBe(true);
+    expect((await pendingFor(book.id)).some((u) => u.kind === 'pdf')).toBe(true);
+    expect(auth.state()).toBe('signed-in');
+  });
 });

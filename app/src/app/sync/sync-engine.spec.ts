@@ -1,4 +1,4 @@
-import { createEnvironmentInjector, EnvironmentInjector } from '@angular/core';
+import { createEnvironmentInjector, EnvironmentInjector, runInInjectionContext } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthApi } from '../auth/auth.service';
@@ -6,7 +6,7 @@ import { FakeAuthService } from '../auth/fake-auth.service';
 import { CLOCK } from '../core/clock';
 import { DB, IqraDb } from '../core/db';
 import { DEVICE_ID } from '../core/ids';
-import type { Annotation, Book, ID } from '../core/models';
+import type { Annotation, Book, Category, ID } from '../core/models';
 import { Repo } from '../core/repo';
 import { UploadQueue } from '../books/upload-queue';
 import { DRIVE_ADAPTER, DriveAuthError } from './drive-adapter';
@@ -298,5 +298,77 @@ describe('SyncEngine', () => {
     await Promise.all([a.engine.syncNow(), a.engine.syncNow()]);
 
     expect(listAppData).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores cover blobs in appData and reports synced', async () => {
+    await a.repo.put<Book>('books', bookDraft('b1'));
+    await drive.writeAppDataBlob('cover-b1.jpg', new Blob(['jpeg'], { type: 'image/jpeg' }));
+    const readText = vi.spyOn(drive, 'readText');
+
+    await a.engine.syncNow();
+
+    expect(a.engine.status()).toBe('synced');
+    expect(a.engine.lastError()).toBeNull();
+    const coverId = (await drive.listAppData()).find((f) => f.name === 'cover-b1.jpg')!.id;
+    expect(readText).not.toHaveBeenCalledWith(coverId);
+    expect(await a.db.syncState.get('cover-b1.jpg')).toBeUndefined();
+  });
+
+  it('marks the shard dirty for a write made inside a Dexie transaction, and pushes it', async () => {
+    await a.db.transaction('rw', a.db.categories, async () => {
+      await a.repo.put<Category>('categories', { id: 'c1', name: 'Fiqh', order: 0 });
+    });
+    await vi.waitFor(async () => expect((await a.db.syncState.get('library.json'))?.dirty).toBe(true));
+    expect(a.engine.status()).not.toBe('error');
+
+    await a.engine.syncNow();
+
+    expect(a.engine.status()).toBe('synced');
+    const remote = await remoteShard(drive, 'library.json');
+    expect(remote.tables.categories?.map((r) => r.id)).toEqual(['c1']);
+  });
+
+  it('uses the catalog and import transactions without losing the dirty flag', async () => {
+    const { CatalogService } = await import('../books/catalog.service');
+    const catalog = runInInjectionContext(a.injector, () => new CatalogService());
+    await catalog.addCategory('Hadith');
+    await catalog.toggleUpNext('b1', true);
+    await vi.waitFor(async () => expect((await a.db.syncState.get('library.json'))?.dirty).toBe(true));
+
+    await a.engine.syncNow();
+
+    const remote = await remoteShard(drive, 'library.json');
+    expect(remote.tables.categories?.map((r) => (r as { name?: string }).name)).toEqual(['Hadith']);
+    expect((remote.tables.upNext?.[0] as { bookIds?: string[] }).bookIds).toEqual(['b1']);
+  });
+
+  it('runs the upload queue even when a shard is unreadable', async () => {
+    await drive.writeAppDataJson('library.json', JSON.stringify({ schemaVersion: 99, tables: {} }));
+    const run = vi.spyOn(a.injector.get(UploadQueue), 'run').mockResolvedValue();
+
+    await a.engine.syncNow();
+
+    expect(a.engine.status()).toBe('error');
+    expect(run).toHaveBeenCalled();
+  });
+
+  it('sweeps local files of deleted books older than 15 s and keeps younger ones', async () => {
+    await a.repo.put<Book>('books', bookDraft('old'));
+    await a.repo.put<Book>('books', bookDraft('young'));
+    for (const id of ['old', 'young']) {
+      await a.db.pdfFiles.put({ bookId: id, blob: new Blob(['x']), sizeBytes: 1, savedAt: 1 });
+      await a.db.covers.put({ bookId: id, blob: new Blob(['x']) });
+    }
+    a.clock.t = 1000;
+    await a.repo.softDelete('books', 'old');
+    a.clock.t = 20_000;
+    await a.repo.softDelete('books', 'young');
+    a.clock.t = 21_000;
+
+    await a.engine.syncNow();
+
+    expect(await a.db.pdfFiles.get('old')).toBeUndefined();
+    expect(await a.db.covers.get('old')).toBeUndefined();
+    expect(await a.db.pdfFiles.get('young')).toBeDefined();
   });
 });

@@ -1,4 +1,5 @@
 import { InjectionToken } from '@angular/core';
+import { COPY } from '../ui/copy';
 
 export interface DriveFileInfo {
   id: string;
@@ -8,8 +9,24 @@ export interface DriveFileInfo {
   appProperties?: Record<string, string>;
 }
 
-/** 401/403 from Drive: the access token is missing, expired or revoked. */
+/** 401, or a 403 for an auth reason: the access token is missing, expired or revoked. */
 export class DriveAuthError extends Error {}
+
+/** The user's Drive is full. JSON sync can go on; PDF uploads must pause. */
+export class DriveQuotaError extends Error {
+  constructor() {
+    super(COPY.sync.driveFull);
+    this.name = 'DriveQuotaError';
+  }
+}
+
+/** A rate limit, a 429 or a 5xx from Drive. Retry later; the token is fine. */
+export class DriveTransientError extends Error {
+  constructor(message = 'Drive is busy, try again later') {
+    super(message);
+    this.name = 'DriveTransientError';
+  }
+}
 
 /** A Drive step got no answer within its deadline. Retry on a later pass. */
 export class DriveTimeoutError extends Error {

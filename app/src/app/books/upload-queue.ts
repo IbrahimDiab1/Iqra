@@ -1,9 +1,10 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { AuthApi } from '../auth/auth.service';
+import { CLOCK } from '../core/clock';
 import { DB, type PendingUpload } from '../core/db';
 import type { Book, ID } from '../core/models';
 import { Repo } from '../core/repo';
-import { DRIVE_ADAPTER, DriveAuthError } from '../sync/drive-adapter';
+import { DRIVE_ADAPTER, DriveAuthError, DriveQuotaError } from '../sync/drive-adapter';
 
 /**
  * Sends local PDFs and covers to Drive. Each entry in db.pendingUploads stays until its upload
@@ -16,21 +17,40 @@ export class UploadQueue {
   private readonly repo = inject(Repo);
   private readonly drive = inject(DRIVE_ADAPTER);
   private readonly auth = inject(AuthApi);
+  private readonly clock = inject(CLOCK);
 
   private readonly progressSignal = signal<Map<ID, number>>(new Map());
   /** Upload fraction per book, for PDFs only. A book is absent while its PDF is not uploading. */
   readonly progress = this.progressSignal.asReadonly();
 
+  private readonly quotaSignal = signal(false);
+  /** True while the last upload failed because Drive is full. PDF uploads pause until one succeeds. */
+  readonly quotaFull = this.quotaSignal.asReadonly();
+
   private inFlight: Promise<void> | null = null;
+  /** Set when run() is called during a run, so the queue is read once more after it. */
+  private rerun = false;
   /** The Books folder id, looked up once per session. */
   private booksFolderId: string | null = null;
 
   /** Processes the queue. Concurrent calls share the running pass. Does nothing offline or when signed out. */
   run(): Promise<void> {
-    this.inFlight ??= this.drain().finally(() => {
+    if (this.inFlight) {
+      this.rerun = true;
+      return this.inFlight;
+    }
+    this.inFlight = this.drainWhileRequested().finally(() => {
       this.inFlight = null;
     });
     return this.inFlight;
+  }
+
+  /** An entry added while the queue was running is picked up by one more pass. */
+  private async drainWhileRequested(): Promise<void> {
+    do {
+      this.rerun = false;
+      await this.drain();
+    } while (this.rerun);
   }
 
   private async drain(): Promise<void> {
@@ -43,6 +63,7 @@ export class UploadQueue {
       } catch (error) {
         await this.db.pendingUploads.update(next.id, { attempts: next.attempts + 1 });
         if (error instanceof DriveAuthError) this.auth.markExpired();
+        else if (error instanceof DriveQuotaError) this.quotaSignal.set(true);
         else console.error('Upload failed', error);
         return;
       }
@@ -62,6 +83,7 @@ export class UploadQueue {
       await this.uploadCover(book, blob);
     }
     await this.db.pendingUploads.delete(entry.id);
+    if (entry.kind === 'pdf' && book && !book.deleted && blob) this.quotaSignal.set(false);
   }
 
   private async localBlob(entry: PendingUpload): Promise<Blob | undefined> {
@@ -89,10 +111,21 @@ export class UploadQueue {
     await this.saveFileIds(book.id, { coverFileId: info.id });
   }
 
-  /** Re-reads the book so edits made during the upload are kept. */
+  /**
+   * Re-reads the book so edits made during the upload are kept. A book deleted meanwhile does not
+   * keep the new file: the file is queued for deletion instead.
+   */
   private async saveFileIds(bookId: ID, ids: Partial<Pick<Book, 'driveFileId' | 'coverFileId'>>): Promise<void> {
     const current = await this.db.books.get(bookId);
-    if (current) await this.repo.put<Book>('books', { ...current, ...ids });
+    if (!current) return;
+    if (current.deleted) {
+      const now = this.clock.now();
+      for (const fileId of Object.values(ids)) {
+        if (fileId) await this.db.pendingDriveDeletes.put({ fileId, notBefore: now });
+      }
+      return;
+    }
+    await this.repo.put<Book>('books', { ...current, ...ids });
   }
 
   private setProgress(bookId: ID, fraction: number): void {

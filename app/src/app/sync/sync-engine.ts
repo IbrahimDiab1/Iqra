@@ -1,4 +1,5 @@
 import { Injectable, OnDestroy, inject, signal } from '@angular/core';
+import Dexie from 'dexie';
 import type { Subscription } from 'rxjs';
 import { AuthApi } from '../auth/auth.service';
 import { CLOCK } from '../core/clock';
@@ -27,6 +28,10 @@ const TABLES: TableName[] = [
   'sessions',
   'words',
 ];
+/** Drive files in appDataFolder that are sync shards. Covers and anything else are ignored. */
+const SHARD_NAME = /^(library|words|book-.+|sessions-\d{4}-\d{2})\.json$/;
+/** A deleted book's local files are removed once its tombstone is this old. */
+const LOCAL_SWEEP_MS = 15_000;
 const DEBOUNCE_MS = 5000;
 const INTERVAL_MS = 120_000;
 /** A run still going after this long is abandoned, so a stalled call cannot block later syncs. */
@@ -151,7 +156,8 @@ export class SyncEngine implements OnDestroy {
   private onLocalChange(table: TableName, rec: SyncRecord): void {
     const shard = shardFor(table, rec);
     this.statusSignal.set(!navigator.onLine ? 'offline' : this.auth.token() === null ? 'paused' : 'saving');
-    this.patchState(shard, { dirty: true }).catch((error: unknown) => this.handleFailure(error));
+    // The change event fires inside the caller's Dexie transaction; marking runs in its own.
+    Dexie.ignoreTransaction(() => this.patchState(shard, { dirty: true })).catch((error: unknown) => this.handleFailure(error));
     this.scheduleSync();
   }
 
@@ -172,6 +178,7 @@ export class SyncEngine implements OnDestroy {
     }
     const id = ++this.runId;
     const current = (): boolean => id === this.runId;
+    let authStopped = false;
     try {
       if (await this.db.syncState.filter((s) => s.dirty).first()) this.statusSignal.set('saving');
       await this.runDueDeletes();
@@ -183,6 +190,7 @@ export class SyncEngine implements OnDestroy {
       const errors = [...pulled.errors, ...(await this.push(pulled.primaryIds))];
       await this.deleteMergedExtras(pulled.extras);
       if (!current()) return;
+      await this.sweepLocalFiles();
       if (errors.length > 0) {
         this.setError(errors[0]);
         return;
@@ -196,10 +204,22 @@ export class SyncEngine implements OnDestroy {
       this.lastErrorSignal.set(null);
       this.lastSyncedSignal.set(this.clock.now());
       this.statusSignal.set('synced');
-      void this.uploads.run();
     } catch (error) {
+      authStopped = error instanceof DriveAuthError;
       if (current()) this.handleFailure(error);
+    } finally {
+      if (current() && !authStopped) this.runUploads();
     }
+  }
+
+  /** PDF uploads run after every pass that was not stopped by auth or offline, whatever the shards did. */
+  private runUploads(): void {
+    this.uploads
+      .run()
+      .then(() => {
+        if (this.uploads.quotaFull() && this.statusSignal() !== 'paused') this.setError(COPY.sync.driveFull);
+      })
+      .catch((error: unknown) => console.error('Upload run failed', error));
   }
 
   private handleFailure(error: unknown): void {
@@ -223,7 +243,7 @@ export class SyncEngine implements OnDestroy {
    */
   private async pull(listing: DriveFileInfo[]): Promise<PullResult> {
     const result: PullResult = { errors: [], extras: new Map(), primaryIds: new Map() };
-    const groups = groupByName(listing);
+    const groups = groupByName(listing.filter((f) => SHARD_NAME.test(f.name)));
     // A shard whose file is gone forgets its remote id; the next push recreates the file.
     for (const state of await this.db.syncState.toArray()) {
       if (state.remoteId && !groups.has(state.shard)) {
@@ -340,6 +360,7 @@ export class SyncEngine implements OnDestroy {
     for (const { keep, drop } of pairs) {
       const kept = byId.get(keep)!;
       const dropped = byId.get(drop)!;
+      // The kept book's own files are never queued for deletion.
       const shared = new Set([kept.driveFileId, kept.coverFileId]);
       await this.queueDriveDeletes([dropped.driveFileId, dropped.coverFileId].filter((f) => !shared.has(f)));
       await this.moveBookRecords(drop, keep);
@@ -442,6 +463,18 @@ export class SyncEngine implements OnDestroy {
         if (error instanceof DriveAuthError) throw error;
       }
     }
+  }
+
+  /**
+   * Deletes the local PDF and cover of books that are deleted (here or on another device). A
+   * tombstone younger than LOCAL_SWEEP_MS is left, which protects the undo window.
+   */
+  private async sweepLocalFiles(): Promise<void> {
+    const now = this.clock.now();
+    const gone = await this.db.books.filter((b) => !!b.deleted && now - b.updatedAt > LOCAL_SWEEP_MS).primaryKeys();
+    if (gone.length === 0) return;
+    await this.db.pdfFiles.bulkDelete(gone);
+    await this.db.covers.bulkDelete(gone);
   }
 
   /** Deletes Drive files queued by duplicate cleanup. Failed deletes stay queued. */

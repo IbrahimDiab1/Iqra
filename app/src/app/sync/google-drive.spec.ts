@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { DriveAuthError, DriveTimeoutError } from './drive-adapter';
+import { DriveAuthError, DriveQuotaError, DriveTimeoutError, DriveTransientError } from './drive-adapter';
 import { CHUNK_SIZE, GoogleDrive, TokenSource } from './google-drive';
 
 const TOTAL = 20971520;
@@ -175,5 +175,41 @@ describe('GoogleDrive deadlines', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('GoogleDrive error mapping and paging', () => {
+  const forbidden = (reason: string) => json({ error: { errors: [{ reason }] } }, 403);
+
+  it('maps storageQuotaExceeded to DriveQuotaError', async () => {
+    const drive = new GoogleDrive(tokens(), queueFetch(forbidden('storageQuotaExceeded')), vi.fn());
+    await expect(drive.listAppData()).rejects.toBeInstanceOf(DriveQuotaError);
+  });
+
+  it('maps rate limits, 429 and 5xx to DriveTransientError', async () => {
+    for (const res of [forbidden('rateLimitExceeded'), forbidden('userRateLimitExceeded'), forbidden('backendError'), empty(429), empty(503)]) {
+      const drive = new GoogleDrive(tokens(), queueFetch(res), vi.fn());
+      await expect(drive.listAppData()).rejects.toBeInstanceOf(DriveTransientError);
+    }
+  });
+
+  it('maps a 403 with an auth reason or no body to DriveAuthError', async () => {
+    for (const res of [forbidden('authError'), forbidden('insufficientPermissions'), empty(403)]) {
+      const drive = new GoogleDrive(tokens(), queueFetch(res), vi.fn());
+      await expect(drive.listAppData()).rejects.toBeInstanceOf(DriveAuthError);
+    }
+  });
+
+  it('listAppData follows nextPageToken until done', async () => {
+    const fetchFn = queueFetch(
+      json({ files: [{ id: '1', name: 'a', modifiedTime: 't' }], nextPageToken: 'p2' }),
+      json({ files: [{ id: '2', name: 'b', modifiedTime: 't' }] }),
+    );
+    const drive = new GoogleDrive(tokens(), fetchFn, vi.fn());
+
+    const files = await drive.listAppData();
+
+    expect(files.map((f) => f.id)).toEqual(['1', '2']);
+    expect(String(fetchFn.mock.calls[1][0])).toContain('pageToken=p2');
   });
 });

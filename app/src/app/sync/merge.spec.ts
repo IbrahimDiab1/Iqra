@@ -105,4 +105,12 @@ describe('duplicateBooks', () => {
     ];
     expect(duplicateBooks(books)).toEqual([]);
   });
+
+  it('prefers a copy with a driveFileId over an earlier one without', () => {
+    const books = [
+      { ...base, id: 'early', addedAt: 1, driveFileId: '' },
+      { ...base, id: 'uploaded', addedAt: 5, driveFileId: 'f' },
+    ];
+    expect(duplicateBooks(books)).toEqual([{ keep: 'uploaded', drop: 'early' }]);
+  });
 });
