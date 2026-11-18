@@ -1,0 +1,72 @@
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { HIGHLIGHT_COLORS, type HighlightColor } from '../annotations/annotation.service';
+import { COPY } from '../ui/copy';
+import type { PendingSelection } from './selection.service';
+
+const WIDTH = 296;
+const HEIGHT = 48;
+const MARGIN = 8;
+
+/** Floating toolbar for a text selection: four highlight colors, Note, Copy. Rendered once by the reader. */
+@Component({
+  selector: 'iqra-selection-toolbar',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    @if (selection(); as sel) {
+      <div
+        class="bar"
+        role="toolbar"
+        [attr.aria-label]="copy.highlight"
+        [style.left.px]="pos().left"
+        [style.top.px]="pos().top"
+        (mousedown)="$event.preventDefault()"
+        (pointerdown)="$event.stopPropagation()"
+      >
+        @for (c of colors; track c) {
+          <button
+            type="button"
+            class="dot"
+            [attr.aria-label]="copy.colors[c]"
+            [style.--c]="'var(--hl-' + c + ')'"
+            (click)="color.emit(c)"
+          ></button>
+        }
+        <button type="button" class="note" (click)="note.emit()">{{ copy.note }}</button>
+        <button type="button" class="copy" (click)="copy_.emit()">{{ copy.copy }}</button>
+      </div>
+    }
+  `,
+  styles: `
+    .bar {
+      position: fixed; z-index: 20; display: flex; align-items: center; gap: 2px; height: 48px; padding: 0 4px;
+      border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--fg); box-shadow: var(--shadow);
+    }
+    button { min-width: 40px; min-height: 40px; border: 0; border-radius: var(--radius-control); background: none; color: inherit; font: 13px var(--ui); cursor: pointer; }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .dot { position: relative; }
+    .dot::after { content: ''; position: absolute; inset: 8px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px var(--line); }
+    .note, .copy { padding: 0 10px; }
+    .note:hover, .copy:hover { background: var(--accent-soft); }
+  `,
+})
+export class SelectionToolbarComponent {
+  readonly selection = input<PendingSelection | null>(null);
+  readonly color = output<HighlightColor>();
+  readonly note = output<void>();
+  /** Named `copy` for the parent's template; the property is `copy_` because `copy` is the copy-strings table. */
+  readonly copy_ = output<void>({ alias: 'copy' });
+
+  protected readonly copy = COPY.annotations;
+  protected readonly colors = HIGHLIGHT_COLORS;
+
+  protected readonly pos = computed(() => {
+    const r = this.selection()?.rect;
+    if (!r) return { left: 0, top: 0 };
+    const vw = typeof innerWidth === 'number' ? innerWidth : 1024;
+    const vh = typeof innerHeight === 'number' ? innerHeight : 768;
+    const left = Math.min(Math.max(r.left + r.width / 2 - WIDTH / 2, MARGIN), Math.max(MARGIN, vw - WIDTH - MARGIN));
+    const above = r.top - HEIGHT - MARGIN;
+    const top = above >= MARGIN ? above : Math.min(r.bottom + MARGIN, Math.max(MARGIN, vh - HEIGHT - MARGIN));
+    return { left, top };
+  });
+}

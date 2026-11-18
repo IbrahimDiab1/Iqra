@@ -19,6 +19,7 @@ import { resolveSwipe } from './gestures';
 import { isReaderKeyIgnored } from './keys';
 import { PageViewComponent, type PageTheme } from './page-view.component';
 import type { PageRenderer } from './pdf-session';
+import { SelectionService } from './selection.service';
 import { annotationsByPage } from './annotations-by-page';
 
 const SWIPE_MAX_ZOOM = 1.05;
@@ -121,6 +122,7 @@ export class PagerComponent implements OnDestroy {
   protected onPage(page: number): Annotation[] {
     return this.byPage().get(page) ?? [];
   }
+  private readonly selection = inject(SelectionService, { optional: true });
 
   protected readonly animationMs = ANIMATION_MS;
   private readonly viewport = viewChild.required<ElementRef<HTMLElement>>('viewport');
@@ -209,6 +211,12 @@ export class PagerComponent implements OnDestroy {
       return;
     }
     this.primaryId = e.pointerId;
+    // A drag that begins while text is selected, or a mouse drag that starts on text, selects; it never swipes.
+    if (this.selection?.active() || (e.pointerType === 'mouse' && this.onText(e))) {
+      this.start = undefined;
+      this.dragging = false;
+      return;
+    }
     this.start = { x: e.clientX, y: e.clientY, t: performance.now() };
     this.dragging = false;
     if (!this.zoomed()) {
@@ -267,6 +275,10 @@ export class PagerComponent implements OnDestroy {
     // The next page's slot is on the right in ltr and on the left in rtl.
     const toLeft = this.rtl() ? dir === -1 : dir === 1;
     this.settle(toLeft ? -width : width, this.page() + dir);
+  }
+
+  private onText(e: PointerEvent): boolean {
+    return !!(e.target as Element | null)?.closest?.('.text-layer [data-item]');
   }
 
   protected cancel(e: PointerEvent): void {

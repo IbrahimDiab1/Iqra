@@ -1,5 +1,6 @@
-import { Directive, HostListener, OnDestroy, input, output } from '@angular/core';
+import { Directive, HostListener, OnDestroy, inject, input, output } from '@angular/core';
 import { isReaderKeyIgnored } from './keys';
+import { SelectionService } from './selection.service';
 import { pinchZoom, toggleFit, zoomIn, zoomOut } from './zoom';
 
 const DOUBLE_TAP_MS = 300;
@@ -16,6 +17,7 @@ export class ZoomGesturesDirective implements OnDestroy {
   readonly lastCustomZoom = input<number>(1);
   readonly zoomChange = output<number>();
 
+  private readonly selection = inject(SelectionService, { optional: true });
   private readonly touches = new Map<number, { x: number; y: number }>();
   private pinch: { startZoom: number; startDist: number } | undefined;
   private pendingZoom: number | undefined;
@@ -52,6 +54,12 @@ export class ZoomGesturesDirective implements OnDestroy {
 
   @HostListener('pointerdown', ['$event'])
   protected down(e: PointerEvent): void {
+    // While text is selected, touches belong to the selection (handles, taps): no pinch and no double-tap zoom.
+    if (this.selection?.active()) {
+      this.press = undefined;
+      this.lastTap = undefined;
+      return;
+    }
     if (e.pointerType === 'touch') {
       this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (this.touches.size === 2) {

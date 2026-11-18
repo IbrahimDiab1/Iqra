@@ -15,7 +15,8 @@ import {
 } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { AnnotationService } from '../annotations/annotation.service';
+import { buildAnchor } from '../annotations/anchor';
+import { AnnotationService, type HighlightColor } from '../annotations/annotation.service';
 import { DB } from '../core/db';
 import type { Annotation, Book } from '../core/models';
 import { SettingsService } from '../core/settings.service';
@@ -34,6 +35,8 @@ import { ReaderState } from './reader.state';
 import { ReadingSettingsSheetComponent } from './reading-settings.sheet';
 import { ReflowViewComponent } from './reflow-view.component';
 import { ScrollerComponent } from './scroller.component';
+import { SelectionService, type PendingSelection } from './selection.service';
+import { SelectionToolbarComponent } from './selection-toolbar.component';
 import { ZoomGesturesDirective } from './zoom-gestures.directive';
 import { zoomIn, zoomOut } from './zoom';
 
@@ -50,7 +53,8 @@ const SYNC_TOAST_MS = 8000;
 
 @Component({
   selector: 'iqra-reader-page',
-  imports: [RouterLink, BookPanelSheetComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective],
+  imports: [RouterLink, BookPanelSheetComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective, SelectionToolbarComponent],
+  providers: [SelectionService],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @switch (statusKind()) {
@@ -153,6 +157,13 @@ const SYNC_TOAST_MS = 8000;
               </div>
             }
           </main>
+
+          <iqra-selection-toolbar
+            [selection]="selection.pending()"
+            (color)="highlight($event)"
+            (note)="addNote()"
+            (copy)="copySelection()"
+          />
 
           <div class="zoompair">
             <button type="button" class="ib" [attr.aria-label]="copy.zoom + ' +'" (click)="s.setZoom(zoomIn(s.zoom(), s.view()))" [innerHTML]="ic('zoomIn')"></button>
@@ -263,6 +274,7 @@ export class ReaderPage implements OnDestroy {
   private readonly open = inject(PDF_OPENER);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly annotationService = inject(AnnotationService);
+  protected readonly selection = inject(SelectionService);
   private readonly scroller = viewChild(ScrollerComponent);
   private readonly topBar = viewChild<ElementRef<HTMLElement>>('topBar');
   private readonly bottomBar = viewChild<ElementRef<HTMLElement>>('bottomBar');
@@ -283,6 +295,8 @@ export class ReaderPage implements OnDestroy {
   private readonly annotationSource = signal<Signal<Annotation[] | undefined> | null>(null);
   /** This book's live annotations. */
   protected readonly annotations = computed(() => this.annotationSource()?.() ?? []);
+  /** The annotation the note sheet (a later task) edits; a freshly created note is put here. */
+  protected readonly noteTarget = signal<Annotation | null>(null);
   protected readonly session = signal<ReaderSession | null>(null);
   protected readonly state = signal<ReaderState | null>(null);
   protected readonly preview = signal<number | null>(null);
@@ -360,6 +374,7 @@ export class ReaderPage implements OnDestroy {
       this.session()?.destroy();
       this.book.set(book);
       this.annotationSource.set(this.annotationService.forBook(book.id));
+      this.selection.attach({ items: (page) => session.textItems(page) });
       this.session.set(session);
       this.state.set(state);
       this.status.set('ready');
@@ -427,6 +442,53 @@ export class ReaderPage implements OnDestroy {
   /** A tap on a highlight; the note sheet (a later task) handles it. */
   protected onAnnotationTap(_a: Annotation): void {
     // Wired by the note sheet.
+  }
+
+  private async anchorOf(sel: PendingSelection) {
+    const session = this.session()!;
+    const [items, size] = await Promise.all([session.textItems(sel.page), session.pageSize(sel.page)]);
+    return { anchor: buildAnchor(items, sel.page, sel.start, sel.end, size), geometry: { items, size } };
+  }
+
+  protected async highlight(color: HighlightColor): Promise<void> {
+    const sel = this.selection.pending();
+    const book = this.book();
+    if (!sel || !book || !this.session()) return;
+    try {
+      const { anchor, geometry } = await this.anchorOf(sel);
+      const result = await this.annotationService.addHighlight(book.id, anchor, color, geometry);
+      this.selection.clear();
+      this.toast.show(COPY.annotations.highlightSaved, {
+        undo: () => void this.annotationService.undoAddHighlight(result),
+      });
+    } catch (err) {
+      console.warn('Could not save the highlight', err);
+    }
+  }
+
+  protected async addNote(): Promise<void> {
+    const sel = this.selection.pending();
+    const book = this.book();
+    if (!sel || !book || !this.session()) return;
+    try {
+      const { anchor } = await this.anchorOf(sel);
+      const note = await this.annotationService.create({ bookId: book.id, type: 'note', page: anchor.page, text: anchor });
+      this.selection.clear();
+      this.noteTarget.set(note);
+    } catch (err) {
+      console.warn('Could not save the note', err);
+    }
+  }
+
+  protected async copySelection(): Promise<void> {
+    const sel = this.selection.pending();
+    if (!sel) return;
+    try {
+      await navigator.clipboard.writeText(sel.quote);
+      this.toast.show(COPY.annotations.copied);
+    } catch (err) {
+      console.warn('Could not copy the selection', err);
+    }
   }
 
   protected sliderValue(e: Event): number {

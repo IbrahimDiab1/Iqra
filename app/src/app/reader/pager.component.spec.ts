@@ -2,6 +2,7 @@ import { Component, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { PageRenderer, PageSize } from './pdf-session';
 import { PagerComponent } from './pager.component';
+import { SelectionService } from './selection.service';
 
 class FakeRenderer implements PageRenderer {
   numPages = 10;
@@ -266,5 +267,36 @@ describe('PagerComponent', () => {
     host.rtl.set(true);
     fixture.detectChanges();
     expect(roles()).toEqual(['next', 'cur', 'prev']);
+  });
+});
+
+describe('PagerComponent with a selection', () => {
+  it('ignores a horizontal swipe while a selection is active', async () => {
+    const active = signal(true);
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400);
+    TestBed.configureTestingModule({
+      imports: [HostComponent],
+      providers: [{ provide: SelectionService, useValue: { active } }],
+    });
+    const fixture = TestBed.createComponent(HostComponent);
+    const host = fixture.componentInstance;
+    const viewport = fixture.nativeElement.querySelector('.viewport') as HTMLElement | null;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const vp = (viewport ?? (fixture.nativeElement as HTMLElement).querySelector('.viewport')) as HTMLElement;
+    const swipe = async () => {
+      vp.dispatchEvent(pointer('pointerdown', 200, 100));
+      vp.dispatchEvent(pointer('pointermove', 80, 100));
+      vp.dispatchEvent(pointer('pointerup', 80, 100));
+      fixture.detectChanges();
+      await new Promise((r) => setTimeout(r, 300));
+    };
+    await swipe();
+    expect(host.changes).toEqual([]);
+    active.set(false);
+    await swipe();
+    expect(host.changes).toEqual([6]);
+    vi.restoreAllMocks();
   });
 });

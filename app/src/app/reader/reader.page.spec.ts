@@ -10,6 +10,9 @@ import { DRIVE_ADAPTER } from '../sync/drive-adapter';
 import { FakeDrive } from '../sync/fake-drive';
 import { COPY } from '../ui/copy';
 import { ToastService } from '../ui/toast.service';
+import { signal } from '@angular/core';
+import type { PendingSelection } from './selection.service';
+import { SelectionService } from './selection.service';
 import { PagerComponent } from './pager.component';
 import { PageRenderer, PageSize, ReaderOpenError } from './pdf-session';
 import { PositionService, type RestoredPosition } from './position.service';
@@ -340,5 +343,44 @@ describe('ReaderPage', () => {
       expect(el.querySelector('iqra-scroller')).not.toBeNull();
     });
     expect(label()).toContain(COPY.reader.pageOf(7, 50));
+  });
+
+  describe('highlighting a selection', () => {
+    const fakeSelection = {
+      pending: signal<PendingSelection | null>(null),
+      active: signal(false),
+      attach: vi.fn(),
+      clear: vi.fn(),
+    };
+
+    beforeEach(() => {
+      fakeSelection.pending.set({
+        page: 7,
+        start: { item: 0, offset: 0 },
+        end: { item: 0, offset: 5 },
+        quote: 'Hello',
+        rect: { left: 50, top: 100, right: 100, bottom: 120, width: 50, height: 20, x: 50, y: 100, toJSON: () => ({}) } as DOMRect,
+        source: 'page',
+      });
+      fakeSelection.clear.mockClear();
+      TestBed.overrideComponent(ReaderPage, { set: { providers: [{ provide: SelectionService, useValue: fakeSelection }] } });
+    });
+
+    const stored = () => db.annotations.toArray();
+
+    it('a color creates one highlight with an Undo toast; Undo removes it', async () => {
+      await create();
+      fixture.detectChanges();
+      el.querySelector<HTMLButtonElement>(`button[aria-label="${COPY.annotations.colors.green}"]`)!.click();
+      await vi.waitFor(async () => expect(await stored()).toHaveLength(1));
+      const [a] = await stored();
+      expect(a).toMatchObject({ type: 'highlight', color: 'green', page: 7, bookId: 'book-1' });
+      expect(a.text?.quote).toBe('Hello');
+      expect(fakeSelection.clear).toHaveBeenCalled();
+      const toast = TestBed.inject(ToastService);
+      expect(toast.current()?.message).toBe(COPY.annotations.highlightSaved);
+      toast.undo();
+      await vi.waitFor(async () => expect((await stored()).filter((r) => !r.deleted)).toHaveLength(0));
+    });
   });
 });

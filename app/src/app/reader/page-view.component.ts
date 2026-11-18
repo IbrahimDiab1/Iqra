@@ -16,6 +16,7 @@ import { hitTest } from '../annotations/anchor';
 import type { Annotation } from '../core/models';
 import { COPY } from '../ui/copy';
 import { HighlightLayerComponent } from './highlight-layer.component';
+import { selectWordAt } from './selection.service';
 import type { PageRenderer } from './pdf-session';
 
 const ZOOM_DEBOUNCE_MS = 60;
@@ -215,6 +216,9 @@ export class PageViewComponent implements OnDestroy {
     const hit = hitTest(this.annotations(), this.page(), x, y);
     if (hit) {
       this.annotationTap.emit(hit);
+    } else if ((e.target as Element | null)?.closest?.('[data-item]')) {
+      // A tap on text selects the word under it (the selection toolbar then offers highlight/copy) instead of toggling the bars.
+      selectWordAt(e.clientX, e.clientY);
     } else {
       this.pageTap.emit();
     }
