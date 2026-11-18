@@ -1,7 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   HostListener,
+  WritableSignal,
+  effect,
   InjectionToken,
   OnDestroy,
   computed,
@@ -68,8 +71,14 @@ const SYNC_TOAST_MS = 8000;
         @let s = state()!;
         @let r = session()!;
         @let b = book()!;
-        <section class="reader ready" [attr.data-rt]="theme()" [class.immersive]="!s.chrome()">
-          <header class="r-top" [attr.inert]="s.chrome() ? null : ''">
+        <section
+          class="reader ready"
+          [attr.data-rt]="theme()"
+          [class.immersive]="!s.chrome()"
+          [style.--reader-top.px]="s.chrome() ? topH() : 0"
+          [style.--reader-bottom.px]="s.chrome() ? bottomH() : 0"
+        >
+          <header #topBar class="r-top" [attr.inert]="s.chrome() ? null : ''">
             <a class="ib" routerLink="/library" [attr.aria-label]="copy.back" [innerHTML]="ic('back')"></a>
             <div class="r-title">
               <div class="t1" dir="auto">{{ b.title }}</div>
@@ -142,8 +151,8 @@ const SYNC_TOAST_MS = 8000;
             <button type="button" class="ib" [attr.aria-label]="copy.zoom + ' −'" (click)="s.setZoom(zoomOut(s.zoom(), s.view()))" [innerHTML]="ic('zoomOut')"></button>
           </div>
 
-          <footer class="r-bottom" [attr.inert]="s.chrome() ? null : ''">
-            <div class="r-range">
+          <footer #bottomBar class="r-bottom" [attr.inert]="s.chrome() ? null : ''">
+            <div class="r-range" [attr.dir]="rtl() ? 'rtl' : null">
               <input
                 type="range"
                 min="1"
@@ -155,11 +164,11 @@ const SYNC_TOAST_MS = 8000;
                 (change)="slide($event)"
               />
             </div>
-            <div class="r-row">
-              <button type="button" class="ib" [attr.aria-label]="copy.prevPage" [disabled]="s.page() <= 1" (click)="step(-1)" [innerHTML]="ic('chevL')"></button>
-              <span class="pg">{{ copy.pageOf(preview() ?? s.page(), r.numPages) }} <span>· {{ percent() }}%</span></span>
+            <div class="r-row" [attr.dir]="rtl() ? 'rtl' : null">
+              <button type="button" class="ib" [attr.aria-label]="copy.prevPage" [disabled]="s.page() <= 1" (click)="step(-1)" [innerHTML]="ic(rtl() ? 'chevR' : 'chevL')"></button>
+              <span class="pg" dir="ltr">{{ copy.pageOf(preview() ?? s.page(), r.numPages) }} <span>· {{ percent() }}%</span></span>
               <button type="button" class="pill" (click)="openPanel('contents')">{{ copy.contents }}</button>
-              <button type="button" class="ib" [attr.aria-label]="copy.nextPage" [disabled]="s.page() >= r.numPages" (click)="step(1)" [innerHTML]="ic('chevR')"></button>
+              <button type="button" class="ib" [attr.aria-label]="copy.nextPage" [disabled]="s.page() >= r.numPages" (click)="step(1)" [innerHTML]="ic(rtl() ? 'chevL' : 'chevR')"></button>
             </div>
           </footer>
           <iqra-book-panel-sheet
@@ -195,6 +204,7 @@ const SYNC_TOAST_MS = 8000;
     .reader {
       --paper: var(--paper-light); --ink: var(--ink-light);
       position: fixed; inset: 0; display: flex; flex-direction: column; color: var(--ink);
+      transition: --reader-top 240ms cubic-bezier(.2, .8, .2, 1), --reader-bottom 240ms cubic-bezier(.2, .8, .2, 1);
       background: color-mix(in srgb, var(--ink) 7%, var(--paper));
     }
     .reader[data-rt='sepia'] { --paper: var(--paper-sepia); --ink: var(--ink-sepia); }
@@ -207,7 +217,7 @@ const SYNC_TOAST_MS = 8000;
       -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
       transition: transform 240ms cubic-bezier(.2, .8, .2, 1), opacity 200ms;
     }
-    .r-top { top: 0; display: flex; align-items: center; padding: 8px 6px 8px 2px; border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); }
+    .r-top { top: 0; display: flex; align-items: center; padding: calc(8px + env(safe-area-inset-top, 0px)) 6px 8px 2px; border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); }
     .r-bottom { bottom: 0; display: grid; gap: 4px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); }
     .immersive .r-top { transform: translateY(-100%); opacity: 0; pointer-events: none; }
     .immersive .r-bottom { transform: translateY(100%); opacity: 0; pointer-events: none; }
@@ -222,13 +232,13 @@ const SYNC_TOAST_MS = 8000;
     .pg span { color: color-mix(in srgb, var(--ink) 55%, transparent); }
     .pill { min-height: 40px; padding: 0 14px; border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); border-radius: 999px; background: none; color: inherit; font: 13px var(--ui); cursor: pointer; }
     .r-range { display: flex; align-items: center; padding: 0 6px; }
-    .r-range input { flex: 1; min-width: 0; min-height: 24px; accent-color: var(--accent); }
+    .r-range input { direction: inherit; flex: 1; min-width: 0; min-height: 24px; accent-color: var(--accent); }
     .zoompair { display: none; }
     @media (min-width: 900px) {
       .zoompair { position: absolute; right: 16px; bottom: 120px; z-index: 5; display: grid; gap: 6px; background: color-mix(in srgb, var(--paper) 94%, transparent); border-radius: var(--radius-control); box-shadow: var(--shadow); }
       .immersive .zoompair { bottom: 24px; }
     }
-    @media (prefers-reduced-motion: reduce) { .r-top, .r-bottom { transition: none; } }
+    @media (prefers-reduced-motion: reduce) { .reader, .r-top, .r-bottom { transition: none; } }
   `,
 })
 export class ReaderPage implements OnDestroy {
@@ -245,6 +255,11 @@ export class ReaderPage implements OnDestroy {
   private readonly open = inject(PDF_OPENER);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly scroller = viewChild(ScrollerComponent);
+  private readonly topBar = viewChild<ElementRef<HTMLElement>>('topBar');
+  private readonly bottomBar = viewChild<ElementRef<HTMLElement>>('bottomBar');
+  /** Heights of the bars (safe areas included): the space the content reserves while the chrome is visible. */
+  protected readonly topH = signal(0);
+  protected readonly bottomH = signal(0);
 
   protected readonly status = signal<Status>('loading');
   protected readonly statusKind = computed(() => {
@@ -279,7 +294,22 @@ export class ReaderPage implements OnDestroy {
   private loadId = 0;
 
   constructor() {
+    this.measure(this.topBar, this.topH);
+    this.measure(this.bottomBar, this.bottomH);
     void this.load();
+  }
+
+  private measure(bar: () => ElementRef<HTMLElement> | undefined, into: WritableSignal<number>): void {
+    effect((onCleanup) => {
+      const el = bar()?.nativeElement;
+      if (!el) return;
+      const read = () => into.set(el.offsetHeight);
+      read();
+      if (typeof ResizeObserver === 'undefined') return;
+      const observer = new ResizeObserver(read);
+      observer.observe(el);
+      onCleanup(() => observer.disconnect());
+    });
   }
 
   protected ic(name: IconName) {

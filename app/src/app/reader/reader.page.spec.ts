@@ -218,6 +218,37 @@ describe('ReaderPage', () => {
     expect(positions.schedule).not.toHaveBeenCalled();
   });
 
+  it('an rtl book mirrors the bottom bar: left chevron is next, the slider runs right to left, the label stays logical', async () => {
+    await db.books.put(makeBook({ direction: 'rtl' }));
+    await create();
+    expect(el.querySelector('.r-row')!.getAttribute('dir')).toBe('rtl');
+    expect(el.querySelector('.r-range')!.getAttribute('dir')).toBe('rtl');
+    expect(el.querySelector('.pg')!.getAttribute('dir')).toBe('ltr');
+    // The "next" button shows the left-pointing chevron (path starts at x=15) and "previous" the right-pointing one.
+    expect(btn(COPY.reader.nextPage)!.innerHTML).toContain('M15 18');
+    expect(btn(COPY.reader.prevPage)!.innerHTML).toContain('M9 6');
+    btn(COPY.reader.nextPage)!.click();
+    fixture.detectChanges();
+    expect(label()).toContain(COPY.reader.pageOf(8, 50));
+  });
+
+  it('an ltr book keeps the usual chevrons and no dir override', async () => {
+    await create();
+    expect(el.querySelector('.r-row')!.hasAttribute('dir')).toBe(false);
+    expect(btn(COPY.reader.prevPage)!.innerHTML).toContain('M15 18');
+  });
+
+  it('reserves the bars space for content via --reader-top / --reader-bottom and releases it when hidden', async () => {
+    await create();
+    const root = el.querySelector<HTMLElement>('.reader')!;
+    expect(root.style.getPropertyValue('--reader-top')).toMatch(/px$/);
+    expect(root.style.getPropertyValue('--reader-bottom')).toMatch(/px$/);
+    pager().tap.emit();
+    fixture.detectChanges();
+    expect(root.style.getPropertyValue('--reader-top')).toBe('0px');
+    expect(root.style.getPropertyValue('--reader-bottom')).toBe('0px');
+  });
+
   it('tapping the page toggles the immersive class', async () => {
     await create();
     const root = el.querySelector('.reader')!;

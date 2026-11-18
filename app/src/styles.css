@@ -8,6 +8,10 @@
 @import '@fontsource/ibm-plex-sans-arabic/500.css';
 @import '@fontsource/ibm-plex-sans-arabic/600.css';
 
+/* The space the reader's bars take; registered so it can animate with the bars. */
+@property --reader-top { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --reader-bottom { syntax: '<length>'; inherits: true; initial-value: 0px; }
+
 * { box-sizing: border-box; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

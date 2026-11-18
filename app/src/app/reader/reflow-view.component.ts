@@ -68,7 +68,7 @@ const THEME_VARS: Record<PageTheme, { paper: string; ink: string }> = {
   `,
   styles: `
     :host { display: block; width: 100%; height: 100%; }
-    .scroll { width: 100%; height: 100%; overflow-y: auto; padding: 24px 16px 48px; box-sizing: border-box; }
+    .scroll { width: 100%; height: 100%; overflow-y: auto; padding: calc(24px + var(--reader-top, 0px)) 16px calc(32px + var(--reader-bottom, 0px)); box-sizing: border-box; }
     article { max-width: 560px; margin: 0 auto; font-family: var(--book); line-height: 1.7; }
     article p { margin: 0 0 1em; }
     .message { max-width: 560px; margin: 48px auto 0; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 16px; }
