@@ -61,3 +61,7 @@ Pushing to `main` runs `.github/workflows/deploy.yml`, which tests, builds and p
 - Design: `docs/specs/2026-11-14-iqra-design.md`
 - Plan 1: `docs/superpowers/plans/2026-11-14-iqra-plan-1-foundation-library.md`
 - `folio-prototype.html`: the clickable UI prototype, made before the app was named Iqra.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
