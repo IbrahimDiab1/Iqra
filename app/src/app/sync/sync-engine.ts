@@ -123,9 +123,12 @@ export class SyncEngine implements OnDestroy {
     this.intervalTimer = setInterval(() => void this.syncNow(), INTERVAL_MS);
   }
 
-  /** Tries a silent token renewal when the token has expired, then syncs. */
+  /**
+   * Tries a silent token renewal when the token has expired, then syncs. The state flips to
+   * expired only inside token(), so the expiry check must run here, not read state() alone.
+   */
   async resume(): Promise<void> {
-    if (this.auth.state() === 'expired') await this.auth.trySilent();
+    if (this.auth.state() !== 'signed-out' && this.auth.token() === null) await this.auth.trySilent();
     await this.syncNow();
   }
 

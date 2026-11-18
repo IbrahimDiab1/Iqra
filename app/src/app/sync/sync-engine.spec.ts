@@ -482,4 +482,22 @@ describe('SyncEngine', () => {
     expect(trySilent).toHaveBeenCalled();
     expect(a.engine.status()).toBe('synced');
   });
+
+  it('resume renews silently once when the token expired lazily while the state still reads signed-in', async () => {
+    const lazy = vi.spyOn(a.auth, 'token').mockReturnValueOnce(null);
+    const trySilent = vi.spyOn(a.auth, 'trySilent');
+
+    await a.engine.resume();
+
+    expect(lazy).toHaveBeenCalled();
+    expect(trySilent).toHaveBeenCalledTimes(1);
+  });
+
+  it('resume does not try a silent renewal when signed out or when the token is still valid', async () => {
+    const trySilent = vi.spyOn(a.auth, 'trySilent');
+    await a.engine.resume();
+    a.auth.signOut();
+    await a.engine.resume();
+    expect(trySilent).not.toHaveBeenCalled();
+  });
 });
