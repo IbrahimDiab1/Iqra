@@ -1,6 +1,8 @@
 import { Injectable, Signal, inject, signal } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { CLOCK } from '../core/clock';
+import { COPY } from '../ui/copy';
+import { ToastService } from '../ui/toast.service';
 
 export type AuthState = 'signed-out' | 'signed-in' | 'expired';
 export interface Profile {
@@ -23,6 +25,8 @@ export abstract class AuthApi {
   abstract signOut(): void;
   /** The sync engine calls this on DriveAuthError. */
   abstract markExpired(): void;
+  /** Starts loading the sign-in script, so a later popup request is not delayed by the network. */
+  abstract preload(): void;
 }
 
 export const SCOPES = [
@@ -56,7 +60,7 @@ interface TokenResponse {
 }
 
 interface TokenClient {
-  requestAccessToken(options: { prompt?: string }): void;
+  requestAccessToken(options: { prompt?: string; hint?: string }): void;
 }
 
 interface GisTokenConfig {
@@ -128,6 +132,7 @@ function writeStoredProfile(profile: Profile | null): void {
 @Injectable()
 export class GisAuthService extends AuthApi {
   private readonly clock = inject(CLOCK);
+  private readonly toast = inject(ToastService);
   private readonly stateSignal = signal<AuthState>('signed-out');
   private readonly profileSignal = signal<Profile | null>(null);
   readonly state = this.stateSignal.asReadonly();
@@ -164,13 +169,30 @@ export class GisAuthService extends AuthApi {
     this.commit(grant);
   }
 
+  preload(): void {
+    loadGis().catch(() => undefined);
+  }
+
+  /**
+   * Asks for the stored account. A token for another account is discarded: the state stays
+   * expired and a toast says which account Iqra is linked to.
+   */
   async reconnect(): Promise<void> {
-    this.commit(await this.requestGrant(''));
+    const stored = this.profileSignal();
+    const grant = await this.requestGrant('', undefined, stored?.email);
+    if (stored) {
+      const picked = await this.fetchProfile(grant.token);
+      if (picked.email.toLowerCase() !== stored.email.toLowerCase()) {
+        this.toast.show(COPY.sync.wrongAccount(picked.email, stored.email));
+        return;
+      }
+    }
+    this.commit(grant);
   }
 
   async trySilent(): Promise<boolean> {
     try {
-      this.commit(await this.requestGrant('none', SILENT_TIMEOUT_MS));
+      this.commit(await this.requestGrant('none', SILENT_TIMEOUT_MS, this.profileSignal()?.email));
       return true;
     } catch {
       return false;
@@ -198,9 +220,13 @@ export class GisAuthService extends AuthApi {
   }
 
   /** prompt undefined leaves the prompt to GIS, which shows consent only when needed. */
-  private async requestGrant(prompt: string | undefined, timeoutMs?: number): Promise<Grant> {
+  private async requestGrant(prompt: string | undefined, timeoutMs?: number, hint?: string): Promise<Grant> {
     const client = await this.ensureClient();
     return new Promise<Grant>((resolve, reject) => {
+      // A new request settles the one before it, so no promise is left hanging.
+      const previous = this.pending;
+      this.pending = null;
+      previous?.reject(new AuthCancelledError());
       let timer: ReturnType<typeof setTimeout> | undefined;
       const pending: Pending = {
         resolve: (grant) => {
@@ -219,7 +245,10 @@ export class GisAuthService extends AuthApi {
           reject(new AuthCancelledError());
         }, timeoutMs);
       }
-      client.requestAccessToken(prompt === undefined ? {} : { prompt });
+      const options: { prompt?: string; hint?: string } = {};
+      if (prompt !== undefined) options.prompt = prompt;
+      if (hint) options.hint = hint;
+      client.requestAccessToken(options);
     });
   }
 

@@ -371,4 +371,14 @@ describe('SyncEngine', () => {
     expect(await a.db.covers.get('old')).toBeUndefined();
     expect(await a.db.pdfFiles.get('young')).toBeDefined();
   });
+
+  it('resume tries a silent renewal when expired, then syncs', async () => {
+    a.auth.markExpired();
+    const trySilent = vi.spyOn(a.auth, 'trySilent');
+
+    await a.engine.resume();
+
+    expect(trySilent).toHaveBeenCalled();
+    expect(a.engine.status()).toBe('synced');
+  });
 });

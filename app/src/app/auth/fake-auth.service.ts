@@ -35,6 +35,8 @@ export class FakeAuthService extends AuthApi {
     this.stateSignal.set('signed-out');
   }
 
+  preload(): void {}
+
   markExpired(): void {
     if (this.profileSignal()) this.stateSignal.set('expired');
   }

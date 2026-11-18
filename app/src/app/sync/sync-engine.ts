@@ -107,7 +107,7 @@ export class SyncEngine implements OnDestroy {
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private intervalTimer: ReturnType<typeof setInterval> | undefined;
   private readonly onVisible = (): void => {
-    if (document.visibilityState === 'visible') void this.syncNow();
+    if (document.visibilityState === 'visible') void this.resume();
   };
   private readonly onOnline = (): void => {
     void this.syncNow();
@@ -121,6 +121,12 @@ export class SyncEngine implements OnDestroy {
     document.addEventListener('visibilitychange', this.onVisible);
     window.addEventListener('online', this.onOnline);
     this.intervalTimer = setInterval(() => void this.syncNow(), INTERVAL_MS);
+  }
+
+  /** Tries a silent token renewal when the token has expired, then syncs. */
+  async resume(): Promise<void> {
+    if (this.auth.state() === 'expired') await this.auth.trySilent();
+    await this.syncNow();
   }
 
   /** Runs one pass. Concurrent calls share the running pass. */

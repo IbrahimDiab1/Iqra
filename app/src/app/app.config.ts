@@ -23,9 +23,10 @@ export const appConfig: ApplicationConfig = {
         void auth.signIn();
         exposeE2eHandles({ __iqraSync: sync, __iqraDrive: inject(DRIVE_ADAPTER) as FakeDrive });
       }
+      auth.preload();
       if (auth.state() === 'signed-out') return;
       sync.start();
-      void sync.syncNow();
+      void sync.resume();
     }),
     provideServiceWorker('ngsw-worker.js', {
       // The e2e build runs in dev mode for Angular but has no real Drive; keep the worker out of its way.

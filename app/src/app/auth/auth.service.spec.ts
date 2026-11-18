@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CLOCK } from '../core/clock';
+import { COPY } from '../ui/copy';
+import { ToastService } from '../ui/toast.service';
 import { AuthCancelledError, GisAuthService } from './auth.service';
 
 const T0 = Date.UTC(2026, 10, 14, 12);
@@ -17,17 +19,20 @@ const clock = { now: () => now };
 /** Per-test behaviour of the GIS stub: fail with an error_callback type, or never answer. */
 let gis: { failWith: string | null; hang: boolean };
 let prompts: Array<string | undefined>;
+let hints: Array<string | undefined>;
 
 /** Stands in for the GIS script: window.google exists, so the loader adds no script tag. */
 function stubGis(): void {
   prompts = [];
+  hints = [];
   gis = { failWith: null, hang: false };
   (window as unknown as { google: unknown }).google = {
     accounts: {
       oauth2: {
         initTokenClient: (config: TokenConfig) => ({
-          requestAccessToken: (options: { prompt?: string } = {}) => {
+          requestAccessToken: (options: { prompt?: string; hint?: string } = {}) => {
             prompts.push(options.prompt);
+            hints.push(options.hint);
             if (gis.hang) return;
             if (gis.failWith) {
               config.error_callback({ type: gis.failWith });
@@ -135,5 +140,47 @@ describe('GisAuthService', () => {
     await vi.advanceTimersByTimeAsync(10_000);
     await expect(result).resolves.toBe(false);
     expect(auth.state()).toBe('expired');
+  });
+
+  it('reconnect passes the stored email as hint', async () => {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE));
+    const auth = createService();
+    await auth.reconnect();
+    expect(hints).toEqual([PROFILE.email]);
+  });
+
+  it('reconnect discards a token for another account, stays expired and toasts', async () => {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ name: 'Other', email: 'other@example.test' }), { status: 200 })),
+    );
+    const auth = createService();
+    const toast = TestBed.inject(ToastService);
+
+    await auth.reconnect();
+
+    expect(auth.token()).toBeNull();
+    expect(auth.state()).toBe('expired');
+    expect(auth.profile()).toEqual(PROFILE);
+    expect(toast.current()?.message).toBe(COPY.sync.wrongAccount('other@example.test', PROFILE.email));
+  });
+
+  it('a new token request rejects the one still pending', async () => {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE));
+    gis.hang = true;
+    const auth = createService();
+    const first = auth.reconnect();
+    const firstSettled = first.then(
+      () => 'resolved',
+      (e: unknown) => (e instanceof AuthCancelledError ? 'cancelled' : 'other'),
+    );
+    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    gis.hang = false;
+
+    await auth.reconnect();
+
+    expect(await firstSettled).toBe('cancelled');
+    expect(auth.state()).toBe('signed-in');
   });
 });
