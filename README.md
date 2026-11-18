@@ -64,4 +64,4 @@ Pushing to `main` runs `.github/workflows/deploy.yml`, which tests, builds and p
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+[MIT](LICENSE). Iqra depends on open-source packages (Angular, pdf.js, Dexie and others) that keep their own licenses. The bundled fonts (Literata, Instrument Sans, IBM Plex Sans Arabic) are under the SIL Open Font License.

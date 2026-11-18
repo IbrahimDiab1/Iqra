@@ -10,3 +10,10 @@ Iqra signs in with Google and stores books in your Drive. For that it needs a fr
    - `http://localhost:4200`
    - `https://ibrahimdiab1.github.io`
 4. Copy the client ID (it ends in `.apps.googleusercontent.com`) into `googleClientId` in `app/src/environments/environment.ts`. A client ID is public and not a secret.
+
+## "Access blocked: has not completed the Google verification process"
+
+This means the OAuth consent screen is still in **Testing** mode. Either:
+
+- **Publish it:** Google Auth Platform (or APIs & Services) → **Audience** → **Publish app**. Any Google account can then sign in after clicking through "Google hasn't verified this app" (**Advanced → Go to Iqra**). Iqra only requests the narrow Drive permissions, so no Google review is required.
+- **Or stay in Testing:** on the same page, add your Google account under **Test users**. Sign-ins then expire every 7 days, so publishing is better.
