@@ -1,21 +1,21 @@
 # Deploy and test: owner checklist
 
-The CI workflow (`.github/workflows/deploy.yml`) runs unit tests and builds the app on every push to `main`, then publishes it to GitHub Pages. The site is served from `https://<user>.github.io/iqra/`.
+The CI workflow (`.github/workflows/deploy.yml`) runs unit tests and builds the app on every push to `main`, then publishes it to GitHub Pages. The site is served from `https://ibrahimdiab1.github.io/Iqra/`.
 
 ## 1. Push the repository to GitHub
 
-- Create an empty GitHub repository named `iqra`.
+- Create an empty GitHub repository named `Iqra`.
 - Push this repository's `main` branch to it.
 
 ## 2. Enable GitHub Pages
 
 - In the repository: Settings → Pages → Build and deployment → Source: **GitHub Actions**.
 - Run the "Deploy to GitHub Pages" workflow (Actions tab → Run workflow), or push to `main`.
-- Confirm the site loads at `https://<user>.github.io/iqra/`.
+- Confirm the site loads at `https://ibrahimdiab1.github.io/Iqra/`.
 
 ## 3. Check the OAuth origin
 
-- In Google Cloud, the OAuth client's authorized JavaScript origins must include `https://<user>.github.io` (the origin only, no path). This was needed from Task 0.
+- In Google Cloud, the OAuth client's authorized JavaScript origins must include `https://ibrahimdiab1.github.io` (the origin only, no path). This was needed from Task 0.
 - If sign-in fails with an origin mismatch error, this is the first thing to check.
 
 ## 4. Install the app
