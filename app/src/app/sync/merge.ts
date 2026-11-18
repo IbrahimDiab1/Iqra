@@ -57,8 +57,9 @@ export function pruneTombstones(
 }
 
 /**
- * Among live books with the same sha256, keeps one with a driveFileId if any, then the earliest
- * addedAt (ties: lower id), and reports each other book as a drop.
+ * Among live books with the same sha256, keeps the earliest addedAt (ties: lower id) and reports
+ * each other book as a drop. The rule uses only immutable fields, so every device picks the same
+ * book whatever its upload state.
  */
 export function duplicateBooks(books: Book[]): { keep: ID; drop: ID }[] {
   const groups = new Map<string, Book[]>();
@@ -72,13 +73,7 @@ export function duplicateBooks(books: Book[]): { keep: ID; drop: ID }[] {
   const pairs: { keep: ID; drop: ID }[] = [];
   for (const group of groups.values()) {
     if (group.length < 2) continue;
-    // A copy already uploaded to Drive is kept first, then the earliest added, then the lower id.
-    group.sort(
-      (a, b) =>
-        Number(a.driveFileId === '') - Number(b.driveFileId === '') ||
-        a.addedAt - b.addedAt ||
-        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-    );
+    group.sort((a, b) => a.addedAt - b.addedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     const [keep, ...rest] = group;
     for (const drop of rest) pairs.push({ keep: keep.id, drop: drop.id });
   }

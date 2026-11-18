@@ -195,6 +195,107 @@ describe('SyncEngine', () => {
     expect(await a.db.pendingDriveDeletes.toArray()).toEqual([]);
   });
 
+  /** Imports a book offline: the record, its PDF blob and the pending upload, as ImportService does. */
+  async function importOffline(device: Device, id: ID, annotationId: string): Promise<void> {
+    await device.repo.put<Book>('books', bookDraft(id, { sha256: 'same', addedAt: 1, driveFileId: '' }));
+    await device.db.pdfFiles.put({ bookId: id, blob: new Blob([`pdf-${id}`]), sizeBytes: 1, savedAt: 1 });
+    await device.db.pendingUploads.put({ id: `up-${id}`, bookId: id, kind: 'pdf', attempts: 0 });
+    await device.repo.put<Annotation>('annotations', { id: annotationId, bookId: id, type: 'bookmark', tags: [], createdAt: 1 });
+  }
+
+  /** Blobs read back from fake-indexeddb are not real Blobs; FakeDrive needs a real one. Returns the upload spy. */
+  function trackUploads() {
+    const pdf = drive.uploadPdf.bind(drive);
+    const cover = drive.writeAppDataBlob.bind(drive);
+    vi.spyOn(drive, 'writeAppDataBlob').mockImplementation((name, _blob, id) => cover(name, new Blob(['cover']), id));
+    return vi.spyOn(drive, 'uploadPdf').mockImplementation((_blob, ...rest) => pdf(new Blob(['pdf']), ...rest));
+  }
+
+  /** Syncs both devices in turn, with each clock moving on so later writes are later. */
+  async function syncRounds(rounds: number): Promise<void> {
+    for (let i = 0; i < rounds; i++) {
+      for (const device of [a, b]) {
+        device.clock.t += 100;
+        await device.engine.syncNow();
+      }
+    }
+  }
+
+  async function liveBooks(device: Device): Promise<Book[]> {
+    return (await device.db.books.toArray()).filter((book) => !book.deleted);
+  }
+
+  it('N1a: two devices import the same PDF and both upload; one book, its file and notes survive', async () => {
+    trackUploads();
+    await importOffline(a, 'ba', 'an-a');
+    await importOffline(b, 'bb', 'an-b');
+    await a.injector.get(UploadQueue).run();
+    await b.injector.get(UploadQueue).run();
+    expect((await a.db.books.get('ba'))?.driveFileId).not.toBe('');
+    expect((await b.db.books.get('bb'))?.driveFileId).not.toBe('');
+
+    await syncRounds(4);
+
+    for (const device of [a, b]) {
+      const live = await liveBooks(device);
+      expect(live.map((book) => book.id)).toEqual(['ba']);
+      await expect(drive.downloadBlob(live[0].driveFileId)).resolves.toBeInstanceOf(Blob);
+      const notes = await device.db.annotations.where('bookId').equals('ba').toArray();
+      expect(notes.filter((n) => !n.deleted).map((n) => n.id).sort()).toEqual(['an-a', 'an-b']);
+    }
+  });
+
+  it('N1b: the kept book takes over the dropped book\'s file ids; the file is kept and not uploaded twice', async () => {
+    const upload = trackUploads();
+    await importOffline(a, 'ba', 'an-a');
+    await importOffline(b, 'bb', 'an-b');
+    await b.db.covers.put({ bookId: 'bb', blob: new Blob(['cover']) });
+    await b.db.pendingUploads.put({ id: 'up-cover-bb', bookId: 'bb', kind: 'cover', attempts: 0 });
+    await b.injector.get(UploadQueue).run();
+    const uploaded = await b.db.books.get('bb');
+    expect(uploaded?.driveFileId).not.toBe('');
+    expect(uploaded?.coverFileId).toBeTruthy();
+    await b.engine.syncNow();
+
+    // A has not uploaded. Its duplicate pass keeps ba and takes over bb's ids.
+    await a.engine.syncNow();
+    const kept = await a.db.books.get('ba');
+    expect(kept?.driveFileId).toBe(uploaded?.driveFileId);
+    expect(kept?.coverFileId).toBe(uploaded?.coverFileId);
+    expect(await a.db.pendingDriveDeletes.toArray()).toEqual([]);
+
+    // The pending PDF upload on A is dropped, since ba now has a file.
+    upload.mockClear();
+    await a.injector.get(UploadQueue).run();
+    expect(upload).not.toHaveBeenCalled();
+    expect(await a.db.pendingUploads.where('bookId').equals('ba').count()).toBe(0);
+
+    await syncRounds(3);
+    for (const device of [a, b]) {
+      const live = await liveBooks(device);
+      expect(live.map((book) => book.id)).toEqual(['ba']);
+      await expect(drive.downloadBlob(live[0].driveFileId)).resolves.toBeInstanceOf(Blob);
+    }
+  });
+
+  it('N1c: with neither uploaded, one book remains and it uploads once', async () => {
+    const upload = trackUploads();
+    await importOffline(a, 'ba', 'an-a');
+    await importOffline(b, 'bb', 'an-b');
+    await syncRounds(3);
+    expect((await liveBooks(a)).map((book) => book.id)).toEqual(['ba']);
+    expect((await liveBooks(b)).map((book) => book.id)).toEqual(['ba']);
+
+    await a.injector.get(UploadQueue).run();
+    await b.injector.get(UploadQueue).run();
+    await syncRounds(3);
+
+    expect(upload).toHaveBeenCalledTimes(1);
+    const live = await liveBooks(b);
+    expect(live[0].driveFileId).not.toBe('');
+    await expect(drive.downloadBlob(live[0].driveFileId)).resolves.toBeInstanceOf(Blob);
+  });
+
   it('does not queue a Drive delete when a device pulls a tombstoned book', async () => {
     await a.repo.put<Book>('books', bookDraft('b1', { driveFileId: 'drive-b1' }));
     await a.engine.syncNow();

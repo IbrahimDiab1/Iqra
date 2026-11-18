@@ -4,7 +4,7 @@ import type { Subscription } from 'rxjs';
 import { AuthApi } from '../auth/auth.service';
 import { CLOCK } from '../core/clock';
 import { DB, SyncState } from '../core/db';
-import type { Annotation, ID, Position, ReadMark, ReadingSession, SyncRecord, TableName } from '../core/models';
+import type { Annotation, Book, ID, Position, ReadMark, ReadingSession, SyncRecord, TableName } from '../core/models';
 import { Repo } from '../core/repo';
 import { UploadQueue } from '../books/upload-queue';
 import { COPY } from '../ui/copy';
@@ -366,9 +366,21 @@ export class SyncEngine implements OnDestroy {
     for (const { keep, drop } of pairs) {
       const kept = byId.get(keep)!;
       const dropped = byId.get(drop)!;
-      // The kept book's own files are never queued for deletion.
-      const shared = new Set([kept.driveFileId, kept.coverFileId]);
-      await this.queueDriveDeletes([dropped.driveFileId, dropped.coverFileId].filter((f) => !shared.has(f)));
+      // The kept book's own files are never queued. An id the kept book lacks is taken over from the
+      // dropped one, so the file stays reachable; a different id is a second copy and is queued.
+      const carry: Partial<Pick<Book, 'driveFileId' | 'coverFileId'>> = {};
+      const extra: string[] = [];
+      for (const key of ['driveFileId', 'coverFileId'] as const) {
+        if (!dropped[key]) continue;
+        if (!kept[key]) carry[key] = dropped[key];
+        else if (kept[key] !== dropped[key]) extra.push(dropped[key]);
+      }
+      await this.queueDriveDeletes(extra);
+      if (Object.keys(carry).length > 0) {
+        const updated = { ...kept, ...carry };
+        await this.repo.put<Book>('books', updated);
+        byId.set(keep, updated);
+      }
       await this.moveBookRecords(drop, keep);
       await this.repo.softDelete('books', drop);
     }
@@ -487,7 +499,17 @@ export class SyncEngine implements OnDestroy {
   private async runDueDeletes(): Promise<void> {
     const now = this.clock.now();
     const due = (await this.db.pendingDriveDeletes.toArray()).filter((d) => d.notBefore <= now);
+    // A file a live book now points to (ids carried over from a duplicate) is never deleted.
+    const inUse = new Set<string>();
+    if (due.length > 0) {
+      await this.db.books.each((b) => {
+        if (b.deleted) return;
+        inUse.add(b.driveFileId);
+        if (b.coverFileId) inUse.add(b.coverFileId);
+      });
+    }
     for (const pending of due) {
+      if (inUse.has(pending.fileId)) continue;
       try {
         await this.drive.deleteFile(pending.fileId);
       } catch (error) {

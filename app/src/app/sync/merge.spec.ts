@@ -106,11 +106,17 @@ describe('duplicateBooks', () => {
     expect(duplicateBooks(books)).toEqual([]);
   });
 
-  it('prefers a copy with a driveFileId over an earlier one without', () => {
+  it('ignores driveFileId: the earlier addedAt wins, then the lower id', () => {
     const books = [
       { ...base, id: 'early', addedAt: 1, driveFileId: '' },
       { ...base, id: 'uploaded', addedAt: 5, driveFileId: 'f' },
     ];
-    expect(duplicateBooks(books)).toEqual([{ keep: 'uploaded', drop: 'early' }]);
+    expect(duplicateBooks(books)).toEqual([{ keep: 'early', drop: 'uploaded' }]);
+    const tied = [
+      { ...base, id: 'b', addedAt: 1, driveFileId: 'f' },
+      { ...base, id: 'a', addedAt: 1, driveFileId: '' },
+    ];
+    expect(duplicateBooks(tied)).toEqual([{ keep: 'a', drop: 'b' }]);
+    expect(duplicateBooks([...tied].reverse())).toEqual([{ keep: 'a', drop: 'b' }]);
   });
 });
