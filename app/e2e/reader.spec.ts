@@ -2,6 +2,7 @@ import { expect, test, type BrowserContext, type Locator, type Page } from '@pla
 import { join } from 'node:path';
 
 const OUTLINE = join(__dirname, 'fixtures', 'outline.pdf');
+const SAMPLE = join(__dirname, 'fixtures', 'sample.pdf');
 const TITLE = 'Outline Book';
 
 /** Handles exposed by the app in the e2e build (see src/app/e2e-hooks.ts). */
@@ -142,10 +143,10 @@ test.describe('reader', () => {
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await expect
       .poll(async () => {
-        await page.mouse.wheel(0, 1500);
+        await page.mouse.wheel(0, 2500);
         const text = (await label(page).textContent()) ?? '';
         return Number(/^\s*(\d+) of/.exec(text)?.[1] ?? 0);
-      })
+      }, { intervals: [150] })
       .toBeGreaterThan(5);
   });
 
@@ -241,6 +242,130 @@ test.describe('reader', () => {
     await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
   });
 });
+
+async function useScrolling(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Reading settings' }).click();
+  await page.getByRole('radio', { name: 'Scrolling' }).click();
+  await page.getByRole('button', { name: 'Close' }).click();
+  await expect(page.locator('iqra-scroller')).toBeVisible();
+}
+
+test.describe('reader geometry', () => {
+  let context: BrowserContext;
+  let page: Page;
+
+  test.beforeEach(async ({ browser }) => {
+    context = await browser.newContext({ viewport: { width: 1280, height: 600 } });
+    page = await openDevice(context);
+  });
+
+  test.afterEach(async () => {
+    await context.close();
+  });
+
+  test('swipe mode: a page taller than the window scrolls so its bottom is reachable', async () => {
+    await page.locator('input[type="file"]').setInputFiles([SAMPLE]);
+    await page.getByRole('tab', { name: /To read/ }).click();
+    await page.locator('[data-grid="main"] li').filter({ hasText: 'Sample Book' }).click();
+    await expect(page.locator('.r-bottom .pg')).toContainText('1 of 5');
+
+    const slot = page.locator('[data-slot="cur"]');
+    const canvas = slot.locator('canvas');
+    await expect(canvas).toBeVisible();
+    const sizes = await slot.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
+    expect(sizes.scroll).toBeGreaterThan(sizes.client);
+
+    // The lower edge starts below the fold, and the mouse wheel brings it into view above the bottom bar.
+    const edgeBefore = (await canvas.boundingBox())!;
+    const slotBox = (await slot.boundingBox())!;
+    expect(edgeBefore.y + edgeBefore.height).toBeGreaterThan(slotBox.y + slotBox.height);
+    await page.mouse.move(slotBox.x + slotBox.width / 2, slotBox.y + slotBox.height / 2);
+    await page.mouse.wheel(0, 5000);
+    const bottomBar = (await page.locator('.r-bottom').boundingBox())!;
+    await expect
+      .poll(async () => {
+        const b = (await canvas.boundingBox())!;
+        return b.y + b.height <= bottomBar.y + 1;
+      })
+      .toBe(true);
+
+    // Turning the page puts the new page back at its top.
+    await page.keyboard.press('ArrowRight');
+    await expect(page.locator('.r-bottom .pg')).toContainText('2 of 5');
+    await expect.poll(() => page.locator('[data-slot="cur"]').evaluate((el) => el.scrollTop)).toBe(0);
+  });
+
+  test('scroll mode: the place survives reopening without drifting', async () => {
+    await openBook(page);
+    await useScrolling(page);
+    const viewport = page.locator('iqra-scroller .viewport');
+    const box = (await viewport.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    // Page 3 starts near 2 x (page height + gap); scroll into the middle of it.
+    await expect
+      .poll(async () => {
+        await page.mouse.wheel(0, 700);
+        const text = (await label(page).textContent()) ?? '';
+        return Number(/^\s*(\d+) of/.exec(text)?.[1] ?? 0);
+      })
+      .toBeGreaterThanOrEqual(3);
+    const pageEl = page.locator('iqra-scroller [data-page="3"]');
+    const h = (await pageEl.boundingBox())!.height;
+    for (let i = 0; i < 20; i++) {
+      const b = (await pageEl.boundingBox())!;
+      const middle = b.y + h / 2;
+      const line = (await page.locator('.r-top').boundingBox())!;
+      const delta = line.y + line.height - middle;
+      if (Math.abs(delta) < 40) break;
+      await page.mouse.wheel(0, -delta);
+      await page.waitForTimeout(60);
+    }
+    await expectPageLabel(page, 3);
+    await page.waitForTimeout(1300);
+    const before = await viewport.evaluate((el) => el.scrollTop);
+
+    for (let round = 0; round < 2; round++) {
+      await page.reload();
+      await expectPageLabel(page, 3);
+      await expect
+        .poll(() => viewport.evaluate((el) => el.scrollTop), { message: `round ${round}` })
+        .toBeGreaterThan(before - 2);
+      const after = await viewport.evaluate((el) => el.scrollTop);
+      expect(Math.abs(after - before)).toBeLessThanOrEqual(2);
+      // Give the position time to be saved again from the restored place.
+      await page.waitForTimeout(1300);
+    }
+  });
+
+  test('with the bars shown, a jumped-to page and reading-mode text start below the top bar', async () => {
+    await openBook(page);
+    await useScrolling(page);
+    await openPanel(page, 'Contents');
+    await page.locator('.row').filter({ hasText: 'Chapter 3' }).click();
+    await expectPageLabel(page, 9);
+    const topBar = (await page.locator('.r-top').boundingBox())!;
+    const barBottom = topBar.y + topBar.height;
+    const target = page.locator('iqra-scroller [data-page="9"]');
+    await expect.poll(async () => (await target.boundingBox())!.y).toBeGreaterThanOrEqual(barBottom - 1);
+    await expect.poll(async () => (await target.boundingBox())!.y).toBeLessThan(barBottom + 40);
+
+    await page.getByRole('button', { name: 'Reading mode' }).click();
+    const first = page.locator('iqra-reflow-view article p').first();
+    await expect(first).toBeVisible();
+    await expect.poll(async () => (await first.boundingBox())!.y).toBeGreaterThanOrEqual(barBottom - 1);
+    const next = page.locator('iqra-reflow-view .nav.next');
+    await next.scrollIntoViewIfNeeded();
+    const bottomBar = (await page.locator('.r-bottom').boundingBox())!;
+    await expect.poll(async () => {
+      const b = (await next.boundingBox())!;
+      return b.y + b.height <= bottomBar.y + 1;
+    }).toBe(true);
+  });
+});
+
+async function expectPageLabel(page: Page, n: number): Promise<void> {
+  await expect(page.locator('.r-bottom .pg')).toContainText(`${n} of 12`);
+}
 
 test('two devices: the newest position wins and Back returns to the older one', async ({ browser }) => {
   const contextA = await browser.newContext();
