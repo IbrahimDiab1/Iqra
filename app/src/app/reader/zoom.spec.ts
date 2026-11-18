@@ -17,6 +17,13 @@ describe('zoom', () => {
     expect(zoomOut(0.8, 'reflow')).toBe(0.8);
   });
 
+  it('clampZoom returns 1 for a non-finite zoom', () => {
+    for (const bad of [NaN, Infinity, -Infinity]) {
+      expect(clampZoom(bad, 'page')).toBe(1);
+      expect(clampZoom(bad, 'reflow')).toBe(1);
+    }
+  });
+
   it('clampZoom keeps page and reflow zoom in their ranges', () => {
     expect(clampZoom(0.1, 'page')).toBe(0.5);
     expect(clampZoom(9, 'page')).toBe(4);

@@ -11,6 +11,7 @@ function round1(z: number): number {
 
 export function clampZoom(z: number, view: View): number {
   const range = view === 'page' ? PAGE_ZOOM : TEXT_ZOOM;
+  if (!Number.isFinite(z)) return 1;
   return Math.min(range.max, Math.max(range.min, z));
 }
 
