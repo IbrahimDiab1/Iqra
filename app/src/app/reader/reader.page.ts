@@ -69,7 +69,7 @@ const SYNC_TOAST_MS = 8000;
         @let r = session()!;
         @let b = book()!;
         <section class="reader ready" [attr.data-rt]="theme()" [class.immersive]="!s.chrome()">
-          <header class="r-top">
+          <header class="r-top" [attr.inert]="s.chrome() ? null : ''">
             <a class="ib" routerLink="/library" [attr.aria-label]="copy.back" [innerHTML]="ic('back')"></a>
             <div class="r-title">
               <div class="t1" dir="auto">{{ b.title }}</div>
@@ -142,7 +142,7 @@ const SYNC_TOAST_MS = 8000;
             <button type="button" class="ib" [attr.aria-label]="copy.zoom + ' −'" (click)="s.setZoom(zoomOut(s.zoom(), s.view()))" [innerHTML]="ic('zoomOut')"></button>
           </div>
 
-          <footer class="r-bottom">
+          <footer class="r-bottom" [attr.inert]="s.chrome() ? null : ''">
             <div class="r-range">
               <input
                 type="range"
@@ -289,6 +289,7 @@ export class ReaderPage implements OnDestroy {
   async load(): Promise<void> {
     const id = ++this.loadId;
     this.status.set('loading');
+    let opened: ReaderSession | undefined;
     try {
       const bookId = this.route.snapshot.paramMap.get('bookId') ?? '';
       const streaming = this.route.snapshot.queryParamMap.get('source') === 'drive';
@@ -306,6 +307,7 @@ export class ReaderPage implements OnDestroy {
       }
 
       const session = await this.open(src);
+      opened = session;
       if (this.destroyed || id !== this.loadId) {
         session.destroy();
         return;
@@ -328,6 +330,8 @@ export class ReaderPage implements OnDestroy {
         });
       }
     } catch (err) {
+      // A session that opened but never became the page's session would leak its worker document.
+      if (opened && this.session() !== opened) opened.destroy();
       if (this.destroyed || id !== this.loadId) return;
       this.status.set({ error: this.errorMessage(err) });
     }

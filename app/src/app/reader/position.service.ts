@@ -88,7 +88,7 @@ export class PositionService {
 
   /** Records the current place. Writes after 800 ms without a new change. */
   schedule(book: Book, p: PositionUpdate): void {
-    if (this.pending && this.pending.bookId !== book.id) void this.flush();
+    if (this.pending && this.pending.bookId !== book.id) this.flushQuietly();
 
     let openedAt = this.pending?.openedAt;
     if (this.firstOfOpen) {
@@ -98,7 +98,7 @@ export class PositionService {
     this.pending = { bookId: book.id, ...p, openedAt };
 
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => void this.flush(), SAVE_DELAY_MS);
+    this.timer = setTimeout(() => this.flushQuietly(), SAVE_DELAY_MS);
   }
 
   /** Writes the pending place now. Resolves when every write so far has finished. */
@@ -110,6 +110,11 @@ export class PositionService {
     const run = this.writes.then(() => (snapshot ? this.write(snapshot) : undefined));
     this.writes = run.catch(() => undefined);
     return run;
+  }
+
+  /** A flush nobody awaits: a failed write is logged, never an unhandled rejection. */
+  private flushQuietly(): void {
+    this.flush().catch((err) => console.warn('Saving the reading position failed', err));
   }
 
   private async write(w: PendingWrite): Promise<void> {

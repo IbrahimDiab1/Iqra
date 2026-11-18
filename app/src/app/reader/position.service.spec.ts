@@ -242,6 +242,19 @@ describe('PositionService', () => {
       expect(put.mock.calls.filter(([t]) => t === 'positions')).toHaveLength(1);
     });
 
+    it('logs a failed timer-driven write instead of leaking an unhandled rejection', async () => {
+      await addBook();
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      vi.spyOn(repo, 'put').mockRejectedValue(new Error('disk full'));
+      const b = (await db.books.get('b1'))!;
+
+      service.schedule(b, { page: 6, offset: 0, zoom: 1, view: 'page' });
+      await vi.advanceTimersByTimeAsync(900);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(warn).toHaveBeenCalledTimes(1);
+      warn.mockRestore();
+    });
+
     it('does nothing when nothing is pending', async () => {
       const put = vi.spyOn(repo, 'put');
       await service.flush();

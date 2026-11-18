@@ -96,6 +96,32 @@ describe('BookPanelSheetComponent', () => {
     expect(el.querySelector('input[type=search]')).not.toBeNull();
   });
 
+  it('reopens on the requested tab after being closed on another', () => {
+    create();
+    el.querySelectorAll<HTMLElement>('[role=tab]')[1].click();
+    fixture.detectChanges();
+    expect(el.querySelector('input[type=search]')).not.toBeNull();
+    host.open.set(false);
+    fixture.detectChanges();
+    host.open.set(true);
+    fixture.detectChanges();
+    expect(el.querySelector('input[type=search]')).toBeNull();
+    expect(el.querySelector('.row')).not.toBeNull();
+  });
+
+  it('closing within the debounce window cancels the pending search', async () => {
+    const search = vi.fn(() => new Promise(() => undefined));
+    TestBed.overrideProvider(SearchService, { useValue: { search } });
+    create((h) => h.tab.set('search'));
+    const input = el.querySelector<HTMLInputElement>('input[type=search]')!;
+    input.value = 'species';
+    input.dispatchEvent(new Event('input'));
+    await vi.advanceTimersByTimeAsync(100);
+    el.querySelector<HTMLButtonElement>('.close')!.click();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(search).not.toHaveBeenCalled();
+  });
+
   async function type(value: string) {
     const input = el.querySelector<HTMLInputElement>('input[type=search]')!;
     input.value = value;

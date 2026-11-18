@@ -145,6 +145,10 @@ export class BookPanelSheetComponent implements OnDestroy {
   private abort: AbortController | undefined;
 
   constructor() {
+    // Every open starts on the requested tab, whatever tab the last visit ended on.
+    effect(() => {
+      if (this.open()) untracked(() => this.tab.set(this.initialTab()));
+    });
     // Opening on the Search tab puts the cursor in the field.
     effect(() => {
       if (this.open() && this.tab() === 'search') {
@@ -160,6 +164,7 @@ export class BookPanelSheetComponent implements OnDestroy {
   }
 
   protected close(): void {
+    clearTimeout(this.debounce);
     this.abort?.abort();
     this.running.set(false);
     this.closed.emit();

@@ -194,6 +194,23 @@ describe('ReaderPage', () => {
     expect(open).not.toHaveBeenCalled();
   });
 
+  it('destroys the session and shows the error when restoring the position throws', async () => {
+    positions.restore.mockRejectedValueOnce(new Error('db gone'));
+    await create();
+    expect(session.destroyed).toBe(true);
+    expect(el.textContent).toContain(COPY.reader.failed);
+  });
+
+  it('hidden bars are inert so the keyboard cannot reach them', async () => {
+    await create();
+    const bars = () => Array.from(el.querySelectorAll<HTMLElement>('.r-top, .r-bottom'));
+    expect(bars().every((b) => !b.hasAttribute('inert'))).toBe(true);
+    pager().tap.emit();
+    fixture.detectChanges();
+    expect(bars()).toHaveLength(2);
+    expect(bars().every((b) => b.hasAttribute('inert'))).toBe(true);
+  });
+
   it('tapping the page toggles the immersive class', async () => {
     await create();
     const root = el.querySelector('.reader')!;
