@@ -8,6 +8,7 @@ interface Calls {
   getPage: ReturnType<typeof vi.fn>;
   getTextContent: ReturnType<typeof vi.fn>;
   destroy: ReturnType<typeof vi.fn>;
+  cleanup: ReturnType<typeof vi.fn>;
 }
 
 function install(failWith?: unknown): Calls {
@@ -20,7 +21,8 @@ function install(failWith?: unknown): Calls {
   });
   const getViewport = vi.fn(({ scale }: { scale: number }) => ({ width: 600 * scale, height: 800 * scale }));
   const getTextContent = vi.fn(async () => ({ items: [{ str: 'hello world', transform: [1, 0, 0, 1, 0, 0], width: 1, height: 1 }] }));
-  const page = { getViewport, render, getTextContent };
+  const cleanup = vi.fn(() => true);
+  const page = { getViewport, render, getTextContent, cleanup };
   const getPage = vi.fn(async () => page);
   const destroy = vi.fn(async () => undefined);
   const getDocument = vi.fn(() => ({
@@ -28,7 +30,7 @@ function install(failWith?: unknown): Calls {
     destroy,
   }));
   setPdfjsLoaderForTests(async () => ({ getDocument }) as never);
-  return { getDocument, render, cancel, getViewport, getPage, getTextContent, destroy };
+  return { getDocument, render, cancel, getViewport, getPage, getTextContent, destroy, cleanup };
 }
 
 const local = () => ({ kind: 'local' as const, blob: new Blob([new Uint8Array([1, 2, 3])]) });
@@ -115,6 +117,33 @@ describe('PdfSession', () => {
     const canvas = document.createElement('canvas');
     await expect(s.renderPage(1, canvas, 300, ac.signal)).rejects.toMatchObject({ name: 'AbortError' });
     expect(c.render).not.toHaveBeenCalled();
+  });
+
+  it('cleans up the page once after a render, whether it succeeds, fails or is aborted', async () => {
+    const c = install();
+    const s = await PdfSession.open(local());
+    setCanvasFactoryForTests(() => fakeCanvas().c);
+    c.render.mockImplementationOnce(() => ({ promise: Promise.resolve(), cancel: c.cancel }));
+    await s.renderPage(1, fakeCanvas(10, 10).c, 300, new AbortController().signal);
+    expect(c.cleanup).toHaveBeenCalledTimes(1);
+
+    c.render.mockImplementationOnce(() => ({ promise: Promise.reject(new Error('boom')), cancel: c.cancel }));
+    await expect(s.renderPage(1, fakeCanvas(10, 10).c, 300, new AbortController().signal)).rejects.toThrow('boom');
+    expect(c.cleanup).toHaveBeenCalledTimes(2);
+
+    const ac = new AbortController();
+    const pending = s.renderPage(1, fakeCanvas(10, 10).c, 300, ac.signal).catch((e: unknown) => e);
+    await vi.waitFor(() => expect(c.render).toHaveBeenCalledTimes(3));
+    ac.abort();
+    await pending;
+    expect(c.cleanup).toHaveBeenCalledTimes(3);
+  });
+
+  it('cleans up the page after extracting its text', async () => {
+    const c = install();
+    const s = await PdfSession.open(local());
+    await s.textItems(1);
+    expect(c.cleanup).toHaveBeenCalledTimes(1);
   });
 
   it('cancels the render task when aborted mid-render', async () => {

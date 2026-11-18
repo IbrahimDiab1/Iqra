@@ -117,6 +117,20 @@ export class PdfSession implements PageRenderer {
   async renderPage(page: number, canvas: HTMLCanvasElement, cssWidthPx: number, signal: AbortSignal): Promise<void> {
     if (signal.aborted) throw abortError();
     const p = await this.doc.getPage(page);
+    try {
+      await this.drawPage(p, canvas, cssWidthPx, signal);
+    } finally {
+      // Releases the page's operator list and decoded images; a no-op while another render of it is running.
+      p.cleanup();
+    }
+  }
+
+  private async drawPage(
+    p: Awaited<ReturnType<PDFDocumentProxy['getPage']>>,
+    canvas: HTMLCanvasElement,
+    cssWidthPx: number,
+    signal: AbortSignal,
+  ): Promise<void> {
     if (signal.aborted) throw abortError();
     const base = p.getViewport({ scale: 1 });
     const cssScale = cssWidthPx / base.width;
@@ -159,7 +173,12 @@ export class PdfSession implements PageRenderer {
 
   async textItems(page: number): Promise<TextItem[]> {
     const p = await this.doc.getPage(page);
-    const content = await p.getTextContent();
+    let content;
+    try {
+      content = await p.getTextContent();
+    } finally {
+      p.cleanup();
+    }
     return content.items.filter((i): i is typeof i & TextItem => 'str' in i) as unknown as TextItem[];
   }
 
