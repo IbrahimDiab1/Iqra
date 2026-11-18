@@ -7,6 +7,8 @@ import { clampZoom } from './zoom';
 type View = 'page' | 'reflow';
 
 const CHROME_TAP_GAP_MS = 350;
+/** A place report closer than this to the last saved offset is not a change (the scroller reports on mount). */
+const OFFSET_TOLERANCE = 0.005;
 
 /** The reader's place, zoom, view and chrome visibility, plus jump history and position saving. */
 export class ReaderState {
@@ -26,6 +28,8 @@ export class ReaderState {
 
   /** The zoom of the view that is not showing. */
   private inactiveZoom = 1;
+  /** What was last restored or handed to the position service. */
+  private saved: { page: number; offset: number; zoom: number; view: View } | undefined;
   private lastChromeTap = Number.NEGATIVE_INFINITY;
 
   constructor(
@@ -38,6 +42,7 @@ export class ReaderState {
     this.offset.set(r.place.offset);
     this.view.set(r.view);
     this.zoom.set(r.zoom);
+    this.saved = { page: r.place.page, offset: r.place.offset, zoom: r.zoom, view: r.view };
     if (r.view === 'page' && r.zoom > 1.05) this.lastCustomZoom.set(r.zoom);
   }
 
@@ -117,11 +122,19 @@ export class ReaderState {
   }
 
   private save(): void {
-    this.positions.schedule(this.book, {
-      page: this.page(),
-      offset: this.offset(),
-      zoom: this.zoom(),
-      view: this.view(),
-    });
+    const now = { page: this.page(), offset: this.offset(), zoom: this.zoom(), view: this.view() };
+    const was = this.saved;
+    // Only a real change is saved: re-reporting the restored place must not stamp a newer position.
+    if (
+      was &&
+      was.page === now.page &&
+      was.view === now.view &&
+      was.zoom === now.zoom &&
+      Math.abs(was.offset - now.offset) < OFFSET_TOLERANCE
+    ) {
+      return;
+    }
+    this.saved = now;
+    this.positions.schedule(this.book, now);
   }
 }

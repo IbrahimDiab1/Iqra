@@ -29,6 +29,17 @@ describe('ReaderState', () => {
     expect(positions.schedule).toHaveBeenCalledWith(book, { page: 6, offset: 0, zoom: 1, view: 'page' });
   });
 
+  it('re-reporting the restored place (the scroller does on mount) saves nothing; a real change saves once', () => {
+    const { state, positions } = setup();
+    state.placeChange({ page: 5, offset: 0.251 });
+    state.setZoom(1);
+    expect(positions.schedule).not.toHaveBeenCalled();
+    state.placeChange({ page: 5, offset: 0.4 });
+    expect(positions.schedule).toHaveBeenCalledTimes(1);
+    state.placeChange({ page: 5, offset: 0.4 });
+    expect(positions.schedule).toHaveBeenCalledTimes(1);
+  });
+
   it('a jump pushes history; back and forward walk it', () => {
     const { state } = setup();
     state.jumpTo({ page: 40, offset: 0 });

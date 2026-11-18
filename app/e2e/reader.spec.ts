@@ -337,6 +337,37 @@ test.describe('reader geometry', () => {
     }
   });
 
+  test('scroll mode: reopening without moving does not stamp a newer position', async () => {
+    await openBook(page);
+    await useScrolling(page);
+    const box = (await page.locator('iqra-scroller .viewport').boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, 900);
+    await page.waitForTimeout(1500);
+    const stamp = () =>
+      page.evaluate(
+        () =>
+          new Promise<number[]>((resolve) => {
+            const open = indexedDB.open('iqra');
+            open.onsuccess = () => {
+              const all = open.result.transaction('positions').objectStore('positions').getAll();
+              all.onsuccess = () => resolve((all.result as { updatedAt: number }[]).map((p) => p.updatedAt));
+            };
+          }),
+      );
+    const before = await stamp();
+    expect(before).toHaveLength(1);
+    await page.reload();
+    await expect(page.locator('iqra-scroller')).toBeVisible();
+    await page.waitForTimeout(1800);
+    expect(await stamp()).toEqual(before);
+    // A real scroll does write.
+    const box2 = (await page.locator('iqra-scroller .viewport').boundingBox())!;
+    await page.mouse.move(box2.x + box2.width / 2, box2.y + box2.height / 2);
+    await page.mouse.wheel(0, 900);
+    await expect.poll(async () => (await stamp())[0], { timeout: 5000 }).toBeGreaterThan(before[0]);
+  });
+
   test('with the bars shown, a jumped-to page and reading-mode text start below the top bar', async () => {
     await openBook(page);
     await useScrolling(page);
