@@ -140,7 +140,6 @@ export class GisAuthService extends AuthApi {
 
   private accessToken: string | null = null;
   private expiresAt = 0;
-  private client: TokenClient | null = null;
   private pending: Pending | null = null;
 
   constructor() {
@@ -180,19 +179,16 @@ export class GisAuthService extends AuthApi {
   async reconnect(): Promise<void> {
     const stored = this.profileSignal();
     const grant = await this.requestGrant('', undefined, stored?.email);
-    if (stored) {
-      const picked = await this.fetchProfile(grant.token);
-      if (picked.email.toLowerCase() !== stored.email.toLowerCase()) {
-        this.toast.show(COPY.sync.wrongAccount(picked.email, stored.email));
-        return;
-      }
-    }
+    if (stored && !(await this.isStoredAccount(grant.token, stored))) return;
     this.commit(grant);
   }
 
   async trySilent(): Promise<boolean> {
+    const stored = this.profileSignal();
     try {
-      this.commit(await this.requestGrant('none', SILENT_TIMEOUT_MS, this.profileSignal()?.email));
+      const grant = await this.requestGrant('none', SILENT_TIMEOUT_MS, stored?.email);
+      if (stored && !(await this.isStoredAccount(grant.token, stored))) return false;
+      this.commit(grant);
       return true;
     } catch {
       return false;
@@ -221,7 +217,7 @@ export class GisAuthService extends AuthApi {
 
   /** prompt undefined leaves the prompt to GIS, which shows consent only when needed. */
   private async requestGrant(prompt: string | undefined, timeoutMs?: number, hint?: string): Promise<Grant> {
-    const client = await this.ensureClient();
+    await loadGis();
     return new Promise<Grant>((resolve, reject) => {
       // A new request settles the one before it, so no promise is left hanging.
       const previous = this.pending;
@@ -245,6 +241,29 @@ export class GisAuthService extends AuthApi {
           reject(new AuthCancelledError());
         }, timeoutMs);
       }
+      // One client per request, its callbacks bound to this request: a late reply to an
+      // abandoned request cannot settle or cancel a newer one.
+      const settle = (fn: (p: Pending) => void): void => {
+        if (this.pending !== pending) return;
+        this.pending = null;
+        fn(pending);
+      };
+      const client = window.google!.accounts.oauth2.initTokenClient({
+        client_id: environment.googleClientId,
+        scope: SCOPES,
+        error_callback: () => settle((p) => p.reject(new AuthCancelledError())),
+        callback: (response) =>
+          settle((p) => {
+            if (response.error || !response.access_token) {
+              p.reject(new Error(response.error ?? 'No access token'));
+              return;
+            }
+            p.resolve({
+              token: response.access_token,
+              expiresAt: this.clock.now() + (response.expires_in ?? 0) * 1000 - EXPIRY_MARGIN_MS,
+            });
+          }),
+      });
       const options: { prompt?: string; hint?: string } = {};
       if (prompt !== undefined) options.prompt = prompt;
       if (hint) options.hint = hint;
@@ -252,32 +271,12 @@ export class GisAuthService extends AuthApi {
     });
   }
 
-  private async ensureClient(): Promise<TokenClient> {
-    if (this.client) return this.client;
-    await loadGis();
-    this.client = window.google!.accounts.oauth2.initTokenClient({
-      client_id: environment.googleClientId,
-      scope: SCOPES,
-      error_callback: () => {
-        const pending = this.pending;
-        this.pending = null;
-        pending?.reject(new AuthCancelledError());
-      },
-      callback: (response) => {
-        const pending = this.pending;
-        this.pending = null;
-        if (!pending) return;
-        if (response.error || !response.access_token) {
-          pending.reject(new Error(response.error ?? 'No access token'));
-          return;
-        }
-        pending.resolve({
-          token: response.access_token,
-          expiresAt: this.clock.now() + (response.expires_in ?? 0) * 1000 - EXPIRY_MARGIN_MS,
-        });
-      },
-    });
-    return this.client;
+  /** False, with a toast, when the token belongs to another account than the stored profile. */
+  private async isStoredAccount(token: string, stored: Profile): Promise<boolean> {
+    const picked = await this.fetchProfile(token);
+    if (picked.email.toLowerCase() === stored.email.toLowerCase()) return true;
+    this.toast.show(COPY.sync.wrongAccount(picked.email, stored.email));
+    return false;
   }
 
   private async fetchProfile(token: string): Promise<Profile> {

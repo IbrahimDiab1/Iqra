@@ -20,34 +20,41 @@ const clock = { now: () => now };
 let gis: { failWith: string | null; hang: boolean };
 let prompts: Array<string | undefined>;
 let hints: Array<string | undefined>;
+let configs: TokenConfig[];
 
 /** Stands in for the GIS script: window.google exists, so the loader adds no script tag. */
 function stubGis(): void {
   prompts = [];
   hints = [];
+  configs = [];
   gis = { failWith: null, hang: false };
   (window as unknown as { google: unknown }).google = {
     accounts: {
       oauth2: {
-        initTokenClient: (config: TokenConfig) => ({
-          requestAccessToken: (options: { prompt?: string; hint?: string } = {}) => {
-            prompts.push(options.prompt);
-            hints.push(options.hint);
-            if (gis.hang) return;
-            if (gis.failWith) {
-              config.error_callback({ type: gis.failWith });
-              return;
-            }
-            config.callback({ access_token: `token-${prompts.length}`, expires_in: 3600 });
-          },
-        }),
+        initTokenClient: (config: TokenConfig) => {
+          configs.push(config);
+          return {
+            requestAccessToken: (options: { prompt?: string; hint?: string } = {}) => {
+              prompts.push(options.prompt);
+              hints.push(options.hint);
+              if (gis.hang) return;
+              if (gis.failWith) {
+                config.error_callback({ type: gis.failWith });
+                return;
+              }
+              config.callback({ access_token: `token-${prompts.length}`, expires_in: 3600 });
+            },
+          };
+        },
       },
     },
   };
 }
 
 function createService(): GisAuthService {
-  TestBed.configureTestingModule({ providers: [GisAuthService, { provide: CLOCK, useValue: clock }] });
+  TestBed.configureTestingModule({
+    providers: [GisAuthService, { provide: CLOCK, useValue: clock }],
+  });
   return TestBed.inject(GisAuthService);
 }
 
@@ -57,7 +64,13 @@ describe('GisAuthService', () => {
     stubGis();
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response(JSON.stringify(PROFILE), { status: 200, headers: { 'Content-Type': 'application/json' } })),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify(PROFILE), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ),
     );
   });
 
@@ -153,7 +166,12 @@ describe('GisAuthService', () => {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE));
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response(JSON.stringify({ name: 'Other', email: 'other@example.test' }), { status: 200 })),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ name: 'Other', email: 'other@example.test' }), {
+            status: 200,
+          }),
+      ),
     );
     const auth = createService();
     const toast = TestBed.inject(ToastService);
@@ -163,7 +181,9 @@ describe('GisAuthService', () => {
     expect(auth.token()).toBeNull();
     expect(auth.state()).toBe('expired');
     expect(auth.profile()).toEqual(PROFILE);
-    expect(toast.current()?.message).toBe(COPY.sync.wrongAccount('other@example.test', PROFILE.email));
+    expect(toast.current()?.message).toBe(
+      COPY.sync.wrongAccount('other@example.test', PROFILE.email),
+    );
   });
 
   it('a new token request rejects the one still pending', async () => {
@@ -181,6 +201,61 @@ describe('GisAuthService', () => {
     await auth.reconnect();
 
     expect(await firstSettled).toBe('cancelled');
+    expect(auth.state()).toBe('signed-in');
+  });
+
+  it('a late reply to an abandoned silent request does not cancel a newer reconnect', async () => {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE));
+    gis.hang = true;
+    const auth = createService();
+    const silent = auth.trySilent();
+    await vi.waitFor(() => expect(configs).toHaveLength(1));
+    const reconnect = auth.reconnect();
+    const reconnectSettled = reconnect.then(
+      () => 'resolved',
+      () => 'rejected',
+    );
+    await vi.waitFor(() => expect(configs).toHaveLength(2));
+    await expect(silent).resolves.toBe(false);
+
+    // The abandoned silent request answers late, first with an error, then with a token.
+    configs[0].error_callback({ type: 'popup_closed' });
+    configs[0].callback({ access_token: 'stale', expires_in: 3600 });
+    // The user's popup then answers.
+    configs[1].callback({ access_token: 'fresh', expires_in: 3600 });
+
+    expect(await reconnectSettled).toBe('resolved');
+    expect(auth.token()).toBe('fresh');
+    expect(auth.state()).toBe('signed-in');
+  });
+
+  it('trySilent discards a token for another account, stays expired and toasts', async () => {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ name: 'Other', email: 'other@example.test' }), {
+            status: 200,
+          }),
+      ),
+    );
+    const auth = createService();
+    const toast = TestBed.inject(ToastService);
+
+    await expect(auth.trySilent()).resolves.toBe(false);
+
+    expect(auth.token()).toBeNull();
+    expect(auth.state()).toBe('expired');
+    expect(toast.current()?.message).toBe(
+      COPY.sync.wrongAccount('other@example.test', PROFILE.email),
+    );
+  });
+
+  it('trySilent accepts a token for the stored account', async () => {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE));
+    const auth = createService();
+    await expect(auth.trySilent()).resolves.toBe(true);
     expect(auth.state()).toBe('signed-in');
   });
 });
