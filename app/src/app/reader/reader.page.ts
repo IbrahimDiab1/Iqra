@@ -17,6 +17,8 @@ import { DomSanitizer } from '@angular/platform-browser';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { buildAnchor } from '../annotations/anchor';
 import { AnnotationService, type HighlightColor } from '../annotations/annotation.service';
+import { NoteSheetComponent } from '../annotations/note-sheet.component';
+import { tagSuggestionsFrom } from '../annotations/tag-input.component';
 import { DB } from '../core/db';
 import type { Annotation, Book } from '../core/models';
 import { SettingsService } from '../core/settings.service';
@@ -53,7 +55,7 @@ const SYNC_TOAST_MS = 8000;
 
 @Component({
   selector: 'iqra-reader-page',
-  imports: [RouterLink, BookPanelSheetComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective, SelectionToolbarComponent],
+  imports: [RouterLink, BookPanelSheetComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective, SelectionToolbarComponent, NoteSheetComponent],
   providers: [SelectionService],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -199,6 +201,11 @@ const SYNC_TOAST_MS = 8000;
             (closed)="panel.set(null)"
             (jump)="jump($event)"
           />
+          <iqra-note-sheet
+            [annotation]="noteTarget()"
+            [tagSuggestions]="tagSuggestions()"
+            (closed)="noteTarget.set(null)"
+          />
           <iqra-reading-settings-sheet
             [open]="settingsOpen()"
             [book]="b"
@@ -295,8 +302,10 @@ export class ReaderPage implements OnDestroy {
   private readonly annotationSource = signal<Signal<Annotation[] | undefined> | null>(null);
   /** This book's live annotations. */
   protected readonly annotations = computed(() => this.annotationSource()?.() ?? []);
-  /** The annotation the note sheet (a later task) edits; a freshly created note is put here. */
+  /** The annotation the note sheet edits: a tapped highlight, or a freshly created note. */
   protected readonly noteTarget = signal<Annotation | null>(null);
+  private readonly allAnnotations = this.annotationService.all();
+  protected readonly tagSuggestions = computed(() => tagSuggestionsFrom(this.allAnnotations()));
   protected readonly session = signal<ReaderSession | null>(null);
   protected readonly state = signal<ReaderState | null>(null);
   protected readonly preview = signal<number | null>(null);
@@ -439,9 +448,9 @@ export class ReaderPage implements OnDestroy {
     this.panel.set(which);
   }
 
-  /** A tap on a highlight; the note sheet (a later task) handles it. */
-  protected onAnnotationTap(_a: Annotation): void {
-    // Wired by the note sheet.
+  /** A tap on a highlight opens its note sheet. */
+  protected onAnnotationTap(a: Annotation): void {
+    this.noteTarget.set(a);
   }
 
   private async anchorOf(sel: PendingSelection) {

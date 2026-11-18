@@ -87,5 +87,12 @@ export const COPY = {
     noNotes: 'No notes yet. Select text to highlight it.',
     filters: { all: 'All', highlights: 'Highlights', notes: 'Notes', summaries: 'Summaries', areas: 'Areas' },
     pageShort: (p: number) => `p. ${p}`,
+    removeTag: (t: string) => `Remove tag ${t}`,
+    suggestedTags: 'Suggested tags',
+    showMore: 'Show more',
+    showLess: 'Show less',
+    colorLabel: 'Color',
+    scopeBook: 'Whole book',
+    pageRange: (a: number, b: number) => `p. ${a}–${b}`,
   },
 } as const;

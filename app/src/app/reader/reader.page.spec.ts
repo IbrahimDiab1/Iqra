@@ -418,5 +418,56 @@ describe('ReaderPage', () => {
       toast.undo();
       await vi.waitFor(async () => expect((await stored()).filter((r) => !r.deleted)).toHaveLength(0));
     });
+
+    it('Note creates a note, opens the sheet focused, and closing it empty removes the note', async () => {
+      await create();
+      fixture.detectChanges();
+      el.querySelector<HTMLButtonElement>('iqra-selection-toolbar button.note')!.click();
+      await vi.waitFor(async () => expect(await stored()).toHaveLength(1));
+      const [n] = await stored();
+      expect(n).toMatchObject({ type: 'note', page: 7, bookId: 'book-1' });
+      expect(fakeSelection.clear).toHaveBeenCalled();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-note-sheet .panel.open')).not.toBeNull();
+        expect(document.activeElement).toBe(el.querySelector('iqra-note-sheet textarea'));
+      });
+      expect(el.querySelector('iqra-note-sheet .quote')!.textContent).toContain('Hello');
+      el.querySelector<HTMLButtonElement>('iqra-note-sheet button.close')!.click();
+      await vi.waitFor(async () => expect((await stored()).filter((r) => !r.deleted)).toHaveLength(0));
+      fixture.detectChanges();
+      expect(el.querySelector('iqra-note-sheet .panel.open')).toBeNull();
+    });
+
+    it('Note, typing and closing keeps the note with its text', async () => {
+      await create();
+      fixture.detectChanges();
+      el.querySelector<HTMLButtonElement>('iqra-selection-toolbar button.note')!.click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-note-sheet textarea')).not.toBeNull();
+      });
+      const ta = el.querySelector<HTMLTextAreaElement>('iqra-note-sheet textarea')!;
+      ta.value = 'worth remembering';
+      ta.dispatchEvent(new Event('input'));
+      el.querySelector<HTMLButtonElement>('iqra-note-sheet button.close')!.click();
+      await vi.waitFor(async () => expect((await stored())[0].body).toBe('worth remembering'));
+      expect((await stored())[0].deleted).toBeFalsy();
+    });
+
+    it('tapping a highlight opens its note sheet', async () => {
+      await create();
+      fakeSelection.pending.set(null);
+      const rec = await TestBed.inject(AnnotationService).create({
+        bookId: 'book-1', type: 'highlight', page: 7, color: 'pink', tags: [],
+        text: { page: 7, start: { item: 0, offset: 0 }, end: { item: 0, offset: 5 }, rects: [], quote: 'Hello' },
+      });
+      pager().annotationTap.emit(rec);
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-note-sheet .panel.open')).not.toBeNull();
+      });
+      expect(el.querySelector('iqra-note-sheet .quote')!.textContent).toContain('Hello');
+    });
   });
 });
