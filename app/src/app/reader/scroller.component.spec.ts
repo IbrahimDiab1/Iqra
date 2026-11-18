@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import type { Place } from './jump-history';
 import { PageRenderer, PageSize } from './pdf-session';
 import { ScrollerComponent } from './scroller.component';
-import { currentPageAt } from './virtualize';
+import { placeAtTop } from './virtualize';
 
 const VIEW_W = 400;
 const VIEW_H = 800;
@@ -105,10 +105,11 @@ describe('ScrollerComponent', () => {
     await create();
     await scrollTo(5000);
     const pages = renderedPages();
-    const expectedCentre = Math.floor((5000 + VIEW_H / 2) / (RATIO * VIEW_W + GAP)) + 1;
-    expect(pages).toContain(expectedCentre);
+    // The place is anchored at the top of the viewport: 5000 / 612 lies in page 9 (tops are multiples of 612).
+    const expectedTop = Math.floor(5000 / (RATIO * VIEW_W + GAP)) + 1;
+    expect(pages).toContain(expectedTop);
     expect(pages).not.toContain(1);
-    await vi.waitFor(() => expect(host.places[host.places.length - 1]?.page).toBe(expectedCentre));
+    await vi.waitFor(() => expect(host.places[host.places.length - 1]?.page).toBe(expectedTop));
   });
 
   it('a fast scroll through 50 pages never keeps more than visible + overscan canvases', async () => {
@@ -136,6 +137,38 @@ describe('ScrollerComponent', () => {
     expect(viewport().scrollTop).toBeCloseTo(9 * (RATIO * VIEW_W + GAP), 0);
   });
 
+  it('scrollTo then the reported place is the same place (no drift), at offset 0.5 and 0', async () => {
+    await create();
+    const scroller = fixture.debugElement.children[0].componentInstance as ScrollerComponent;
+    for (const place of [{ page: 20, offset: 0.5 }, { page: 21, offset: 0 }, { page: 9, offset: 0.99 }]) {
+      host.places.length = 0;
+      scroller.scrollTo(place);
+      await vi.waitFor(() => expect(host.places.length).toBeGreaterThan(0));
+      const got = host.places[host.places.length - 1];
+      expect(got.page).toBe(place.page);
+      expect(got.offset).toBeCloseTo(place.offset, 2);
+    }
+  });
+
+  it('short pages (shorter than half the viewport) do not advance on repeated reopen', async () => {
+    await create();
+    const scroller = fixture.debugElement.children[0].componentInstance as ScrollerComponent;
+    // At zoom 0.4 a page is 240 px tall, under half of the 800 px viewport.
+    host.zoom.set(0.4);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(Number(el.querySelector('.column')?.getAttribute('style')?.match(/height: (\d+)/)?.[1])).toBeLessThan(100 * 300));
+    await new Promise((r) => setTimeout(r, 250));
+    let place: Place = { page: 20, offset: 0.5 };
+    for (let i = 0; i < 3; i++) {
+      host.places.length = 0;
+      scroller.scrollTo(place);
+      await vi.waitFor(() => expect(host.places.length).toBeGreaterThan(0));
+      place = host.places[host.places.length - 1];
+      expect(place.page).toBe(20);
+      expect(place.offset).toBeCloseTo(0.5, 2);
+    }
+  });
+
   it('zooming keeps the page under the viewport centre', async () => {
     await create();
     await scrollTo(3000);
@@ -143,7 +176,7 @@ describe('ScrollerComponent', () => {
       const h = RATIO * VIEW_W * zoom;
       const n = 100;
       const tops = Array.from({ length: n }, (_, i) => i * (h + GAP));
-      return currentPageAt({ scrollTop: viewport().scrollTop, viewportH: VIEW_H, tops, heights: Array(n).fill(h) }).index;
+      return placeAtTop({ scrollTop: viewport().scrollTop + VIEW_H / 2, tops, heights: Array(n).fill(h) }).index;
     };
     const before = at(1);
     host.zoom.set(2);

@@ -21,20 +21,21 @@ export function visibleRange(o: {
   return { first, last };
 }
 
-/** The page covering the viewport centre, and the scroll position within it (0..1). */
-export function currentPageAt(o: {
-  scrollTop: number;
-  viewportH: number;
-  tops: number[];
-  heights: number[];
-}): { index: number; offset: number } {
-  const centre = o.scrollTop + o.viewportH / 2;
-  let index = 0;
-  for (let i = 0; i < o.tops.length; i++) {
-    if (o.tops[i] <= centre) index = i;
+/**
+ * The place at the reading line, which is the top of the viewport content: the page whose box contains
+ * `scrollTop` and how far down it that is (0..1). In the gap between two pages it is the next page at offset 0.
+ * `top + offset * height` of the result is the inverse (exact except inside a gap).
+ */
+export function placeAtTop(o: { scrollTop: number; tops: number[]; heights: number[] }): { index: number; offset: number } {
+  const n = o.tops.length;
+  if (n === 0) return { index: 0, offset: 0 };
+  for (let i = 0; i < n; i++) {
+    const bottom = o.tops[i] + o.heights[i];
+    if (o.scrollTop < o.tops[i]) return { index: i, offset: 0 };
+    if (o.scrollTop < bottom) {
+      const height = o.heights[i] || 1;
+      return { index: i, offset: Math.min(1, Math.max(0, (o.scrollTop - o.tops[i]) / height)) };
+    }
   }
-  const top = o.tops[index] ?? 0;
-  const height = o.heights[index] || 1;
-  const offset = Math.min(1, Math.max(0, (o.scrollTop - top) / height));
-  return { index, offset };
+  return { index: n - 1, offset: 1 };
 }

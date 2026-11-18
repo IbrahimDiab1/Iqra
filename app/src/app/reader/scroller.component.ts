@@ -17,7 +17,7 @@ import {
 import type { Place } from './jump-history';
 import { PageViewComponent, type PageTheme } from './page-view.component';
 import type { PageRenderer } from './pdf-session';
-import { currentPageAt, visibleRange } from './virtualize';
+import { placeAtTop, visibleRange } from './virtualize';
 import { ZoomGesturesDirective } from './zoom-gestures.directive';
 
 const GAP_PX = 12;
@@ -70,7 +70,7 @@ const DEFAULT_RATIO = 1.414;
   `,
   styles: `
     :host { display: block; width: 100%; height: 100%; }
-    .viewport { width: 100%; height: 100%; overflow: auto; overscroll-behavior: contain; touch-action: pan-x pan-y; }
+    .viewport { box-sizing: border-box; width: 100%; height: 100%; overflow: auto; overscroll-behavior: contain; touch-action: pan-x pan-y; padding-top: var(--reader-top, 0px); padding-bottom: var(--reader-bottom, 0px); }
     .column { position: relative; margin: 0 auto; }
     .page { position: absolute; }
   `,
@@ -230,6 +230,15 @@ export class ScrollerComponent implements OnDestroy {
     this.sync();
   }
 
+  /**
+   * The space the top bar takes (padding on the viewport). Content coordinate c sits at viewport y = topPad + c - scrollTop,
+   * so the reading line just below the bar is exactly c = scrollTop and the padding cancels out of scrollTo and the place.
+   */
+  private topPad(): number {
+    const el = this.viewport().nativeElement;
+    return typeof getComputedStyle === 'function' ? parseFloat(getComputedStyle(el).paddingTop) || 0 : 0;
+  }
+
   private async sizeOf(renderer: PageRenderer, page: number): Promise<number | undefined> {
     try {
       const s = await renderer.pageSize(page);
@@ -267,7 +276,7 @@ export class ScrollerComponent implements OnDestroy {
     const heights = this.heights();
     if (index >= tops.length) return;
     const el = this.viewport().nativeElement;
-    el.scrollTop = Math.max(0, tops[index] + frac * heights[index] - el.clientHeight / 2);
+    el.scrollTop = Math.max(0, tops[index] + frac * heights[index] - el.clientHeight / 2 + this.topPad());
     this.sync();
   }
 
@@ -288,11 +297,13 @@ export class ScrollerComponent implements OnDestroy {
     const tops = this.tops();
     const heights = this.heights();
     if (tops.length === 0) return;
-    const centre = currentPageAt({ scrollTop: top + el.clientHeight / 2, viewportH: 0, tops, heights });
+    // The page under the viewport centre, for keeping the view still while zooming.
+    const centre = placeAtTop({ scrollTop: top + el.clientHeight / 2 - this.topPad(), tops, heights });
     this.anchor = { index: centre.index, frac: centre.offset };
     clearTimeout(this.placeTimer);
     this.placeTimer = setTimeout(() => {
-      const at = currentPageAt({ scrollTop: el.scrollTop, viewportH: el.clientHeight, tops: this.tops(), heights: this.heights() });
+      // The reading line is the top of the content area, so the place is simply the content coordinate scrollTop.
+      const at = placeAtTop({ scrollTop: el.scrollTop, tops: this.tops(), heights: this.heights() });
       this.placeChange.emit({ page: at.index + 1, offset: at.offset });
     }, PLACE_DEBOUNCE_MS);
   }
