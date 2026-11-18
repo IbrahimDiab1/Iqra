@@ -2,6 +2,7 @@
 :root {
   --ui: "Instrument Sans", "IBM Plex Sans Arabic", system-ui, sans-serif;
   --book: "Literata Variable", "IBM Plex Sans Arabic", Georgia, serif;
+  --display-ar: "Aref Ruqaa", "Amiri", "Noto Naskh Arabic", "Segoe UI", Tahoma, serif;
   --ar: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
 
   --bg: #E9ECEA;

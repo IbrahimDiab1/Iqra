@@ -1,7 +1,27 @@
 export const COPY = {
-  welcome: { title: 'Your books, on every device', body: 'Iqra keeps your PDFs in your own Google Drive and your notes in sync. Reading always works offline.', cta: 'Continue with Google', offline: 'Connect to the internet once to sign in. After that, Iqra works offline.' },
+  welcome: {
+    title: 'Your library, in your own Google Drive',
+    body: 'Read PDFs on your phone and your PC. Your page, highlights and notes follow you everywhere, and everything works offline.',
+    meaning: 'Iqra means “read” in Arabic.',
+    cta: 'Continue with Google',
+    busy: 'Opening Google…',
+    trust: 'Iqra can only open the files it creates in your Drive. It has no server and never sees your other files.',
+    cancelled: 'Sign-in didn’t finish. Try again when you’re ready.',
+    offline: 'Connect to the internet once to sign in. After that, Iqra works offline.',
+    warningTitle: 'Seeing a Google warning?',
+    warningBody: 'Google may say it hasn’t verified Iqra. That’s expected for a personal app. Choose Advanced, then Go to Iqra. Iqra only asks for access to the files it creates.',
+    features: [
+      { icon: 'cloud', title: 'Your Drive, your books', text: 'PDFs are stored in your own Google Drive. No new storage to pay for.' },
+      { icon: 'bookmark', title: 'Pick up where you left off', text: 'Your page, highlights and notes follow you from phone to PC.' },
+      { icon: 'wifiOff', title: 'Works offline', text: 'Downloaded books open anywhere, with no signal.' },
+      { icon: 'translate', title: 'Made for Arabic and English', text: 'Right-to-left titles, notes and search feel native.' },
+    ],
+    previewNote: 'The question the whole book is trying to answer.',
+    footer: 'Free and open source.',
+    source: 'View the code on GitHub',
+  },
   sync: { synced: 'Synced with Google Drive', saving: 'Saved on this device · syncing', offline: 'Offline · changes are saved on this device', paused: 'Sync paused · Tap to reconnect', error: 'Sync failed · Tap to retry', unreadable: (name: string) => `${name} can't be read. It may have been made by a newer version of Iqra.`, driveFull: 'Your Google Drive is full. Free up space to keep syncing.', wrongAccount: (other: string, stored: string) => `You picked ${other}. Iqra is linked to ${stored}.` },
-  library: { title: 'Library', add: 'Add PDF', tabs: { reading: 'Reading', 'to-read': 'To read', finished: 'Finished', all: 'All' }, paused: 'Paused', upNext: 'Up next', continue: 'Continue reading', resume: 'Resume', filter: 'Filter', sort: 'Sort', emptyAll: 'No books yet. Add a PDF to start your library.', emptyFiltered: 'No books match these filters.', clearFilters: 'Clear filters', uploadingElsewhere: 'Uploading from another device', notStarted: 'Not started', finished: 'Finished', settings: 'Settings', search: 'Search library', searchPlaceholder: 'Title or author', notDownloaded: 'Not downloaded', reorder: 'Reorder', removeFilter: (name: string) => `Remove filter ${name}`, sortBy: 'Sort by', dropHint: 'Drop PDFs to add them to your library' },
+  library: { title: 'Library', add: 'Add PDF', tabs: { reading: 'Reading', 'to-read': 'To read', finished: 'Finished', all: 'All' }, paused: 'Paused', upNext: 'Up next', continue: 'Continue reading', resume: 'Resume', filter: 'Filter', sort: 'Sort', emptyTitle: 'Your library is empty', emptyBody: 'Add a PDF and Iqra saves it to your Drive and opens it on every device.', addFirst: 'Add your first PDF', emptyDropHint: 'You can also drop PDF files anywhere on this page.', emptyFiltered: 'No books match these filters.', clearFilters: 'Clear filters', uploadingElsewhere: 'Uploading from another device', notStarted: 'Not started', finished: 'Finished', settings: 'Settings', search: 'Search library', searchPlaceholder: 'Title or author', notDownloaded: 'Not downloaded', reorder: 'Reorder', removeFilter: (name: string) => `Remove filter ${name}`, sortBy: 'Sort by', dropHint: 'Drop PDFs to add them to your library' },
   sort: { 'recent-read': 'Recently read', 'recent-added': 'Recently added', progress: 'Progress', priority: 'Priority', rating: 'Rating', title: 'Title' },
   filter: { title: 'Filter', categories: 'Categories', tags: 'Tags', minRating: 'Minimum rating', downloadedOnly: 'Downloaded only', apply: 'Show books', reset: 'Reset', any: 'Any' },
   import: { duplicate: (n: string) => `${n} is already in your library`, unreadable: (n: string) => `${n} couldn't be added: it isn't a readable PDF.`, importFailedMany: (names: string[]) => `${names.length} files couldn't be added: ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` and ${names.length - 3} more` : ''}.`, added: (c: number) => c === 1 ? 'Book added' : `${c} books added`, uploading: (p: number) => `Uploading to Drive · ${p}%` },
@@ -13,5 +33,5 @@ export const COPY = {
   reader: { loading: 'Loading…', failed: 'This book couldn\'t be opened.', back: 'Back to library', pageOf: (n: number) => `Page 1 of ${n}` },
   // Added in Task 2 for the app shell and placeholder pages.
   nav: { library: 'Library', notes: 'Notes', stats: 'Stats' },
-  placeholder: { soon: 'Coming soon' },
+  placeholder: { soon: 'Coming soon', notesNext: 'Highlights and notes arrive next.', statsNext: 'Stats arrive after the reader.', notesTitle: 'Notes', notesText: 'Every highlight, note and summary from all your books, searchable in one place.', statsTitle: 'Stats', statsText: 'Your reading time, pages and weekly goals.' },
 } as const;

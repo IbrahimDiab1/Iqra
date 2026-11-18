@@ -15,7 +15,7 @@ interface E2eWindow {
 async function openDevice(context: BrowserContext): Promise<Page> {
   const page = await context.newPage();
   await page.goto('/library');
-  await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
   return page;
 }
 

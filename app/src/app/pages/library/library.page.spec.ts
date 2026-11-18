@@ -136,6 +136,15 @@ describe('LibraryPage', () => {
     expect(el.querySelector('[aria-label="Remove filter Fiqh"]')).toBeNull();
   });
 
+  it('shows the first-run empty state and its button opens the file picker', async () => {
+    await create();
+    await waitFor(() => el.textContent!.includes(COPY.library.emptyTitle));
+    const input = el.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const click = vi.spyOn(input, 'click');
+    button(COPY.library.addFirst).click();
+    expect(click).toHaveBeenCalled();
+  });
+
   it('shows the filtered empty state with a way to clear the filters', async () => {
     await seed([reading, paused, toRead]);
     await create();

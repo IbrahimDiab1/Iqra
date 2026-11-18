@@ -20,7 +20,8 @@ export const appConfig: ApplicationConfig = {
       const sync = inject(SyncEngine);
       if (environment.fakeDrive) {
         // e2e only: start signed in, and expose the engine and fake Drive to the tests.
-        void auth.signIn();
+        // ?signed-out leaves it signed out so /welcome can be opened.
+        if (!location.search.includes('signed-out')) void auth.signIn();
         exposeE2eHandles({ __iqraSync: sync, __iqraDrive: inject(DRIVE_ADAPTER) as FakeDrive });
       }
       auth.preload();

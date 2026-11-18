@@ -186,11 +186,21 @@ function isPdf(file: File): boolean {
       }
 
       @if (noBooks()) {
-        <div class="empty">
-          <p>{{ copy.emptyAll }}</p>
-          <button type="button" class="add" (click)="pickFiles()">
-            <span [innerHTML]="uploadIcon"></span>{{ copy.add }}
+        <div class="empty first">
+          <svg class="art" width="120" height="96" viewBox="0 0 120 96" aria-hidden="true">
+            <rect x="14" y="26" width="18" height="64" rx="3" fill="var(--accent)" opacity=".55"/>
+            <rect x="36" y="14" width="20" height="76" rx="3" fill="var(--accent)"/>
+            <rect x="60" y="30" width="18" height="60" rx="3" fill="var(--accent)" opacity=".35" transform="rotate(-6 69 90)"/>
+            <rect x="84" y="34" width="26" height="40" rx="3" fill="var(--surface)" stroke="var(--line)" stroke-width="2" transform="rotate(8 97 54)"/>
+            <rect x="89" y="46" width="16" height="7" rx="2" fill="var(--hl-yellow)" transform="rotate(8 97 54)"/>
+            <path d="M4 91h112" stroke="var(--line)" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <h2>{{ copy.emptyTitle }}</h2>
+          <p>{{ copy.emptyBody }}</p>
+          <button type="button" class="add big" (click)="pickFiles()">
+            <span [innerHTML]="uploadIcon"></span>{{ copy.addFirst }}
           </button>
+          <p class="hint">{{ copy.emptyDropHint }}</p>
         </div>
       } @else if (noMatches()) {
         <div class="empty">
@@ -426,6 +436,12 @@ function isPdf(file: File): boolean {
       text-align: center;
     }
     .empty p { margin: 0 0 14px; }
+    .first { display: flex; flex-direction: column; align-items: center; padding-top: 56px; }
+    .first .art { margin-bottom: 20px; }
+    .first h2 { margin: 0 0 8px; color: var(--fg); font-family: var(--book); font-size: 22px; font-weight: 600; }
+    .first p { max-width: 36ch; }
+    .big { min-height: 48px; padding: 10px 20px; margin: 4px 0 14px; font-size: 15px; }
+    .first .hint { margin: 0; font-size: 13px; }
     .link {
       min-height: 40px;
       padding: 8px;

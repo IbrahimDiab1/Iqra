@@ -17,7 +17,7 @@ interface Tab {
 }
 
 // Welcome and the reader are full-screen: no tab bar there.
-const TABLESS_ROUTE = /^\/(welcome|read)(\/|$)/;
+const TABLESS_ROUTE = /^\/(welcome|read)(?:[/?#]|$)/;
 
 @Component({
   imports: [
