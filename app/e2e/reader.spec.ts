@@ -282,12 +282,19 @@ test.describe('reader geometry', () => {
     await page.mouse.move(slotBox.x + slotBox.width / 2, slotBox.y + slotBox.height / 2);
     await page.mouse.wheel(0, 5000);
     const bottomBar = (await page.locator('.r-bottom').boundingBox())!;
+    // The bar-space padding eases in at open, so wait until it has settled and the slot is at its end.
     await expect
-      .poll(async () => {
-        const b = (await canvas.boundingBox())!;
-        return b.y + b.height <= bottomBar.y + 1;
-      })
+      .poll(() =>
+        slot.evaluate((el) => {
+          const pad = parseFloat(getComputedStyle(el).paddingBottom);
+          return pad > 0 && Number.isInteger(pad) && el.scrollTop >= el.scrollHeight - el.clientHeight - 1;
+        }),
+      )
       .toBe(true);
+    // The page height is fractional (1813.33 px) and scrollTop is not, so the edge may sit up to a pixel or two low.
+    const edge = (await canvas.boundingBox())!;
+    expect(edge.y + edge.height).toBeLessThanOrEqual(bottomBar.y + 2);
+    expect(edge.y + edge.height).toBeGreaterThan(slotBox.y + slotBox.height - bottomBar.height - 4);
 
     // Turning the page puts the new page back at its top.
     await page.keyboard.press('ArrowRight');
