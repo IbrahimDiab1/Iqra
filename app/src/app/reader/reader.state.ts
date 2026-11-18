@@ -7,6 +7,7 @@ import { clampZoom } from './zoom';
 type View = 'page' | 'reflow';
 
 const CHROME_TAP_GAP_MS = 350;
+const FLASH_MS = 1200;
 /** A place report closer than this to the last saved offset is not a change (the scroller reports on mount). */
 const OFFSET_TOLERANCE = 0.005;
 
@@ -18,6 +19,8 @@ export class ReaderState {
   readonly view = signal<View>('page');
   readonly chrome = signal(true);
   readonly lastCustomZoom = signal(1);
+  /** The annotation id whose rects pulse after a jump to it. */
+  readonly flash = signal<string | null>(null);
 
   readonly place = computed<Place>(() => ({ page: this.page(), offset: this.offset() }));
 
@@ -30,6 +33,7 @@ export class ReaderState {
   private inactiveZoom = 1;
   /** What was last restored or handed to the position service. */
   private saved: { page: number; offset: number; zoom: number; view: View } | undefined;
+  private flashTimer: ReturnType<typeof setTimeout> | undefined;
   private lastChromeTap = Number.NEGATIVE_INFINITY;
 
   constructor(
@@ -96,6 +100,13 @@ export class ReaderState {
     this.inactiveZoom = previous;
     this.view.set(view);
     this.save();
+  }
+
+  /** Pulses an annotation for 1.2 s. */
+  flashAnnotation(id: string): void {
+    clearTimeout(this.flashTimer);
+    this.flash.set(id);
+    this.flashTimer = setTimeout(() => this.flash.set(null), FLASH_MS);
   }
 
   /** Shows or hides the bars; a tap right after another (a double tap) is ignored. */

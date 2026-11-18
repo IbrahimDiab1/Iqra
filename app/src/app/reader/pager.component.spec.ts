@@ -13,6 +13,9 @@ class FakeRenderer implements PageRenderer {
       signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))),
     );
   }
+  renderTextLayer(): Promise<void> {
+    return Promise.resolve();
+  }
   async textItems() {
     return [];
   }

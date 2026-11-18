@@ -14,9 +14,11 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
+import type { Annotation } from '../core/models';
 import type { Place } from './jump-history';
 import { PageViewComponent, type PageTheme } from './page-view.component';
 import type { PageRenderer } from './pdf-session';
+import { annotationsByPage } from './annotations-by-page';
 import { placeAtTop, visibleRange } from './virtualize';
 import { ZoomGesturesDirective } from './zoom-gestures.directive';
 
@@ -61,6 +63,10 @@ const DEFAULT_RATIO = 1.414;
                 [fitWidthPx]="fitWidth()"
                 [zoom]="zoom()"
                 [theme]="theme()"
+                [annotations]="onPage(box.index + 1)"
+                [flashId]="flashId()"
+                (annotationTap)="annotationTap.emit($event)"
+                (pageTap)="tap.emit()"
               />
             }
           </div>
@@ -82,7 +88,15 @@ export class ScrollerComponent implements OnDestroy {
   readonly theme = input<PageTheme>('paper');
   readonly placeChange = output<Place>();
   readonly zoomChange = output<number>();
+  readonly annotations = input<Annotation[]>([]);
+  readonly flashId = input<string | null>(null);
+  readonly annotationTap = output<Annotation>();
   readonly tap = output<void>();
+
+  private readonly byPage = computed(() => annotationsByPage(this.annotations()));
+  protected onPage(page: number): Annotation[] {
+    return this.byPage().get(page) ?? [];
+  }
 
   private readonly viewport = viewChild.required<ElementRef<HTMLElement>>('viewport');
   private readonly injector = inject(Injector);
@@ -318,7 +332,8 @@ export class ScrollerComponent implements OnDestroy {
     this.press = undefined;
     if (!p || p.id !== e.pointerId) return;
     if (Math.hypot(e.clientX - p.x, e.clientY - p.y) < TAP_MAX_MOVE_PX && performance.now() - p.t < TAP_MAX_MS) {
-      this.tap.emit();
+      // A tap on a page is the page view's to interpret (highlight, word, or bars); it re-emits through pageTap.
+      if (!(e.target as Element | null)?.closest?.('iqra-page-view')) this.tap.emit();
     }
   }
 }

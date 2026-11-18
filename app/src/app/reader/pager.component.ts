@@ -14,10 +14,12 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import type { Annotation } from '../core/models';
 import { resolveSwipe } from './gestures';
 import { isReaderKeyIgnored } from './keys';
 import { PageViewComponent, type PageTheme } from './page-view.component';
 import type { PageRenderer } from './pdf-session';
+import { annotationsByPage } from './annotations-by-page';
 
 const SWIPE_MAX_ZOOM = 1.05;
 const ANIMATION_MS = 220;
@@ -53,6 +55,10 @@ interface Slot {
             [fitWidthPx]="width()"
             [zoom]="zoom()"
             [theme]="theme()"
+            [annotations]="onPage(page())"
+            [flashId]="flashId()"
+            (annotationTap)="annotationTap.emit($event)"
+            (pageTap)="tap.emit()"
           />
         </div>
       } @else {
@@ -71,6 +77,10 @@ interface Slot {
                   [fitWidthPx]="width()"
                   [zoom]="zoom()"
                   [theme]="theme()"
+                  [annotations]="onPage(slot.page)"
+                  [flashId]="flashId()"
+                  (annotationTap)="annotationTap.emit($event)"
+                  (pageTap)="tap.emit()"
                 />
               }
             </div>
@@ -102,7 +112,15 @@ export class PagerComponent implements OnDestroy {
   readonly theme = input<PageTheme>('paper');
   readonly pageChange = output<number>();
   readonly zoomChange = output<number>();
+  readonly annotations = input<Annotation[]>([]);
+  readonly flashId = input<string | null>(null);
+  readonly annotationTap = output<Annotation>();
   readonly tap = output<void>();
+
+  private readonly byPage = computed(() => annotationsByPage(this.annotations()));
+  protected onPage(page: number): Annotation[] {
+    return this.byPage().get(page) ?? [];
+  }
 
   protected readonly animationMs = ANIMATION_MS;
   private readonly viewport = viewChild.required<ElementRef<HTMLElement>>('viewport');
@@ -230,7 +248,8 @@ export class PagerComponent implements OnDestroy {
 
     if (Math.abs(dx) < TAP_MAX_MOVE_PX && Math.abs(dy) < TAP_MAX_MOVE_PX && dtMs < TAP_MAX_MS) {
       this.offset.set(0);
-      this.tap.emit();
+      // A tap on a page is the page view's to interpret (highlight, word, or bars); it re-emits through pageTap.
+      if (!(e.target as Element | null)?.closest?.('iqra-page-view')) this.tap.emit();
       return;
     }
     if (this.zoomed() || !wasDragging) {

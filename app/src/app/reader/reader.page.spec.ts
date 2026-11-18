@@ -27,8 +27,11 @@ class FakeSession implements PageRenderer {
       signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))),
     );
   }
+  renderTextLayer(): Promise<void> {
+    return Promise.resolve();
+  }
   async textItems() {
-    return [];
+    return [{ str: 'Hello world', width: 100, height: 10, transform: [1, 0, 0, 1, 20, 500] }] as never;
   }
   async pageText() {
     return '';

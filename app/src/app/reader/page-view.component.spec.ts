@@ -1,6 +1,7 @@
 import { Component, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { COPY } from '../ui/copy';
+import type { Annotation } from '../core/models';
 import { PageRenderer, PageSize } from './pdf-session';
 import { PageViewComponent } from './page-view.component';
 
@@ -36,6 +37,9 @@ class FakeRenderer implements PageRenderer {
   async pageText() {
     return '';
   }
+  renderTextLayer(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 @Component({
@@ -46,7 +50,10 @@ class FakeRenderer implements PageRenderer {
     [fitWidthPx]="fit()"
     [zoom]="zoom()"
     [theme]="theme()"
+    [annotations]="anns()"
     (rendered)="done.push($event)"
+    (annotationTap)="taps.push($event)"
+    (pageTap)="pageTaps = pageTaps + 1"
   />`,
 })
 class HostComponent {
@@ -56,6 +63,9 @@ class HostComponent {
   zoom = signal(1);
   theme = signal<'paper' | 'sepia' | 'night'>('paper');
   done: number[] = [];
+  anns = signal<Annotation[]>([]);
+  taps: Annotation[] = [];
+  pageTaps = 0;
 }
 
 describe('PageViewComponent', () => {
@@ -165,5 +175,59 @@ describe('PageViewComponent', () => {
     host.theme.set('sepia');
     await settle();
     expect(canvas.style.filter).toContain('sepia(');
+  });
+  describe('taps on the text layer', () => {
+    const highlight = {
+      id: 'h1',
+      bookId: 'b',
+      type: 'highlight',
+      page: 1,
+      color: 'yellow',
+      text: { page: 1, start: { item: 0, offset: 0 }, end: { item: 0, offset: 3 }, quote: 'abc', rects: [{ x: 0.1, y: 0.1, w: 0.3, h: 0.1 }] },
+      tags: [],
+      createdAt: 1,
+      updatedAt: 1,
+      deviceId: 'd',
+      deleted: false,
+    } as Annotation;
+
+    function click(xFrac: number, yFrac: number) {
+      const box = el.querySelector('.box') as HTMLElement;
+      box.getBoundingClientRect = () => ({ left: 10, top: 20, width: 400, height: 560, right: 410, bottom: 580, x: 10, y: 20, toJSON: () => ({}) }) as DOMRect;
+      const layer = el.querySelector('.text-layer') as HTMLElement;
+      layer.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 10 + 400 * xFrac, clientY: 20 + 560 * yFrac }));
+    }
+
+    beforeEach(async () => {
+      host.anns.set([highlight]);
+      await settle();
+    });
+
+    it('emits annotationTap for a collapsed selection over a highlight', () => {
+      click(0.2, 0.15);
+      expect(host.taps.map((a) => a.id)).toEqual(['h1']);
+      expect(host.pageTaps).toBe(0);
+    });
+
+    it('emits pageTap elsewhere', () => {
+      click(0.8, 0.8);
+      expect(host.taps).toEqual([]);
+      expect(host.pageTaps).toBe(1);
+    });
+
+    it('emits neither while text is selected', () => {
+      const p = document.createElement('p');
+      p.textContent = 'selected';
+      el.appendChild(p);
+      const range = document.createRange();
+      range.selectNodeContents(p);
+      const sel = window.getSelection()!;
+      sel.removeAllRanges();
+      sel.addRange(range);
+      click(0.2, 0.15);
+      sel.removeAllRanges();
+      expect(host.taps).toEqual([]);
+      expect(host.pageTaps).toBe(0);
+    });
   });
 });

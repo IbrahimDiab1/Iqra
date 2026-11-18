@@ -316,7 +316,7 @@ test.describe('reader geometry', () => {
         return Number(/^\s*(\d+) of/.exec(text)?.[1] ?? 0);
       })
       .toBeGreaterThanOrEqual(3);
-    const pageEl = page.locator('iqra-scroller [data-page="3"]');
+    const pageEl = page.locator('iqra-scroller .page[data-page="3"]');
     const h = (await pageEl.boundingBox())!.height;
     for (let i = 0; i < 20; i++) {
       const b = (await pageEl.boundingBox())!;
@@ -383,7 +383,7 @@ test.describe('reader geometry', () => {
     await expectPageLabel(page, 9);
     const topBar = (await page.locator('.r-top').boundingBox())!;
     const barBottom = topBar.y + topBar.height;
-    const target = page.locator('iqra-scroller [data-page="9"]');
+    const target = page.locator('iqra-scroller .page[data-page="9"]');
     await expect.poll(async () => (await target.boundingBox())!.y).toBeGreaterThanOrEqual(barBottom - 1);
     await expect.poll(async () => (await target.boundingBox())!.y).toBeLessThan(barBottom + 40);
 

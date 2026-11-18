@@ -14,6 +14,7 @@ class FakeRenderer implements PageRenderer {
     return { widthPt: 500, heightPt: 700 };
   }
   async renderPage(): Promise<void> {}
+  async renderTextLayer(): Promise<void> {}
   async textItems(page: number): Promise<TextItem[]> {
     const v = this.pages.get(page) ?? [];
     if (v instanceof Error) throw v;

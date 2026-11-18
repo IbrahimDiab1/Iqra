@@ -92,4 +92,19 @@ describe('ReaderState', () => {
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
+
+  it('flashAnnotation sets the id and clears it after 1200 ms', () => {
+    vi.useFakeTimers();
+    try {
+      const { state } = setup();
+      state.flashAnnotation('a1');
+      expect(state.flash()).toBe('a1');
+      vi.advanceTimersByTime(1199);
+      expect(state.flash()).toBe('a1');
+      vi.advanceTimersByTime(2);
+      expect(state.flash()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

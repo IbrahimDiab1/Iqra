@@ -20,6 +20,9 @@ class FakeRenderer implements PageRenderer {
       signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))),
     );
   }
+  renderTextLayer(): Promise<void> {
+    return Promise.resolve();
+  }
   async textItems() {
     return [];
   }
@@ -57,7 +60,7 @@ describe('ScrollerComponent', () => {
 
   const viewport = () => el.querySelector('.viewport') as HTMLElement;
   const views = () => Array.from(el.querySelectorAll('iqra-page-view'));
-  const renderedPages = () => views().map((v) => Number((v.closest('[data-page]') as HTMLElement).dataset['page']));
+  const renderedPages = () => views().map((v) => Number((v.closest('.page[data-page]') as HTMLElement).dataset['page']));
 
   async function create(start: Place = { page: 1, offset: 0 }) {
     TestBed.configureTestingModule({ imports: [HostComponent] });
@@ -68,7 +71,7 @@ describe('ScrollerComponent', () => {
     // Start-up is async (page sizes, then the jump to the start place): wait for the page boxes.
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(el.querySelectorAll('[data-page]').length).toBe(100);
+      expect(el.querySelectorAll('.page[data-page]').length).toBe(100);
     });
     const target = Math.max(0, start.page - 1) * (RATIO * VIEW_W + GAP);
     if (start.page > 1) await vi.waitFor(() => expect(viewport().scrollTop).toBeGreaterThanOrEqual(target));
@@ -98,7 +101,7 @@ describe('ScrollerComponent', () => {
     await create();
     // window is [-800, 1600]; tops are 0, 612, 1224, 1836...
     expect(renderedPages()).toEqual([1, 2, 3]);
-    expect(el.querySelectorAll('[data-page]').length).toBe(100);
+    expect(el.querySelectorAll('.page[data-page]').length).toBe(100);
   });
 
   it('scrolling updates the rendered set and emits the page', async () => {

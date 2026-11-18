@@ -1,5 +1,6 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import { loadPdfjs } from '../books/import/pdf-meta';
+import { alignSpans } from './text-layer';
 import { pageTextOf, type TextItem } from './text';
 import { canvasScale } from './zoom';
 
@@ -14,6 +15,11 @@ export interface PageRenderer {
   pageSize(page: number): Promise<PageSize>;
   /** Sets the canvas pixel size and draws the page. Rejects with an AbortError-named error when aborted. */
   renderPage(page: number, canvas: HTMLCanvasElement, cssWidthPx: number, signal: AbortSignal): Promise<void>;
+  /**
+   * Fills `container` with one transparent span per non-empty text item, each tagged `data-item="<index in textItems(page)>"`.
+   * Rejects with an AbortError-named error when aborted.
+   */
+  renderTextLayer(page: number, container: HTMLElement, cssWidthPx: number, signal: AbortSignal): Promise<void>;
   textItems(page: number): Promise<TextItem[]>;
   pageText(page: number): Promise<string>;
 }
@@ -168,6 +174,36 @@ export class PdfSession implements PageRenderer {
       signal.removeEventListener('abort', onAbort);
       work.width = 0;
       work.height = 0;
+    }
+  }
+
+  async renderTextLayer(page: number, container: HTMLElement, cssWidthPx: number, signal: AbortSignal): Promise<void> {
+    if (signal.aborted) throw abortError();
+    const { TextLayer } = await loader();
+    const p = await this.doc.getPage(page);
+    try {
+      const base = p.getViewport({ scale: 1 });
+      const viewport = p.getViewport({ scale: cssWidthPx / base.width });
+      const items = await this.textItems(page);
+      if (signal.aborted) throw abortError();
+      container.replaceChildren();
+      // pdf.js's own viewer sets this on the layer; the text-layer CSS (page-view.component.ts) sizes the fonts from it.
+      container.style.setProperty('--total-scale-factor', String(viewport.scale));
+      const layer = new TextLayer({ textContentSource: p.streamTextContent(), container, viewport });
+      const onAbort = () => layer.cancel();
+      signal.addEventListener('abort', onAbort, { once: true });
+      try {
+        await layer.render();
+      } catch (err) {
+        if (signal.aborted || this.destroyed) throw abortError();
+        throw err;
+      } finally {
+        signal.removeEventListener('abort', onAbort);
+      }
+      if (signal.aborted) throw abortError();
+      alignSpans(items, layer.textDivs);
+    } finally {
+      p.cleanup();
     }
   }
 

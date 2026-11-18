@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   HostListener,
+  Signal,
   WritableSignal,
   effect,
   InjectionToken,
@@ -14,8 +15,9 @@ import {
 } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { AnnotationService } from '../annotations/annotation.service';
 import { DB } from '../core/db';
-import type { Book } from '../core/models';
+import type { Annotation, Book } from '../core/models';
 import { SettingsService } from '../core/settings.service';
 import { DRIVE_ADAPTER } from '../sync/drive-adapter';
 import { COPY } from '../ui/copy';
@@ -119,8 +121,11 @@ const SYNC_TOAST_MS = 8000;
                 [startPlace]="s.place()"
                 [zoom]="s.zoom()"
                 [theme]="theme()"
+                [annotations]="annotations()"
+                [flashId]="s.flash()"
                 (placeChange)="s.placeChange($event)"
                 (zoomChange)="s.setZoom($event)"
+                (annotationTap)="onAnnotationTap($event)"
                 (tap)="s.toggleChrome()"
               />
             } @else {
@@ -138,8 +143,11 @@ const SYNC_TOAST_MS = 8000;
                   [zoom]="s.zoom()"
                   [rtl]="rtl()"
                   [theme]="theme()"
+                  [annotations]="annotations()"
+                  [flashId]="s.flash()"
                   (pageChange)="s.pageChange($event)"
                   (zoomChange)="s.setZoom($event)"
+                  (annotationTap)="onAnnotationTap($event)"
                   (tap)="s.toggleChrome()"
                 />
               </div>
@@ -254,6 +262,7 @@ export class ReaderPage implements OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly open = inject(PDF_OPENER);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly annotationService = inject(AnnotationService);
   private readonly scroller = viewChild(ScrollerComponent);
   private readonly topBar = viewChild<ElementRef<HTMLElement>>('topBar');
   private readonly bottomBar = viewChild<ElementRef<HTMLElement>>('bottomBar');
@@ -271,6 +280,9 @@ export class ReaderPage implements OnDestroy {
     return typeof s === 'string' ? '' : s.error;
   });
   protected readonly book = signal<Book | null>(null);
+  private readonly annotationSource = signal<Signal<Annotation[] | undefined> | null>(null);
+  /** This book's live annotations. */
+  protected readonly annotations = computed(() => this.annotationSource()?.() ?? []);
   protected readonly session = signal<ReaderSession | null>(null);
   protected readonly state = signal<ReaderState | null>(null);
   protected readonly preview = signal<number | null>(null);
@@ -347,6 +359,7 @@ export class ReaderPage implements OnDestroy {
       state.init(restored);
       this.session()?.destroy();
       this.book.set(book);
+      this.annotationSource.set(this.annotationService.forBook(book.id));
       this.session.set(session);
       this.state.set(state);
       this.status.set('ready');
@@ -409,6 +422,11 @@ export class ReaderPage implements OnDestroy {
 
   protected openPanel(which: 'contents' | 'search'): void {
     this.panel.set(which);
+  }
+
+  /** A tap on a highlight; the note sheet (a later task) handles it. */
+  protected onAnnotationTap(_a: Annotation): void {
+    // Wired by the note sheet.
   }
 
   protected sliderValue(e: Event): number {

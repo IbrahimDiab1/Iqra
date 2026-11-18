@@ -5,13 +5,17 @@ import {
   OnDestroy,
   computed,
   effect,
+  inject,
   input,
   output,
   signal,
   untracked,
   viewChild,
 } from '@angular/core';
+import { hitTest } from '../annotations/anchor';
+import type { Annotation } from '../core/models';
 import { COPY } from '../ui/copy';
+import { HighlightLayerComponent } from './highlight-layer.component';
 import type { PageRenderer } from './pdf-session';
 
 const ZOOM_DEBOUNCE_MS = 60;
@@ -27,10 +31,19 @@ const FILTERS: Record<PageTheme, string> = {
 
 @Component({
   selector: 'iqra-page-view',
+  imports: [HighlightLayerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="box" [class.shimmer]="!painted()" [style.width.px]="cssWidth()" [style.height.px]="cssHeight()">
       <canvas #canvas [style.filter]="filter()"></canvas>
+      <iqra-highlight-layer [annotations]="annotations()" [flashId]="flashId()" />
+      <div
+        #textLayer
+        class="text-layer"
+        [class.inert]="!interactive()"
+        [attr.data-page]="page()"
+        (click)="onClick($event)"
+      ></div>
       @if (failed()) {
         <div class="failed" role="alert">
           <p>{{ copy.pageFailed }}</p>
@@ -43,6 +56,29 @@ const FILTERS: Record<PageTheme, string> = {
     :host { display: block; }
     .box { position: relative; background: var(--surface-2); overflow: hidden; }
     canvas { display: block; width: 100%; height: 100%; }
+    /* pdf.js fills this with absolutely positioned, transparent spans; the browser's own selection works on them. */
+    .text-layer {
+      position: absolute;
+      inset: 0;
+      width: 100% !important;
+      height: 100% !important;
+      overflow: hidden;
+      line-height: 1;
+      color: transparent;
+      user-select: text;
+      -webkit-user-select: text;
+      --selection: rgba(42, 157, 143, 0.28);
+    }
+    :host-context([data-rt='night']) .text-layer { --selection: rgba(99, 189, 178, 0.4); }
+    .text-layer.inert { pointer-events: none; }
+    .text-layer ::ng-deep span, .text-layer ::ng-deep br {
+      position: absolute; margin: 0; padding: 0; color: transparent; white-space: pre; cursor: text; transform-origin: 0 0;
+      /* pdf.js sets --font-height, --scale-x and --rotate per span, and --total-scale-factor on the layer. */
+      font-size: calc(var(--font-height, 0px) * var(--total-scale-factor, 1));
+      transform: rotate(var(--rotate, 0deg)) scaleX(var(--scale-x, 1));
+    }
+    .text-layer ::ng-deep .markedContent { display: contents; }
+    .text-layer ::ng-deep ::selection { background: var(--selection); color: transparent; }
     .shimmer::after {
       content: '';
       position: absolute;
@@ -85,10 +121,17 @@ export class PageViewComponent implements OnDestroy {
   readonly fitWidthPx = input.required<number>();
   readonly zoom = input<number>(1);
   readonly theme = input<PageTheme>('paper');
+  readonly annotations = input<Annotation[]>([]);
+  readonly flashId = input<string | null>(null);
+  readonly interactive = input(true);
   readonly rendered = output<number>();
+  readonly annotationTap = output<Annotation>();
+  readonly pageTap = output<void>();
 
   protected readonly copy = COPY.reader;
   private readonly canvas = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
+  private readonly textLayer = viewChild.required<ElementRef<HTMLElement>>('textLayer');
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   protected readonly painted = signal(false);
   protected readonly failed = signal(false);
@@ -119,6 +162,7 @@ export class PageViewComponent implements OnDestroy {
         this.controller?.abort();
         this.controller = undefined;
         this.generation++;
+        if (pageChanged) this.textLayer().nativeElement.replaceChildren();
         if (pageChanged || !this.started) {
           void renderer.pageSize(page).then((s) => {
             if (this.page() === page) this.ratio.set(s.heightPt / s.widthPt);
@@ -148,6 +192,10 @@ export class PageViewComponent implements OnDestroy {
         if (generation !== this.generation || controller.signal.aborted) return;
         this.painted.set(true);
         this.rendered.emit(page);
+        // The text layer is an extra: a failure here never fails the page, and a page without text just has none.
+        renderer
+          .renderTextLayer(page, this.textLayer().nativeElement, width, controller.signal)
+          .catch(() => undefined);
       },
       (err: unknown) => {
         if (generation !== this.generation || controller.signal.aborted) return;
@@ -155,6 +203,21 @@ export class PageViewComponent implements OnDestroy {
         this.failed.set(true);
       },
     );
+  }
+
+  protected onClick(e: MouseEvent): void {
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && sel.toString() !== '') return;
+    const rect = this.host.nativeElement.querySelector('.box')!.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    const hit = hitTest(this.annotations(), this.page(), x, y);
+    if (hit) {
+      this.annotationTap.emit(hit);
+    } else {
+      this.pageTap.emit();
+    }
   }
 
   ngOnDestroy(): void {
