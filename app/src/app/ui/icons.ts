@@ -38,7 +38,11 @@ const ICON = {
   histFwd: '<path d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3"/>',
   zoomIn: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2M11 8v6M8 11h6"/>',
   zoomOut: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2M8 11h6"/>',
-  grip: '<path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/>'
+  grip: '<path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/>',
+  highlighter: '<path d="M14.5 4.5l5 5L11 18l-5 1 1-5z"/><path d="M4 21h9"/>',
+  bookmarkFilled: '<path d="M7 4h10v16l-5-3.6L7 20z" fill="currentColor"/>',
+  areaSelect: '<path d="M4 4h16v16H4z" stroke-dasharray="2.5 2.5"/><path d="M8 8h8v8H8z"/>',
+  pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/>'
 } as const;
 
 export type IconName = keyof typeof ICON;
