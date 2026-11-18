@@ -2,7 +2,7 @@
 
 A personal PDF reader that runs in the browser and installs like an app on Android and Windows. Your books live in **your own Google Drive**, so there is no server to run and nothing to pay for. Your library, reading position, highlights and notes stay in sync across devices.
 
-> **Status: early development.** Plan 1 (foundation and library) is built. The full reader, annotations and stats come in the next plans. See [Roadmap](#roadmap).
+> **Status: early development.** Plans 1 (foundation and library) and 2 (the reader) are built. Annotations and stats come in the next plans. See [Roadmap](#roadmap).
 
 ## What works today
 
@@ -15,14 +15,16 @@ A personal PDF reader that runs in the browser and installs like an app on Andro
 - Book details: title, author, status, categories, tags, rating, review, progress mode and file info.
 - Arabic and English text, with right-to-left support in titles and notes.
 
-Opening a book currently shows a placeholder page-1 viewer. The real reader is Plan 2.
+- A real reader. Page view with swipe or keys, or continuous scrolling. Zoom (pinch, Ctrl+wheel, double-tap), a reading mode that reflows the text with adjustable size and page colour (paper, sepia, night), and Arabic right-to-left support.
+- Contents (the PDF's chapters) and search inside the book. Jumping to a chapter or search result keeps a Back and Forward history (Alt+arrows on the PC).
+- Books open where you left off, on every device. If another device read further, Iqra opens there and offers "Back to p. N" for the page you were on.
 
 ## Roadmap
 
 | Plan | What it adds |
 |---|---|
 | 1 (done) | Sign-in, Drive, sync, library, adding and removing books, book details |
-| 2 | The reader: page view and reading mode, swipe and scroll, zoom, back/forward, opening at your last place, search in the book |
+| 2 (done) | The reader: page view and reading mode, swipe and scroll, zoom, back/forward, opening at your last place, search in the book |
 | 3 | Highlights, notes, summaries, bookmarks, the Contents & notes panel, the Notes hub |
 | 4 | Reading time, progress and chapter progress, weekly goals, stats |
 | 5 | Settings, storage, managing downloads, export, reading reminders |
