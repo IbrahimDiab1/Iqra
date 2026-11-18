@@ -176,7 +176,33 @@ describe('FilesService', () => {
     expect(toast.current()?.message).toBe(COPY.remove.removedDevice);
   });
 
+  it('refuses to remove the PDF of a book that is not on Drive yet', async () => {
+    const book = makeBook({ driveFileId: '' });
+    await db.books.put(book);
+    await db.pdfFiles.put({ bookId: book.id, blob: new Blob(['%PDF']), sizeBytes: 4, savedAt: 1000 });
+
+    await files.removeLocal(book);
+
+    expect(await db.pdfFiles.get(book.id)).toBeDefined();
+    expect(toast.current()?.message).toBe(COPY.remove.stillUploading);
+  });
+
   describe('deleteEverywhere', () => {
+    it('undo re-creates the upload entries of a book that never reached Drive', async () => {
+      const book = makeBook({ driveFileId: '' });
+      await seed(book);
+      await db.covers.put({ bookId: book.id, blob: new Blob(['jpeg']) });
+
+      await files.deleteEverywhere(book);
+      await settle();
+      expect(await db.pendingUploads.count()).toBe(0);
+      toast.undo();
+      await settle();
+
+      const kinds = (await db.pendingUploads.where('bookId').equals(book.id).toArray()).map((u) => u.kind).sort();
+      expect(kinds).toEqual(['cover', 'pdf']);
+    });
+
     async function seed(book: Book): Promise<void> {
       await db.books.put(book);
       await db.upNext.put({ id: 'up-next', bookIds: [book.id, 'other'], deviceId: 'device-a', updatedAt: 1000 } as UpNext);
@@ -250,7 +276,7 @@ describe('FilesService', () => {
       await settle();
       expect(await db.pdfFiles.get(book.id)).toBeUndefined();
 
-      clock.t += UNDO_MS;
+      clock.t += UNDO_MS + 30_000;
       await engine.syncNow();
 
       await expect(drive.downloadBlob(book.driveFileId)).rejects.toThrow();

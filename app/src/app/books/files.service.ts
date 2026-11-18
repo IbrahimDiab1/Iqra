@@ -2,6 +2,7 @@ import { Injectable, Signal, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { CLOCK } from '../core/clock';
 import { DB } from '../core/db';
+import { newId } from '../core/ids';
 import type { Book, ID, SyncMeta, TableName, UpNext } from '../core/models';
 import { Repo } from '../core/repo';
 import { DRIVE_ADAPTER } from '../sync/drive-adapter';
@@ -10,6 +11,8 @@ import { ToastService } from '../ui/toast.service';
 
 /** How long a deletion can be undone. Drive files are only removed after this. */
 export const UNDO_MS = 10_000;
+/** Added to the undo window before Drive files may be deleted, so a late Undo is still safe. */
+const UNDO_MARGIN_MS = 30_000;
 const UPNEXT_ID = 'up-next';
 
 interface SoftDeleted {
@@ -100,6 +103,12 @@ export class FilesService {
     this.removing.add(b.id);
     this.removeSheet.set(null);
     try {
+      // A PDF that is not on Drive yet exists only here, so it must stay.
+      const current = (await this.db.books.get(b.id)) ?? b;
+      if (current.driveFileId === '') {
+        this.toast.show(COPY.remove.stillUploading);
+        return;
+      }
       await this.db.pdfFiles.delete(b.id);
       this.toast.show(COPY.remove.removedDevice);
     } finally {
@@ -145,7 +154,7 @@ export class FilesService {
 
     const shard = await db.syncState.get(`book-${b.id}.json`);
     const fileIds = [b.driveFileId, b.coverFileId, shard?.remoteId].filter((id): id is string => !!id);
-    const notBefore = this.clock.now() + UNDO_MS;
+    const notBefore = this.clock.now() + UNDO_MS + UNDO_MARGIN_MS;
     await db.pendingDriveDeletes.bulkPut(fileIds.map((fileId) => ({ fileId, notBefore })));
 
     let settled = false;
@@ -181,12 +190,28 @@ export class FilesService {
       const rec = await this.db.table<SyncMeta>(table).get(id);
       if (rec) await this.repo.put(table, { ...rec, deleted: false });
     }
+    await this.requeueUploads(bookId);
     if (upNext) {
       const current = await this.db.upNext.get(UPNEXT_ID);
       if (current && !current.bookIds.includes(bookId)) {
         const bookIds = [...current.bookIds];
         bookIds.splice(upNext.bookIds.indexOf(bookId), 0, bookId);
         await this.repo.put<UpNext>('upNext', { ...current, bookIds });
+      }
+    }
+  }
+
+  /** The upload queue may have dropped this book's entries while it was deleted; add them back. */
+  private async requeueUploads(bookId: ID): Promise<void> {
+    const book = await this.db.books.get(bookId);
+    if (!book) return;
+    const existing = await this.db.pendingUploads.where('bookId').equals(bookId).toArray();
+    const wanted: ('pdf' | 'cover')[] = [];
+    if (book.driveFileId === '' && (await this.db.pdfFiles.get(bookId))) wanted.push('pdf');
+    if (!book.coverFileId && (await this.db.covers.get(bookId))) wanted.push('cover');
+    for (const kind of wanted) {
+      if (!existing.some((u) => u.kind === kind)) {
+        await this.db.pendingUploads.put({ id: newId(), bookId, kind, attempts: 0 });
       }
     }
   }

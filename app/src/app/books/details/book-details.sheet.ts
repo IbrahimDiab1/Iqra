@@ -196,7 +196,9 @@ function draftOf(b: Book): Draft {
               <div>{{ copy.fileInfo(sizeMb(b), b.pageCount) }}</div>
               <div class="sub">{{ fileStatus(b) }}</div>
             </div>
-            @if (files.downloaded().has(b.id)) {
+            @if (files.downloaded().has(b.id) && b.driveFileId === '') {
+              <div class="sub">{{ removeCopy.stillUploading }}</div>
+            } @else if (files.downloaded().has(b.id)) {
               <button type="button" class="btn-ghost" (click)="files.removeLocal(b)">{{ copy.removeDownload }}</button>
             } @else {
               <button
@@ -392,6 +394,7 @@ export class BookDetailsSheetComponent {
   private readonly injector = inject(Injector);
 
   protected readonly copy = COPY.details;
+  protected readonly removeCopy = COPY.remove;
   protected readonly common = COPY.common;
   protected readonly copyStatus = COPY.status;
   protected readonly statuses = STATUSES;

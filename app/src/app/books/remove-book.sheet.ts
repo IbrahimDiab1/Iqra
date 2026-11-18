@@ -14,7 +14,9 @@ import { icon, IconName } from '../ui/icons';
     <f-sheet [open]="!!b" [title]="copy.title" (closed)="files.closeRemoveSheet()">
       @if (b) {
         <div class="options">
-          @if (files.downloaded().has(b.id)) {
+          @if (files.downloaded().has(b.id) && b.driveFileId === '') {
+            <p class="hint pending">{{ copy.stillUploading }}</p>
+          } @else if (files.downloaded().has(b.id)) {
             <button type="button" class="option" (click)="files.removeLocal(b)">
               <span class="icon" [innerHTML]="iconMarkup('trash')"></span>
               <span class="text">
