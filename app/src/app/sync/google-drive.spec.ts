@@ -194,9 +194,22 @@ describe('GoogleDrive error mapping and paging', () => {
   });
 
   it('maps a 403 with an auth reason or no body to DriveAuthError', async () => {
-    for (const res of [forbidden('authError'), forbidden('insufficientPermissions'), empty(403)]) {
+    for (const res of [forbidden('authError'), forbidden('invalidCredentials'), forbidden('insufficientPermissions'), empty(403)]) {
       const drive = new GoogleDrive(tokens(), queueFetch(res), vi.fn());
       await expect(drive.listAppData()).rejects.toBeInstanceOf(DriveAuthError);
+    }
+  });
+
+  it('maps a 403 with a non-auth reason to a plain error, not DriveAuthError', async () => {
+    for (const reason of ['dailyLimitExceeded', 'sharingRateLimitExceeded', 'domainPolicy', 'appNotAuthorizedToFile']) {
+      const drive = new GoogleDrive(tokens(), queueFetch(forbidden(reason)), vi.fn());
+      const error = await drive.listAppData().then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(DriveAuthError);
+      expect((error as Error).message).toContain(reason);
     }
   });
 

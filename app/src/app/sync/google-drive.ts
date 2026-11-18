@@ -372,9 +372,10 @@ export class GoogleDrive implements DriveAdapter {
   }
 }
 
+const AUTH_REASONS = new Set(['authError', 'invalidCredentials', 'insufficientPermissions']);
 const TRANSIENT_REASONS = new Set(['rateLimitExceeded', 'userRateLimitExceeded', 'backendError']);
 
-/** Reads the Drive error reason of a 403. Only auth-type (or unknown) reasons mean a bad token. */
+/** Reads the Drive error reason of a 403. Only auth reasons, or no reason at all, mean a bad token. */
 async function classifyForbidden(res: Response): Promise<Error> {
   let reasons: string[] = [];
   try {
@@ -385,7 +386,11 @@ async function classifyForbidden(res: Response): Promise<Error> {
   }
   if (reasons.includes('storageQuotaExceeded')) return new DriveQuotaError();
   if (reasons.some((r) => TRANSIENT_REASONS.has(r))) return new DriveTransientError('Drive is busy, try again later');
-  return new DriveAuthError();
+  // Only auth reasons (or a 403 that names none) mean a bad token. Any other reason, such as
+  // dailyLimitExceeded or domainPolicy, is not fixed by signing in again.
+  const named = reasons.filter((r) => r !== '');
+  if (named.length === 0 || named.some((r) => AUTH_REASONS.has(r))) return new DriveAuthError();
+  return new DriveTransientError(`Drive refused the request (${named.join(', ')})`);
 }
 
 async function ensureOk(res: Response, what: string): Promise<void> {
