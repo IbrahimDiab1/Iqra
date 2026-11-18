@@ -25,6 +25,11 @@ describe('normalizeWithMap', () => {
     expect(normalizeWithMap('مـحمد').text).toBe('محمد');
   });
 
+  it('keeps Arabic-Indic digits and other Arabic punctuation', () => {
+    expect(normalizeWithMap('١٢٣').text).toBe('١٢٣');
+    expect(normalizeWithMap('٪٫٬').text).toBe('٪٫٬');
+  });
+
   it('maps alef variants, alef maksura and teh marbuta', () => {
     expect(normalizeWithMap('أإآٱ').text).toBe('اااا');
     expect(normalizeWithMap('ى').text).toBe('ي');
@@ -48,6 +53,11 @@ describe('findMatches', () => {
   it('matches alef variants and teh marbuta', () => {
     expect(findMatches('أحمد', 'احمد')).toEqual([{ index: 0, length: 4 }]);
     expect(findMatches('مدرسة', 'مدرسه')).toEqual([{ index: 0, length: 5 }]);
+  });
+
+  it('finds Arabic-Indic digits in text and query', () => {
+    expect(findMatches('رقم ١٢٣ هنا', '١٢٣')).toEqual([{ index: 4, length: 3 }]);
+    expect(findMatches('صفحة ١٢', 'صفحة ١')).toEqual([{ index: 0, length: 6 }]);
   });
 
   it('is case-insensitive', () => {

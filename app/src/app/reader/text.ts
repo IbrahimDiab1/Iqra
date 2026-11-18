@@ -13,7 +13,7 @@ export interface Paragraph {
 }
 
 /** Latin combining marks, tatweel, and Arabic harakat (U+064B-U+065F, U+0670). */
-const STRIPPED = /[̀-ͯـً-ٰٟ]/;
+const STRIPPED = /[\u0300-\u036F\u0640\u064B-\u065F\u0670]/;
 /** Letters folded to a single form so that spelling variants match. */
 const FOLDED: Record<string, string> = {
   'أ': 'ا', // أ -> ا
