@@ -15,6 +15,7 @@ const SECTIONS: readonly SectionDef[] = [
   { id: 'account', title: SETTINGS_COPY.sections.account, load: () => import('./account.section').then((m) => m.AccountSection) },
   { id: 'categories', title: SETTINGS_COPY.sections.categories, load: () => import('./categories.section').then((m) => m.CategoriesSection) },
   { id: 'defaults', title: SETTINGS_COPY.sections.defaults, load: () => import('./defaults.section').then((m) => m.DefaultsSection) },
+  { id: 'storage', title: SETTINGS_COPY.sections.storage, load: () => import('./storage.section').then((m) => m.StorageSection) },
 ];
 
 /** Loads a section's code on demand and renders it in place. */

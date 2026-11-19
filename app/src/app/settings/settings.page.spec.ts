@@ -8,6 +8,7 @@ import { signedInGuard } from '../auth/auth.guard';
 import { routes } from '../app.routes';
 import { DB, IqraDb } from '../core/db';
 import { newId } from '../core/ids';
+import { DRIVE_ADAPTER } from '../sync/drive-adapter';
 import { SyncEngine } from '../sync/sync-engine';
 import { SettingsPage } from './settings.page';
 
@@ -32,6 +33,7 @@ describe('SettingsPage', () => {
         provideRouter([]),
         { provide: DB, useValue: db },
         { provide: AuthApi, useClass: FakeAuthService },
+        { provide: DRIVE_ADAPTER, useValue: { storageQuota: async () => ({ limit: 100, usage: 10 }) } },
         {
           provide: SyncEngine,
           useValue: { status: signal('synced'), lastSyncedAt: signal(null), lastError: signal(null), syncNow: vi.fn(), ngOnDestroy: vi.fn() },
@@ -56,7 +58,9 @@ describe('SettingsPage', () => {
       fixture.detectChanges();
       expect(el.querySelector('[data-section="account"] iqra-account-section')).not.toBeNull();
       expect(el.querySelector('[data-section="defaults"] iqra-defaults-section')).not.toBeNull();
+      expect(el.querySelector('[data-section="storage"] iqra-storage-section')).not.toBeNull();
+      expect(el.querySelector('[data-section="categories"] iqra-categories-section')).not.toBeNull();
     });
-    expect(Array.from(el.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(['Account', 'Categories', 'Reading defaults']);
+    expect(Array.from(el.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(['Account', 'Categories', 'Reading defaults', 'Storage']);
   });
 });
