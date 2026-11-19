@@ -167,6 +167,11 @@ describe('buildReflow', () => {
     expect(r.map((p) => p.text)).toEqual(['القراءة غذاء العقل Hello world']);
   });
 
+  it('reflow keeps a Latin phrase in its own order inside an Arabic line, in a book that is not marked rtl', () => {
+    const r = buildReflow([item('ثالث', 10, 700), item('Hello', 60, 700), item('World', 110, 700), item('ثاني', 160, 700), item('أول', 210, 700)], { rtl: false });
+    expect(r.map((p) => p.text)).toEqual(['أول ثاني Hello World ثالث']);
+  });
+
   it('marks Arabic paragraphs rtl and Latin paragraphs not rtl', () => {
     const r = buildReflow(
       // Gaps 100 and 12: median 56, so the 100 gap starts a new paragraph.

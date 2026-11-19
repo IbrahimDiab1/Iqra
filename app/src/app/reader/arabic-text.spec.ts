@@ -177,3 +177,42 @@ describe('toReadingOrder', () => {
     expect(items.map((i) => i.str)).toEqual(['أ', '', 'ب']);
   });
 });
+
+describe('mixed Arabic and Latin on one line', () => {
+  const texts = (items: ReturnType<typeof item>[]) => readingOrder(items).map((i) => items[i].str).filter((s) => s.trim());
+
+  it('keeps a Latin phrase written as separate items in its own left-to-right order inside an Arabic line', () => {
+    // Visual, left to right: ثالث | Hello World | ثاني | أول  (read right to left: أول ثاني Hello World ثالث)
+    const items = [item('ثالث', 10), item('Hello', 60), item('World', 110), item('ثاني', 160), item('أول', 210)];
+    expect(texts(items)).toEqual(['أول', 'ثاني', 'Hello', 'World', 'ثالث']);
+  });
+
+  it('a space item between the Latin words stays between them', () => {
+    const items = [item('ثالث', 10), item('Hello', 60), item(' ', 100, 500, 10), item('World', 110), item('ثاني', 160), item('أول', 210)];
+    const order = readingOrder(items).map((i) => items[i].str);
+    expect(order).toEqual(['أول', 'ثاني', 'Hello', ' ', 'World', 'ثالث']);
+  });
+
+  it('numbers inside an Arabic line keep the right-to-left position between the Arabic items', () => {
+    const items = [item('ثالث', 10), item('2024', 60), item('ثاني', 110), item('أول', 160)];
+    expect(texts(items)).toEqual(['أول', 'ثاني', '2024', 'ثالث']);
+  });
+
+  it('a bilingual line with an English column left of an Arabic column reads the Arabic column right to left and the English left to right', () => {
+    const items = [item('Hello', 10), item('world', 60), item('ظلام', 150), item('والجهل', 200), item('نور', 250), item('العلم', 300)];
+    expect(texts(items)).toEqual(['العلم', 'نور', 'والجهل', 'ظلام', 'Hello', 'world']);
+  });
+
+  it('page text and search then work for both the Latin phrase and the Arabic one', () => {
+    const items = [item('ثالث', 10), item('Hello', 60), item('World', 110), item('ثاني', 160), item('أول', 210)];
+    const text = pageTextOf(toReadingOrder(items).items);
+    expect(text).toBe('أول ثاني Hello World ثالث');
+    expect(findMatches(text, 'Hello World')).toHaveLength(1);
+    expect(findMatches(text, 'ثاني Hello')).toHaveLength(1);
+  });
+
+  it('a mostly Latin line is still left alone', () => {
+    const items = [item('see', 10), item('the', 60), item('كتاب', 110), item('page', 160)];
+    expect(readingOrder(items)).toEqual([0, 1, 2, 3]);
+  });
+});

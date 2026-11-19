@@ -151,6 +151,43 @@ export function findMatches(pageText: string, query: string, max = Number.POSITI
   return scanDespaced(normalized, pageText, needle, max);
 }
 
+type Direction = 'rtl' | 'ltr' | 'neutral';
+
+/** The direction an item reads in: by its letters (majority), neutral when it has none (spaces, digits, punctuation). */
+function directionOf(str: string): Direction {
+  let rtl = 0;
+  let other = 0;
+  for (const ch of str) {
+    if (!/\p{L}/u.test(ch)) continue;
+    if (RTL_LETTER.test(ch)) rtl++;
+    else other++;
+  }
+  return rtl === 0 && other === 0 ? 'neutral' : rtl >= other ? 'rtl' : 'ltr';
+}
+
+/**
+ * The items of one right-to-left line in reading order: right to left by x, except that each run of left-to-right items
+ * (an English phrase, an English column) keeps its own left-to-right order, with the spaces and numbers between its
+ * words. `x` is the item's left edge.
+ */
+export function readRtlLine<T>(items: readonly T[], strOf: (item: T) => string, xOf: (item: T) => number): T[] {
+  const sorted = items.map((item, i) => ({ item, i })).sort((a, b) => xOf(b.item) - xOf(a.item) || a.i - b.i).map((e) => e.item);
+  const dirs = sorted.map((it) => directionOf(strOf(it)));
+  let i = 0;
+  while (i < sorted.length) {
+    if (dirs[i] !== 'ltr') {
+      i++;
+      continue;
+    }
+    let last = i;
+    for (let k = i + 1; k < sorted.length && dirs[k] !== 'rtl'; k++) if (dirs[k] === 'ltr') last = k;
+    const run = sorted.slice(i, last + 1).reverse();
+    sorted.splice(i, run.length, ...run);
+    i = last + 1;
+  }
+  return sorted;
+}
+
 const EPSILON = 1e-3;
 const SAME_LINE_FACTOR = 0.5;
 const RTL_SHARE = 0.5;
@@ -190,7 +227,7 @@ function planOrder(items: readonly OrderedItem[]): { order: number[]; moved: [nu
     const slots: number[] = [];
     for (let i = start; i < end; i++) if (items[i].str !== '') slots.push(i);
     if (upright(first) && slots.length > 1 && isRtlRun(slots.map((i) => items[i]))) {
-      const sorted = [...slots].sort((a, b) => items[b].transform[4] - items[a].transform[4] || a - b);
+      const sorted = readRtlLine(slots, (i) => items[i].str, (i) => items[i].transform[4]);
       if (sorted.some((old, k) => old !== slots[k])) {
         slots.forEach((slot, k) => (order[slot] = sorted[k]));
         moved.push([start, end]);

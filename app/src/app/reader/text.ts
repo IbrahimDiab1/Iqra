@@ -1,3 +1,5 @@
+import { readRtlLine } from './arabic-text';
+
 export { findMatches, normalizeWithMap } from './arabic-text';
 
 /** A pdf.js text item, reduced to the fields this module reads. */
@@ -84,9 +86,12 @@ function groupLines(items: TextItem[], rtl: boolean): Line[] {
   }
   return groups.map((g) => {
     const xOf = (it: TextItem) => it.transform[4];
-    // An Arabic line reads right to left whatever the book's direction says.
-    const lineRtl = rtl || isArabicParagraph(g.items.map((it) => it.str).join(' '));
-    const ordered = [...g.items].sort((a, b) => (lineRtl ? xOf(b) - xOf(a) : xOf(a) - xOf(b)));
+    // An Arabic line reads right to left whatever the book's direction says, keeping Latin phrases in their own order.
+    // A line with no Arabic in a book marked rtl keeps the plain right-to-left order.
+    const arabic = isArabicParagraph(g.items.map((it) => it.str).join(' '));
+    const ordered = arabic
+      ? readRtlLine(g.items, (it) => it.str, xOf)
+      : [...g.items].sort((a, b) => (rtl ? xOf(b) - xOf(a) : xOf(a) - xOf(b)));
     const text = ordered
       .map((it) => it.str)
       .join(' ')
