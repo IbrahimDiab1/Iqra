@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ChangeDetectionStrategy, Component, computed, inject, linkedSignal, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { AnnotationService } from '../annotations/annotation.service';
 import { searchNotes } from '../annotations/notes-search';
@@ -29,6 +30,12 @@ const ROW_ICONS: Record<Annotation['type'], IconName> = {
   highlight: 'highlighter', note: 'note', area: 'areaSelect', 'side-note': 'words', summary: 'notes', bookmark: 'bookmark',
 };
 
+/** Strings for the filter chips that a Stats link sets. Lives here so the eager copy.ts stays small. */
+const CHIP_COPY = {
+  book: (title: string) => `Book: ${title}`,
+  clear: (what: string) => `Clear filter: ${what}`,
+} as const;
+
 interface Row {
   a: Annotation;
   icon: SafeHtml;
@@ -47,6 +54,14 @@ interface Row {
       @if (total() === 0) {
         <p class="empty">{{ copy.hubEmpty }}</p>
       } @else {
+        @if (bookFilter(); as b) {
+          <div class="chips filters">
+            <button type="button" class="chip on" dir="auto" [attr.aria-label]="chip.clear(b.title)" (click)="clearBook()">{{ chip.book(b.title) }} ×</button>
+            @if (typePreset(); as t) {
+              <button type="button" class="chip on" [attr.aria-label]="chip.clear(copy.filters[t])" (click)="clearType()">{{ copy.filters[t] }} ×</button>
+            }
+          </div>
+        }
         <label class="search">
           <input type="search" dir="auto" autocomplete="off" [placeholder]="copy.hubSearch" [attr.aria-label]="copy.hubSearch" [value]="query()" (input)="onInput($event)" />
         </label>
@@ -129,6 +144,7 @@ export class NotesPage {
   protected readonly copy = COPY.annotations;
   protected readonly title = COPY.placeholder.notesTitle;
   protected readonly filters = FILTERS;
+  protected readonly chip = CHIP_COPY;
 
   private readonly service = inject(AnnotationService);
   private readonly files = inject(FilesService);
@@ -137,17 +153,23 @@ export class NotesPage {
   private readonly bookRecs = inject(Repo).live(() => this.db.books.filter((b) => !b.deleted).toArray());
   private readonly anns = this.service.all();
 
-  private readonly params = inject(ActivatedRoute).snapshot.queryParamMap;
-  /** Set by `?book=`: only this book's notes are listed. */
-  private readonly bookId = this.params.get('book');
+  private readonly router = inject(Router);
+  private readonly params = toSignal(inject(ActivatedRoute).queryParamMap);
+  /** Set by `?book=`: only this book's notes are listed. Follows the URL, so the Notes tab (no params) clears it. */
+  private readonly bookId = computed(() => this.params()?.get('book') ?? null);
+  /** The chip a `?type=` value turns on. */
+  protected readonly typePreset = computed(() => TYPE_PRESETS[this.params()?.get('type') as Annotation['type']] ?? null);
+  /** The book the page is limited to, while it still exists. */
+  protected readonly bookFilter = computed(() => {
+    const id = this.bookId();
+    return id === null ? null : ((this.bookRecs() ?? []).find((b) => b.id === id) ?? { id, title: '' });
+  });
 
   protected readonly query = signal('');
-  protected readonly types = signal<Filter[]>(
-    (() => {
-      const preset = TYPE_PRESETS[this.params.get('type') as Annotation['type']];
-      return preset ? [preset] : [];
-    })(),
-  );
+  protected readonly types = linkedSignal<Filter | null, Filter[]>({
+    source: this.typePreset,
+    computation: (preset) => (preset ? [preset] : []),
+  });
   protected readonly tags = signal<string[]>([]);
   protected readonly textTarget = signal<Annotation | null>(null);
   protected readonly textBook = computed(() => (this.bookRecs() ?? []).find((b) => b.id === this.textTarget()?.bookId));
@@ -162,12 +184,20 @@ export class NotesPage {
       types: this.types().flatMap((t) => FILTER_TYPES[t]),
       tags: this.tags(),
     })
-      .filter((g) => this.bookId === null || g.book.id === this.bookId)
+      .filter((g) => this.bookId() === null || g.book.id === this.bookId())
       .map((g) => ({ book: g.book, rows: g.items.map((a) => this.toRow(a)) })),
   );
 
   protected onInput(e: Event): void {
     this.query.set((e.target as HTMLInputElement).value);
+  }
+
+  protected clearBook(): void {
+    void this.router.navigate(['/notes']);
+  }
+
+  protected clearType(): void {
+    void this.router.navigate(['/notes'], { queryParams: { book: this.bookId() } });
   }
 
   protected toggleType(f: Filter): void {

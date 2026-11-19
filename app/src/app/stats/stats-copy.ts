@@ -21,6 +21,7 @@ export const STATS_COPY = {
   inProgress: 'Books in progress',
   noneInProgress: 'No books in progress.',
   progressRow: (page: number, total: number, pct: number, time: string) => `p. ${page} of ${total} · ${pct}% · ${time}`,
+  progressRowMarked: (marked: number, total: number, pct: number, time: string) => `${marked} of ${total} pages read · ${pct}% · ${time}`,
   goals: {
     add: 'Add goal',
     newTitle: 'New weekly goal',
@@ -36,6 +37,7 @@ export const STATS_COPY = {
     save: 'Save',
     delete: 'Delete',
     deleted: 'Goal deleted',
+    saveFailed: 'Couldn’t save that. Try again.',
   },
   noData: 'No reading yet.',
   book: {

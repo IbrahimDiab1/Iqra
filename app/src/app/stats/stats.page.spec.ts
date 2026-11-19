@@ -32,6 +32,7 @@ function goal(id: string, over: Partial<Goal> = {}): Goal {
 }
 
 describe('StatsPage', () => {
+  let clockNow = NOW;
   let db: IqraDb;
   let fixture: ComponentFixture<StatsPage>;
   let el: HTMLElement;
@@ -49,9 +50,10 @@ describe('StatsPage', () => {
 
   beforeEach(async () => {
     localStorage.clear();
+    clockNow = NOW;
     db = new IqraDb(`iqra-test-${newId()}`);
     TestBed.configureTestingModule({
-      providers: [provideRouter([]), { provide: DB, useValue: db }, { provide: CLOCK, useValue: { now: () => NOW } }],
+      providers: [provideRouter([]), { provide: DB, useValue: db }, { provide: CLOCK, useValue: { now: () => clockNow } }],
     });
     await db.books.put(makeBook('b1', { categoryIds: ['c1'] }));
     await db.categories.put({ id: 'c1', deviceId: 'dev', updatedAt: 1, name: 'Fiqh', order: 0 });
@@ -178,5 +180,38 @@ describe('StatsPage', () => {
     const details = TestBed.inject(BookDetailsService);
     await vi.waitFor(() => expect(details.openBook()?.id).toBe('b1'));
     expect(details.openTab()).toBe('stats');
+  });
+
+  it('moves to the next week when the app comes back after the rollover', async () => {
+    await create();
+    expect(text()).toContain('This week · Nov 14 – 20');
+    clockNow = new Date(2026, 10, 21, 0, 5).getTime();
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(text()).toContain('This week · Nov 21 – 27');
+    });
+  });
+
+  it('a minute timer refreshes the week and stops when the page is destroyed', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      await create();
+      clockNow = new Date(2026, 10, 21, 0, 5).getTime();
+      await vi.advanceTimersByTimeAsync(60_000);
+      fixture.detectChanges();
+      expect(text()).toContain('This week · Nov 21 – 27');
+      fixture.destroy();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows marked-mode progress as pages read, not a page number', async () => {
+    await db.books.put(makeBook('b1', { progressMode: 'marked', pageCount: 100 }));
+    for (const p of range(10)) await db.readMarks.put({ id: `b1:${p}`, deviceId: 'dev', updatedAt: 1, bookId: 'b1', page: p, read: true });
+    await create();
+    expect(el.querySelector('.progress-row')!.textContent!.replace(/\s+/g, ' ')).toContain('10 of 100 pages read · 10%');
   });
 });

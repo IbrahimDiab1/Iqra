@@ -111,15 +111,28 @@ export class GoalEditorSheet {
     if (target === null) return;
     const g = this.goal();
     const fields = { categoryId: this.categoryId(), measure: this.measure(), target };
-    if (g) await this.goals.update(g.id, fields);
-    else await this.goals.create(fields);
+    try {
+      if (g) await this.goals.update(g.id, fields);
+      else await this.goals.create(fields);
+    } catch (err) {
+      console.warn('Could not save the goal', err);
+      this.toast.show(this.c.saveFailed);
+      return;
+    }
     this.closed.emit();
   }
 
   protected async remove(): Promise<void> {
     const g = this.goal();
     if (!g) return;
-    const removed = await this.goals.remove(g.id);
+    let removed: Goal | undefined;
+    try {
+      removed = await this.goals.remove(g.id);
+    } catch (err) {
+      console.warn('Could not delete the goal', err);
+      this.toast.show(this.c.saveFailed);
+      return;
+    }
     this.closed.emit();
     if (removed) this.toast.show(this.c.deleted, { undo: () => void this.goals.restore(removed) });
   }

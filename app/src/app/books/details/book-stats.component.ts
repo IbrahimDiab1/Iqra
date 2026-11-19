@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Injector, computed, inject, input, runInInjectionContext, signal, untracked, type Signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, Injector, computed, inject, input, runInInjectionContext, signal, untracked, type Signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AnnotationService } from '../../annotations/annotation.service';
 import { CLOCK } from '../../core/clock';
@@ -135,6 +135,14 @@ export class BookStatsComponent {
   private readonly settings = inject(SettingsService);
   private readonly annotationService = inject(AnnotationService);
   private readonly marks = inject(ReadMarkService);
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => {
+      if (this.markedId !== null) this.marks.release(this.markedId);
+      this.markedId = null;
+      this.markedSource = null;
+    });
+  }
   private readonly sessionSignals = new Map<ID, Signal<ReadingSession[] | undefined>>();
 
   // The per-book live signals are created outside the reactive context (toSignal is not allowed inside it).
@@ -146,9 +154,18 @@ export class BookStatsComponent {
     const id = this.book().id;
     return untracked(() => this.annotationService.forBook(id))();
   });
+  private markedId: ID | null = null;
+  private markedSource: Signal<ReadonlySet<number> | undefined> | null = null;
   private readonly marked = computed(() => {
     const id = this.book().id;
-    return untracked(() => this.marks.marked(id))() ?? new Set<number>();
+    return untracked(() => {
+      if (id !== this.markedId || !this.markedSource) {
+        if (this.markedId !== null) this.marks.release(this.markedId);
+        this.markedId = id;
+        this.markedSource = this.marks.marked(id);
+      }
+      return this.markedSource;
+    })() ?? new Set<number>();
   });
 
   protected readonly ready = computed(() => this.sessions() !== undefined && this.annotations() !== undefined);

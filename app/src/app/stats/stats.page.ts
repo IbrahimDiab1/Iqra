@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { BookDetailsService } from '../books/details/book-details.service';
 import { CLOCK } from '../core/clock';
 import { DB } from '../core/db';
@@ -137,6 +137,16 @@ export class StatsPage {
     return counts;
   });
 
+  constructor() {
+    const refresh = () => this.now.set(this.clock.now());
+    const timer = setInterval(refresh, 60_000);
+    document.addEventListener('visibilitychange', refresh);
+    inject(DestroyRef).onDestroy(() => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    });
+  }
+
   protected readonly measure = signal<Measure>('pages');
   protected readonly editing = signal<Goal | null>(null);
   protected readonly editorOpen = signal(false);
@@ -146,8 +156,9 @@ export class StatsPage {
     () => this.sessionsRec() !== undefined && this.booksRec() !== undefined && this.categoriesRec() !== undefined && this.goalService.goals()() !== undefined && this.markedRec() !== undefined,
   );
 
-  private readonly now = this.clock.now();
-  private readonly thisWeek = computed(() => weekRange(this.now, this.settings.settings().weekStartsOn));
+  /** Refreshed every minute and when the app comes back to the front, so a screen left open follows midnight and the week rollover. */
+  private readonly now = signal(this.clock.now());
+  private readonly thisWeek = computed(() => weekRange(this.now(), this.settings.settings().weekStartsOn));
   /** The day before this week starts is always in last week, whatever DST did in between. */
   private readonly lastWeek = computed(() => weekRange(this.thisWeek().from - 1, this.settings.settings().weekStartsOn));
 
@@ -219,9 +230,10 @@ export class StatsPage {
       .sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0))
       .map((book: Book) => {
         const markedCount = marked.get(book.id) ?? 0;
-        const page = book.progressMode === 'marked' ? markedCount : book.lastPageReached;
         const pct = Math.round(bookProgress(book, markedCount) * 100);
-        return { book, text: L.progressRow(page, book.pageCount, pct, formatDuration(per.get(book.id)?.ms ?? 0)) };
+        const time = formatDuration(per.get(book.id)?.ms ?? 0);
+        const text = book.progressMode === 'marked' ? L.progressRowMarked(markedCount, book.pageCount, pct, time) : L.progressRow(book.lastPageReached, book.pageCount, pct, time);
+        return { book, text };
       });
   });
 }

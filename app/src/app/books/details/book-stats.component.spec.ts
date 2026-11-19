@@ -1,3 +1,4 @@
+import { ReadMarkService } from '../../progress/read-mark.service';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -120,5 +121,14 @@ describe('BookStatsComponent', () => {
     await create(makeBook({ outline, lastPageReached: 50 }));
     const bars = [...el.querySelectorAll('.chap [role=progressbar]')].map((b) => b.getAttribute('aria-valuenow'));
     expect(bars).toEqual(['100', '0']);
+  });
+
+  it('releases its read-mark live query when destroyed', async () => {
+    const marks = TestBed.inject(ReadMarkService);
+    const release = vi.spyOn(marks, 'release');
+    await create(makeBook());
+    fixture.destroy();
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(release).toHaveBeenCalledWith('b1');
   });
 });

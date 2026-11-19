@@ -10,9 +10,9 @@ export class ReadMarkService {
   private readonly db = inject(DB);
   private readonly injector = inject(EnvironmentInjector);
   /** One live query per open book; each lives in its own injector so `release` can stop it. */
-  private readonly byBook = new Map<ID, { sig: Signal<ReadonlySet<number> | undefined>; scope: EnvironmentInjector }>();
+  private readonly byBook = new Map<ID, { sig: Signal<ReadonlySet<number> | undefined>; scope: EnvironmentInjector; users: number }>();
 
-  /** Live set of the pages marked read in one book. */
+  /** Live set of the pages marked read in one book. Every call must be paired with a `release`. */
   marked(bookId: ID): Signal<ReadonlySet<number> | undefined> {
     let entry = this.byBook.get(bookId);
     if (!entry) {
@@ -23,16 +23,17 @@ export class ReadMarkService {
           return new Set(marks.filter((m) => !m.deleted && m.read).map((m) => m.page)) as ReadonlySet<number>;
         }),
       );
-      entry = { sig, scope };
+      entry = { sig, scope, users: 0 };
       this.byBook.set(bookId, entry);
     }
+    entry.users++;
     return entry.sig;
   }
 
-  /** Stops the live query for a book (called when its reader closes). */
+  /** Gives back one `marked` call; the live query stops with the last one. */
   release(bookId: ID): void {
     const entry = this.byBook.get(bookId);
-    if (!entry) return;
+    if (!entry || --entry.users > 0) return;
     this.byBook.delete(bookId);
     entry.scope.destroy();
   }

@@ -5,6 +5,7 @@ import { CLOCK } from '../core/clock';
 import { DB, IqraDb } from '../core/db';
 import { newId } from '../core/ids';
 import type { Category, Goal } from '../core/models';
+import { Repo } from '../core/repo';
 import { ToastService } from '../ui/toast.service';
 import { GoalEditorSheet } from './goal-editor.sheet';
 import { STATS_COPY } from './stats-copy';
@@ -103,5 +104,30 @@ describe('GoalEditorSheet', () => {
 
   it('has no Delete button for a new goal', () => {
     expect([...el.querySelectorAll('button')].some((b) => b.textContent!.trim() === c.delete)).toBe(false);
+  });
+
+  it('a failed save keeps the sheet open and shows the error toast', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(TestBed.inject(Repo), 'put').mockRejectedValue(new Error('disk full'));
+    type('30');
+    btn(c.save).click();
+    const toast = TestBed.inject(ToastService);
+    await vi.waitFor(() => expect(toast.current()?.message).toBe(c.saveFailed));
+    expect(fixture.componentInstance.closes).toBe(0);
+    warn.mockRestore();
+  });
+
+  it('a failed delete keeps the sheet open and shows the error toast', async () => {
+    const g: Goal = { id: 'g1', deviceId: 'd', updatedAt: 1, categoryId: null, measure: 'time', target: 60 };
+    await db.goals.put(g);
+    fixture.componentInstance.goal.set(g);
+    fixture.detectChanges();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(TestBed.inject(Repo), 'softDelete').mockRejectedValue(new Error('disk full'));
+    btn(c.delete).click();
+    const toast = TestBed.inject(ToastService);
+    await vi.waitFor(() => expect(toast.current()?.message).toBe(c.saveFailed));
+    expect(fixture.componentInstance.closes).toBe(0);
+    warn.mockRestore();
   });
 });

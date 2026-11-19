@@ -55,7 +55,8 @@ describe('ReadMarkService', () => {
 
   it('release drops the cached live set so a reopened book starts a fresh query', async () => {
     const first = TestBed.runInInjectionContext(() => service.marked('b'));
-    expect(service.marked('b')).toBe(first);
+    expect(service.marked('b')).toBe(first); // a second user of the same book
+    service.release('b');
     service.release('b');
     const second = service.marked('b');
     expect(second).not.toBe(first);

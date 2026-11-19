@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CLOCK } from '../core/clock';
 import { DB, IqraDb } from '../core/db';
@@ -48,7 +48,7 @@ describe('NotesPage', () => {
     db = new IqraDb(`iqra-test-${newId()}`);
     TestBed.configureTestingModule({
       providers: [
-        provideRouter([]),
+        provideRouter([{ path: 'notes', component: NotesPage }]),
         { provide: DB, useValue: db },
         { provide: CLOCK, useValue: { now: () => 5000 } },
         { provide: DRIVE_ADAPTER, useValue: new FakeDrive() },
@@ -113,17 +113,44 @@ describe('NotesPage', () => {
     await waitFor(() => rows().length === 1 && rows()[0].textContent!.includes('natural selection'));
   });
 
-  it('presets the filter from ?book and ?type', async () => {
-    TestBed.overrideProvider(ActivatedRoute, { useValue: { snapshot: { queryParamMap: convertToParamMap({ book: 'b1', type: 'highlight' }) } } });
+  it('presets the filter from ?book and ?type, shows chips, and the Notes tab (no params) clears them', async () => {
     await db.annotations.bulkPut([
       makeAnn({ id: 'h1', bookId: 'b1', type: 'highlight', page: 3, text: anchor('natural selection') }),
       makeAnn({ id: 'n1', bookId: 'b1', type: 'note', page: 2, body: 'a note', text: anchor('q') }),
       makeAnn({ id: 'h2', bookId: 'b2', type: 'highlight', page: 3, text: anchor('other book') }),
     ]);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/notes?book=b1&type=highlight');
     await create();
     await waitFor(() => rows().length === 1);
     expect(rows()[0].textContent).toContain('natural selection');
     expect(el.querySelectorAll('.group h2')).toHaveLength(1);
+    expect(el.querySelector('.filters')!.textContent).toContain('Darwin Letters');
+
+    await router.navigateByUrl('/notes');
+    await waitFor(() => rows().length === 3);
+    expect(el.querySelector('.filters')).toBeNull();
+  });
+
+  it('the book chip clears the book filter; the type chip clears only the type', async () => {
+    await db.annotations.bulkPut([
+      makeAnn({ id: 'h1', bookId: 'b1', type: 'highlight', page: 3, text: anchor('natural selection') }),
+      makeAnn({ id: 'n1', bookId: 'b1', type: 'note', page: 2, body: 'a note', text: anchor('q') }),
+      makeAnn({ id: 'h2', bookId: 'b2', type: 'highlight', page: 3, text: anchor('other book') }),
+    ]);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/notes?book=b1&type=highlight');
+    await create();
+    await waitFor(() => rows().length === 1);
+    const chips = () => [...el.querySelectorAll<HTMLButtonElement>('.filters .chip')];
+    expect(chips()).toHaveLength(2);
+    chips()[1].click();
+    await waitFor(() => rows().length === 2);
+    expect(el.querySelectorAll('.group h2')).toHaveLength(1);
+    chips()[0].click();
+    await waitFor(() => rows().length === 3);
+    expect(el.querySelector('.filters')).toBeNull();
+    expect(router.url).toBe('/notes');
   });
 
   it('tapping a highlight opens the book at its page with the annotation id', async () => {

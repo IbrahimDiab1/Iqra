@@ -47,12 +47,12 @@ class Run {
     if (!final && snap.activeMs < FIRST_WRITE_MS) return;
     if (this.written?.activeMs === snap.activeMs && this.written.pages === snap.pagesRead.length && !final) return;
     await this.repo.put<ReadingSession>('sessions', { id: this.id, bookId: this.bookId, ...snap });
-    // Only a successful put counts as written, so a failed checkpoint is retried.
-    this.written = { activeMs: snap.activeMs, pages: snap.pagesRead.length };
     if (snap.pagesRead.length > this.checkedPages) {
-      this.checkedPages = snap.pagesRead.length;
       await this.markStarted(snap);
+      this.checkedPages = snap.pagesRead.length;
     }
+    // Only a fully successful write counts as written, so a failed put or start update is retried.
+    this.written = { activeMs: snap.activeMs, pages: snap.pagesRead.length };
   }
 
   /** First day with at least 3 distinct pages read: sets startedAt and moves to-read to reading. */

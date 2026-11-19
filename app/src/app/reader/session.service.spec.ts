@@ -131,6 +131,25 @@ describe('SessionService', () => {
     warn.mockRestore();
   });
 
+  it('a failed start update is retried by the next checkpoint', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const update = vi.spyOn(TestBed.inject(Repo), 'update');
+    update.mockRejectedValueOnce(new Error('locked'));
+    const h = service.start(book(), 1);
+    for (const p of [2, 3, 4]) {
+      clock.t += 6_000;
+      h.pageChanged(p);
+    }
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect((await db.books.get('b1'))!.startedAt).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.waitFor(async () => expect((await db.books.get('b1'))!.startedAt).toBeDefined());
+    await h.end();
+    warn.mockRestore();
+  });
+
   describe('ending a run', () => {
     const setVisibility = (state: 'visible' | 'hidden') =>
       vi.spyOn(document, 'visibilityState', 'get').mockReturnValue(state);
