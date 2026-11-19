@@ -1,6 +1,6 @@
 import { COPY } from '../../ui/copy';
 import type { Book, ID } from '../../core/models';
-import { bookProgress } from '../../progress/progress';
+import { bookProgress } from '../../progress/book-progress';
 
 export { bookProgress };
 
