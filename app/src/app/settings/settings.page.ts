@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Directive, OnInit, ViewContainerRef, inject, input, type Type } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, Directive, OnInit, ViewContainerRef, inject, input, type Type } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { BackLinkDirective } from '../ui/back-link.directive';
 import { icon } from '../ui/icons';
@@ -26,6 +26,11 @@ class SectionHost implements OnInit {
   readonly load = input.required<() => Promise<Type<unknown>>>({ alias: 'iqraSectionHost' });
   private readonly host = inject(ViewContainerRef);
   private created = false;
+  private destroyed = false;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => (this.destroyed = true));
+  }
 
   ngOnInit(): void {
     void this.create();
@@ -33,7 +38,8 @@ class SectionHost implements OnInit {
 
   private async create(): Promise<void> {
     const comp = await this.load()();
-    if (this.created) return;
+    // The page may have been left while the section's code was still loading.
+    if (this.created || this.destroyed) return;
     this.created = true;
     this.host.createComponent(comp);
   }
