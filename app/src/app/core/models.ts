@@ -105,6 +105,16 @@ export interface Goal extends SyncMeta {
   target: number; // minutes or pages, per week
 }
 
+/** Reading reminders (spec 9.12). Every field is optional; the reminder code applies the defaults. */
+export interface ReminderSettings {
+  enabled?: boolean;
+  days?: (0 | 1 | 2 | 3 | 4 | 5 | 6)[]; // JS getDay(): 0 = Sunday
+  time?: string; // 'HH:mm' local
+  quoteSource?: 'highlights' | 'builtin' | 'both';
+  customQuotes?: string[];
+  calendarId?: string;
+}
+
 export interface Settings extends SyncMeta {
   id: 'settings';
   defaultProgressMode: Book['progressMode'];
@@ -112,7 +122,7 @@ export interface Settings extends SyncMeta {
   defaultView: 'page' | 'reflow';
   readerTheme: 'paper' | 'sepia' | 'night';
   weekStartsOn: 0 | 1 | 6; // Sun / Mon / Sat; default 6 = Saturday [decided]
-  reminders: unknown; // typed as ReminderSettings in Plan 5
+  reminders: ReminderSettings;
   cardDirection: 'en-ar' | 'ar-en' | 'mixed'; // phase 2
 }
 

@@ -30,7 +30,19 @@ export class FakeAuthService extends AuthApi {
     return true;
   }
 
+  private readonly scopes = new Set<string>();
+
+  scopeToken(scope: string): string | null {
+    return this.scopes.has(scope) ? 'fake-scope-token' : null;
+  }
+
+  async requestScope(scope: string): Promise<string> {
+    this.scopes.add(scope);
+    return 'fake-scope-token';
+  }
+
   signOut(): void {
+    this.scopes.clear();
     this.profileSignal.set(null);
     this.stateSignal.set('signed-out');
   }

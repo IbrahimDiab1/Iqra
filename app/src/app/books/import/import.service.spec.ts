@@ -150,7 +150,7 @@ describe('ImportService', () => {
       defaultView: 'page',
       readerTheme: 'paper',
       weekStartsOn: 6,
-      reminders: null,
+      reminders: {},
       cardDirection: 'mixed',
     });
 

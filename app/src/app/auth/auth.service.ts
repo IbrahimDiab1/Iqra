@@ -25,6 +25,14 @@ export abstract class AuthApi {
   abstract signOut(): void;
   /** The sync engine calls this on DriveAuthError. */
   abstract markExpired(): void;
+  /**
+   * Incremental grant for one extra scope (Calendar reminders), separate from the sign-in token.
+   * Call from a user gesture, or with `silent` for a no-popup attempt. Rejects AuthCancelledError
+   * when the popup is closed and another Error when Google denies the scope.
+   */
+  abstract requestScope(scope: string, opts?: { silent?: boolean }): Promise<string>;
+  /** A valid cached token for the scope, or null. Never opens a popup. */
+  abstract scopeToken(scope: string): string | null;
   /** Starts loading the sign-in script, so a later popup request is not delayed by the network. */
   abstract preload(): void;
 }
@@ -41,9 +49,9 @@ const GIS_SRC = 'https://accounts.google.com/gsi/client';
 const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const PROFILE_KEY = 'iqra.profile';
 /** The token is treated as expired this long before Google expires it. */
-const EXPIRY_MARGIN_MS = 60_000;
+export const EXPIRY_MARGIN_MS = 60_000;
 /** A silent token request that GIS has not answered by now counts as failed. */
-const SILENT_TIMEOUT_MS = 10_000;
+export const SILENT_TIMEOUT_MS = 10_000;
 
 /** The user closed or never opened the Google sign-in popup. The state is left unchanged. */
 export class AuthCancelledError extends Error {
@@ -85,7 +93,7 @@ declare global {
   }
 }
 
-interface Grant {
+export interface Grant {
   token: string;
   expiresAt: number;
 }
@@ -93,7 +101,7 @@ interface Grant {
 let gisLoad: Promise<void> | null = null;
 
 /** Adds the Google Identity Services script once. Resolves at once if it is already present. */
-function loadGis(): Promise<void> {
+export function loadGis(): Promise<void> {
   if (window.google?.accounts?.oauth2) return Promise.resolve();
   gisLoad ??= new Promise<void>((resolve, reject) => {
     const script = document.createElement('script');
@@ -141,6 +149,7 @@ export class GisAuthService extends AuthApi {
   private accessToken: string | null = null;
   private expiresAt = 0;
   private pending: Pending | null = null;
+  private readonly scopeGrants = new Map<string, Grant>();
 
   constructor() {
     super();
@@ -195,7 +204,22 @@ export class GisAuthService extends AuthApi {
     }
   }
 
+  scopeToken(scope: string): string | null {
+    const grant = this.scopeGrants.get(scope);
+    return grant && this.clock.now() < grant.expiresAt ? grant.token : null;
+  }
+
+  async requestScope(scope: string, opts: { silent?: boolean } = {}): Promise<string> {
+    const cached = this.scopeToken(scope);
+    if (cached) return cached;
+    const { requestScopeGrant } = await import('./scope-grant');
+    const grant = await requestScopeGrant(scope, this.clock.now.bind(this.clock), opts.silent === true, this.profileSignal()?.email);
+    this.scopeGrants.set(scope, grant);
+    return grant.token;
+  }
+
   signOut(): void {
+    this.scopeGrants.clear();
     this.accessToken = null;
     this.expiresAt = 0;
     this.profileSignal.set(null);
