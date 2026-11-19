@@ -122,7 +122,10 @@ const MIN_QUERY = 2;
   `,
   styles: `
     .tabs { display: flex; gap: 4px; padding: 3px; margin-bottom: 10px; border-radius: var(--radius-control); background: var(--surface-2); }
-    .tabs button { flex: 1; min-height: 40px; border: 0; border-radius: 10px; background: none; color: var(--muted); font: 600 14px var(--ui); cursor: pointer; }
+    .tabs button { flex: 1 0 auto; padding: 0 8px; min-height: 40px; border: 0; border-radius: 10px; background: none; color: var(--muted); font: 600 14px var(--ui); cursor: pointer; }
+    /* On the narrowest screens the four tabs are tighter and the strip scrolls rather than clipping a label. */
+    .tabs { overflow-x: auto; scrollbar-width: none; }
+    @media (max-width: 359px) { .tabs { gap: 2px; } .tabs button { padding: 0 4px; font-size: 12px; } }
     .tabs button.on { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
     button:focus-visible, .field:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .note { margin: 12px 2px; color: var(--muted); font-size: 14px; }

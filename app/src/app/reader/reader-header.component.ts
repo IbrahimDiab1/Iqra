@@ -63,7 +63,11 @@ import { CHROME_COPY } from './chrome-copy';
     .t2 { font-size: 12px; line-height: 1.25; color: color-mix(in srgb, var(--ink) 62%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .sep { opacity: 0.7; }
     .chip { flex: none; max-width: 46%; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-size: 12px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    @media (max-width: 599px) { .chip { white-space: normal; max-width: 52%; font-size: 11px; } }
+    /* On a narrow header the chip takes the title's place while the area tool is on, so neither is squeezed to a stub. */
+    @media (max-width: 599px) {
+      .chip { flex: 1; max-width: none; white-space: normal; font-size: 11px; }
+      :host:has(.chip) .titles { display: none; }
+    }
     .ib { display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none; padding: 0; border: 0; border-radius: var(--radius-control); background: none; color: inherit; cursor: pointer; }
     .ib:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 8%, transparent); }
     .ib:disabled { opacity: 0.35; cursor: default; }
