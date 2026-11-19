@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatAvg, formatDuration } from './format';
+import { formatAvg, formatDuration, formatMinutes } from './format';
 
 describe('format', () => {
   it('formats durations', () => {
@@ -16,5 +16,12 @@ describe('format', () => {
     expect(formatAvg(0)).toBe('0:00');
     expect(formatAvg(Number.NaN)).toBe('0:00');
     expect(formatAvg(9_000)).toBe('0:09');
+  });
+
+  it('formats whole-hour minute counts without minutes', () => {
+    expect(formatMinutes(300)).toBe('5 h');
+    expect(formatMinutes(65)).toBe('1 h 05 min');
+    expect(formatMinutes(45)).toBe('45 min');
+    expect(formatMinutes(0)).toBe('0 min');
   });
 });

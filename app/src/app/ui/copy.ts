@@ -49,7 +49,7 @@ export const COPY = {
   },
   // Added in Task 2 for the app shell and placeholder pages.
   nav: { library: 'Library', notes: 'Notes', stats: 'Stats' },
-  placeholder: { soon: 'Coming soon', statsNext: 'Stats arrive after the reader.', notesTitle: 'Notes', statsTitle: 'Stats', statsText: 'Your reading time, pages and weekly goals.' },
+  placeholder: { notesTitle: 'Notes' },
   annotations: {
     highlight: 'Highlight',
     note: 'Note',

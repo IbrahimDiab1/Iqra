@@ -13,3 +13,9 @@ export function formatAvg(ms: number): string {
   const seconds = Math.round(finite(ms) / 1000);
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
+
+/** Whole minutes as '5 h' when exact hours, otherwise like formatDuration. */
+export function formatMinutes(minutes: number): string {
+  const m = Math.floor(finite(minutes));
+  return m >= 60 && m % 60 === 0 ? `${m / 60} h` : formatDuration(m * 60_000);
+}

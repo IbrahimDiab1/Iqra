@@ -46,7 +46,10 @@ describe('App shell', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(router.url).toBe('/stats');
-    expect(el.textContent).toContain('Coming soon');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(el.querySelector('iqra-stats-page h1')?.textContent).toBe('Stats');
+    });
   });
 
   it('hides the tab bar on /read/abc', async () => {
