@@ -116,3 +116,14 @@ The real Calendar adapter (`reminders/google-calendar.ts`) has never talked to G
 - **Sync on mobile data:** turn it off, switch the phone to cellular only, change something, and no sync happens until Wi-Fi returns. Turn it on and it syncs on cellular.
 - **Export notes:** the zip opens on the phone and on a computer; there is one Markdown file per book with notes, Arabic shows correctly, and a title with `/ : ? "` still gives a valid file name.
 - **Backup and restore:** take a backup, then on a second device (or after clearing the first) restore it. Books and notes come back, and nothing newer on the device is overwritten. Restoring a random file shows an error and changes nothing.
+
+## 10. Sign-in and sync checks (a two-hour session)
+
+Real-account checks that need real time; the unit tests cover the logic with a fake clock.
+
+- **Stay signed in for two hours:** sign in, keep Iqra open in a visible tab (reading or in the Library) for at least 2 hours and make a change every so often. There must be no "Reconnect" bar and no popup; changes keep reaching Drive (check the status line, or open Iqra on another device).
+- **Background tab:** leave the tab hidden for more than 1 hour, then switch back to it. Within a few seconds the status returns to "Synced" without a click. If your browser blocks the silent renewal, one "Reconnect to keep syncing" bar appears; one click fixes it and the pending changes sync right away.
+- **Offline for an hour:** turn on airplane mode, read and highlight for an hour, then go online. There must be no popup while offline; after reconnecting, the changes sync (silently, or after the single Reconnect click).
+- **Sync timing:** change a setting, wait about 5 seconds, and see it on another device. Leave a book: its position reaches the other device without waiting for the 2-minute poll. Open the Library after more than a minute away: it syncs on arrival.
+- **Back button:** Library → open a book → browser Back returns to the Library; Library → book → header back arrow → Settings → browser Back returns to the Library, not to the book.
+- **Calendar errors:** with the Google Calendar API disabled in the Cloud project, turning reminders on shows "Google Calendar API isn't enabled for this project…" with `403 accessNotConfigured` under it. Enable the API and try again.

@@ -611,9 +611,11 @@ test.describe('annotations', () => {
 
     // Read on, leave (which saves the place), and come back through history and through a reload.
     await readTo(page, 2, 4);
+    // The back arrow steps back to the page the book was opened from (the Notes hub), not always to the Library.
     await page.getByRole('link', { name: 'Back to library' }).click();
-    await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
-    await page.goBack();
+    await expect(page.getByRole('searchbox')).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe('/notes');
+    await page.goForward();
     await expectPage(page, 4);
     await page.reload();
     await expectPage(page, 4);

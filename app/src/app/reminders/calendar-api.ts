@@ -38,18 +38,30 @@ export interface CalendarApi {
 
 export const CALENDAR_API = new InjectionToken<CalendarApi>('calendar');
 
-/** Calendar refused the request: permission missing, revoked or rejected (401/403). */
-export class CalendarAuthError extends Error {
-  constructor(message = 'Calendar access was refused') {
+/** A Calendar request that Google answered with an error: the HTTP status and Google's error reason (e.g. accessNotConfigured). */
+export class CalendarHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+    readonly reason?: string,
+  ) {
     super(message);
+    this.name = 'CalendarHttpError';
+  }
+}
+
+/** Calendar refused the request: permission missing, revoked or rejected (401/403). */
+export class CalendarAuthError extends CalendarHttpError {
+  constructor(message = 'Calendar access was refused', status?: number, reason?: string) {
+    super(message, status, reason);
     this.name = 'CalendarAuthError';
   }
 }
 
-/** A rate limit, quota or server fault. Reminders stay on and the next run tries again. */
-export class CalendarTransientError extends Error {
-  constructor(message = 'Calendar is busy, try again later') {
-    super(message);
+/** A rate limit, quota, server fault or any other error the owner cannot fix by granting permission. Reminders stay on and the next run tries again. */
+export class CalendarTransientError extends CalendarHttpError {
+  constructor(message = 'Calendar is busy, try again later', status?: number, reason?: string) {
+    super(message, status, reason);
     this.name = 'CalendarTransientError';
   }
 }

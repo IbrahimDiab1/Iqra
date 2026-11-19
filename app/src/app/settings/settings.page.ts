@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, Directive, OnInit, ViewContainerRef, inject, input, type Type } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
-import { RouterLink } from '@angular/router';
+import { BackLinkDirective } from '../ui/back-link.directive';
 import { icon } from '../ui/icons';
 import { SETTINGS_COPY } from './settings-copy';
 
@@ -42,12 +42,12 @@ class SectionHost implements OnInit {
 /** The Settings screen: a back arrow, a title and the section list. */
 @Component({
   selector: 'iqra-settings-page',
-  imports: [RouterLink, SectionHost],
+  imports: [BackLinkDirective, SectionHost],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="page">
       <header class="hdr">
-        <a class="back" routerLink="/library" [attr.aria-label]="c.back" [innerHTML]="backIcon"></a>
+        <a class="back" iqraBack="/library" [attr.aria-label]="c.back" [innerHTML]="backIcon"></a>
         <h1>{{ c.title }}</h1>
       </header>
       @for (s of sections; track s.id) {

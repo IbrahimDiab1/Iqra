@@ -14,7 +14,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AnnotationService } from '../annotations/annotation.service';
 import { NoteSheetComponent } from '../annotations/note-sheet.component';
 import { TextEditorSheet } from '../annotations/text-editor.sheet';
@@ -26,6 +26,8 @@ import { Repo } from '../core/repo';
 import { SettingsService } from '../core/settings.service';
 import { ReadMarkService } from '../progress/read-mark.service';
 import { DRIVE_ADAPTER } from '../sync/drive-adapter';
+import { SyncScheduler } from '../sync/sync-scheduler';
+import { BackLinkDirective } from '../ui/back-link.directive';
 import { COPY } from '../ui/copy';
 import { PROGRESS_COPY } from './progress-copy';
 import { CHROME_COPY } from './chrome-copy';
@@ -75,7 +77,7 @@ const LONG_PRESS_SLOP_PX = 10;
 
 @Component({
   selector: 'iqra-reader-page',
-  imports: [RouterLink, ContextMenuComponent, ReaderHeaderComponent, ReaderToolbarComponent, ShortcutHelpComponent, BookPanelDrawerComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective, SelectionToolbarComponent, NoteSheetComponent, TextEditorSheet],
+  imports: [BackLinkDirective, ContextMenuComponent, ReaderHeaderComponent, ReaderToolbarComponent, ShortcutHelpComponent, BookPanelDrawerComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective, SelectionToolbarComponent, NoteSheetComponent, TextEditorSheet],
   providers: [SelectionService, UndoStack, ReaderActions],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -91,7 +93,7 @@ const LONG_PRESS_SLOP_PX = 10;
           <p dir="auto">{{ errorText() }}</p>
           <div class="actions">
             <button type="button" class="btn" (click)="load()">{{ copy.retry }}</button>
-            <a class="btn link" routerLink="/library">{{ copy.back }}</a>
+            <a class="btn link" iqraBack="/library">{{ copy.back }}</a>
           </div>
         </div>
       }
@@ -110,6 +112,7 @@ const LONG_PRESS_SLOP_PX = 10;
             [canBack]="s.canBack()"
             [canForward]="s.canForward()"
             [areaActive]="s.tool() === 'area'"
+            [beforeBack]="saveBeforeLeaving"
             [(gotoOpen)]="gotoOpen"
             (historyBack)="historyBack()"
             (historyForward)="historyForward()"
@@ -313,6 +316,7 @@ export class ReaderPage implements OnDestroy {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly annotationService = inject(AnnotationService);
   private readonly repo = inject(Repo);
+  private readonly scheduler = inject(SyncScheduler);
   protected readonly selection = inject(SelectionService);
   protected readonly actions = inject(ReaderActions);
   private readonly scroller = viewChild(ScrollerComponent);
@@ -725,6 +729,17 @@ export class ReaderPage implements OnDestroy {
     if (this.actions.pendingArea()) this.actions.pendingArea.set(null);
   }
 
+  /** The header's back arrow writes the reading position before it leaves; so does the browser's Back (below). */
+  protected readonly saveBeforeLeaving = async (): Promise<void> => {
+    await this.state()?.flush();
+  };
+
+  /** The browser's Back or Forward: the position is on its way to the database before the page is torn down. */
+  @HostListener('window:popstate')
+  protected onPopState(): void {
+    void this.state()?.flush();
+  }
+
   @HostListener('document:visibilitychange')
   protected onVisibility(): void {
     if (document.visibilityState === 'hidden') void this.state()?.flush();
@@ -775,10 +790,11 @@ export class ReaderPage implements OnDestroy {
     this.destroyed = true;
     this.cancelPress();
     this.stopListening();
-    void this.tracking?.end();
+    // Position and reading session are written first; leaving the reader then syncs at once.
+    const saved = Promise.all([this.tracking?.end(), this.state()?.flush()]);
+    this.scheduler.afterReader(saved);
     this.tracking = null;
     if (this.openBookId) this.readMarks.release(this.openBookId);
-    void this.state()?.flush();
     this.session()?.destroy();
   }
 }

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
-import { RouterLink } from '@angular/router';
+import { BackLinkDirective } from '../ui/back-link.directive';
 import { FilesService } from '../books/files.service';
 import { DB } from '../core/db';
 import type { Book } from '../core/models';
@@ -13,12 +13,12 @@ import { formatBytes } from './storage-math';
 /** Books whose PDF is kept on this device, largest first, with a way to remove each or all. */
 @Component({
   selector: 'iqra-downloads-page',
-  imports: [RouterLink, SheetComponent],
+  imports: [BackLinkDirective, SheetComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="page">
       <header class="hdr">
-        <a class="back" routerLink="/settings" [attr.aria-label]="c.back" [innerHTML]="backIcon"></a>
+        <a class="back" iqraBack="/settings" [attr.aria-label]="c.back" [innerHTML]="backIcon"></a>
         <h1>{{ c.title }}</h1>
       </header>
 

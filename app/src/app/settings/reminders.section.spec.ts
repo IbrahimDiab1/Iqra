@@ -247,6 +247,66 @@ describe('RemindersSection', () => {
     });
   });
 
+  describe('Calendar errors', () => {
+    const msg = () => q('[data-testid="reminders-message"]');
+    const detail = () => el.querySelector('[data-testid="reminders-detail"]');
+    const turnOn = async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      await create();
+      q<HTMLInputElement>('[data-testid="reminders-switch"]').click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(msg()).not.toBeNull();
+      });
+    };
+
+    it('the Calendar API being off says so, with the reason and a log line', async () => {
+      const { CalendarTransientError } = await import('../reminders/calendar-api');
+      cal.failWith = new CalendarTransientError('x', 403, 'accessNotConfigured');
+      await turnOn();
+      expect(msg().textContent).toContain("Google Calendar API isn't enabled for this project");
+      expect(msg().textContent).toContain('Google Calendar API');
+      expect(detail()!.textContent).toContain('403 accessNotConfigured');
+      expect(console.warn).toHaveBeenCalled();
+      expect(q<HTMLInputElement>('[data-testid="reminders-switch"]').checked).toBe(false);
+    });
+
+    it('insufficient permissions says the scope was not granted', async () => {
+      const { CalendarAuthError } = await import('../reminders/calendar-api');
+      cal.failWith = new CalendarAuthError('x', 403, 'insufficientPermissions');
+      await turnOn();
+      expect(msg().textContent).toContain("Google didn't grant calendar access. Check the consent screen scopes.");
+      expect(detail()!.textContent).toContain('insufficientPermissions');
+    });
+
+    it('a network fault says Google could not be reached', async () => {
+      cal.failWith = new TypeError('Failed to fetch');
+      await turnOn();
+      expect(msg().textContent).toContain("Couldn't reach Google. Check your connection and try again.");
+    });
+
+    it('anything else shows the status and reason, not the network text', async () => {
+      const { CalendarTransientError } = await import('../reminders/calendar-api');
+      cal.failWith = new CalendarTransientError('x', 500, 'backendError');
+      await turnOn();
+      expect(msg().textContent).toContain('Google Calendar returned an error (500 backendError).');
+      expect(msg().textContent).not.toContain("Couldn't reach");
+    });
+
+    it('a later successful try clears the message and the detail', async () => {
+      const { CalendarTransientError } = await import('../reminders/calendar-api');
+      cal.failWith = new CalendarTransientError('x', 403, 'accessNotConfigured');
+      await turnOn();
+      cal.failWith = null;
+      q<HTMLInputElement>('[data-testid="reminders-switch"]').click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(msg()).toBeNull();
+        expect(detail()).toBeNull();
+      });
+    });
+  });
+
   it('sends a test reminder', async () => {
     await create({ enabled: true, calendarId: 'c' });
     await TestBed.inject(AuthApi).requestScope('https://www.googleapis.com/auth/calendar.app.created');

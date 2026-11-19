@@ -219,6 +219,16 @@ describe('ReminderService', () => {
     expect((await reminders())?.['enabled']).toBeFalsy();
   });
 
+  it('enable lets a Calendar error through with its status and reason, and stays off', async () => {
+    await settings.update({ reminders: {} });
+    cal.failWith = new CalendarTransientError('off', 403, 'accessNotConfigured');
+    await expect(svc.enable()).rejects.toMatchObject({ status: 403, reason: 'accessNotConfigured' });
+    expect((await reminders())?.['enabled']).toBeFalsy();
+    cal.failWith = new CalendarAuthError('scope', 403, 'insufficientPermissions');
+    await expect(svc.enable()).rejects.toMatchObject({ name: 'CalendarAuthError', reason: 'insufficientPermissions' });
+    expect((await reminders())?.['enabled']).toBeFalsy();
+  });
+
   it('enable rethrows a fault that is not a refusal', async () => {
     await settings.update({ reminders: {} });
     vi.spyOn(auth, 'requestScope').mockRejectedValue(new Error('Could not load Google sign-in'));

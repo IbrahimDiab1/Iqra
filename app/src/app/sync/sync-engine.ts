@@ -33,7 +33,6 @@ const SHARD_NAME = /^(library|words|book-.+|sessions-\d{4}-\d{2})\.json$/;
 /** A deleted book's local files are removed once its tombstone is this old. */
 const LOCAL_SWEEP_MS = 15_000;
 const DEBOUNCE_MS = 5000;
-const INTERVAL_MS = 120_000;
 /** A run still going after this long is abandoned, so a stalled call cannot block later syncs. */
 const RUN_TIMEOUT_MS = 5 * 60_000;
 
@@ -95,6 +94,8 @@ export class SyncEngine implements OnDestroy {
   readonly status = this.statusSignal.asReadonly();
   readonly lastSyncedAt = this.lastSyncedSignal.asReadonly();
   readonly lastError = this.lastErrorSignal.asReadonly();
+  /** Whether the last finished pass pulled or pushed anything. The scheduler's poll backs off after idle passes. */
+  lastPassChanged = false;
 
   /** Called after a pass that dropped duplicate books, so the app can clean up local copies. */
   onAfterPull: ((dropped: { keep: ID; drop: ID }[]) => Promise<void>) | null = null;
@@ -105,22 +106,17 @@ export class SyncEngine implements OnDestroy {
   private started = false;
   private changesSub: Subscription | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
-  private intervalTimer: ReturnType<typeof setInterval> | undefined;
-  private readonly onVisible = (): void => {
-    if (document.visibilityState === 'visible') void this.resume();
-  };
-  private readonly onOnline = (): void => {
-    void this.syncNow();
-  };
+  /** Set while a pass runs when it pulls or pushes something; copied to `lastPassChanged` when the pass ends. */
+  private changed = false;
 
-  /** Subscribes to local changes and registers the sync triggers. Calling it again does nothing. */
+  /**
+   * Subscribes to local changes: each marks its shard dirty and schedules a pass 5 s later. When else to sync (start,
+   * visibility, online, polling, leaving the reader) is the SyncScheduler's decision. Calling it again does nothing.
+   */
   start(): void {
     if (this.started) return;
     this.started = true;
     this.changesSub = this.repo.changes$.subscribe(({ table, rec }) => this.onLocalChange(table, rec));
-    document.addEventListener('visibilitychange', this.onVisible);
-    window.addEventListener('online', this.onOnline);
-    this.intervalTimer = setInterval(() => void this.syncNow(), INTERVAL_MS);
   }
 
   /**
@@ -156,9 +152,6 @@ export class SyncEngine implements OnDestroy {
   ngOnDestroy(): void {
     this.changesSub?.unsubscribe();
     clearTimeout(this.debounceTimer);
-    clearInterval(this.intervalTimer);
-    document.removeEventListener('visibilitychange', this.onVisible);
-    window.removeEventListener('online', this.onOnline);
     this.started = false;
   }
 
@@ -188,6 +181,7 @@ export class SyncEngine implements OnDestroy {
     const id = ++this.runId;
     const current = (): boolean => id === this.runId;
     let authStopped = false;
+    this.changed = false;
     try {
       if (await this.db.syncState.filter((s) => s.dirty).first()) this.statusSignal.set('saving');
       await this.runDueDeletes();
@@ -212,6 +206,7 @@ export class SyncEngine implements OnDestroy {
       }
       this.lastErrorSignal.set(null);
       this.lastSyncedSignal.set(this.clock.now());
+      this.lastPassChanged = this.changed;
       this.statusSignal.set('synced');
     } catch (error) {
       authStopped = error instanceof DriveAuthError;
@@ -354,6 +349,7 @@ export class SyncEngine implements OnDestroy {
    */
   private async applyRemote(table: TableName, recs: SyncRecord[]): Promise<void> {
     if (recs.length === 0) return;
+    this.changed = true;
     await this.repo.applyRemote(table, recs);
   }
 
@@ -455,6 +451,7 @@ export class SyncEngine implements OnDestroy {
       const { merged } = await this.db.transaction('rw', this.syncTables(), () => this.mergeIntoLocal(shard, remote));
       const json = JSON.stringify({ schemaVersion: SCHEMA_VERSION, tables: merged } satisfies ShardDoc);
       const info = await this.drive.writeAppDataJson(shard, json, fileId);
+      this.changed = true;
       await this.patchState(shard, { remoteId: info.id, remoteModified: info.modifiedTime, error: undefined });
       return null;
     } catch (error) {

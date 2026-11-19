@@ -1,4 +1,4 @@
-import { Injectable, Signal, inject, signal } from '@angular/core';
+import { Injectable, OnDestroy, Signal, inject, signal } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { CLOCK } from '../core/clock';
 import { COPY } from '../ui/copy';
@@ -23,8 +23,13 @@ export abstract class AuthApi {
   /** No gesture. Resolves false when a popup would be needed. */
   abstract trySilent(): Promise<boolean>;
   abstract signOut(): void;
-  /** The sync engine calls this on DriveAuthError. */
+  /**
+   * The sync engine and the upload queue call this when Google rejected the token (a 401). The real service tries one
+   * silent renewal first and turns the state to expired only when that fails.
+   */
   abstract markExpired(): void;
+  /** Counts every new token (sign-in, reconnect, silent renewal), so work that was waiting for one can retry. */
+  abstract tokenVersion: Signal<number>;
   /**
    * Incremental grant for one extra scope (Calendar reminders), separate from the sign-in token.
    * Call from a user gesture, or with `silent` for a no-popup attempt. Rejects AuthCancelledError
@@ -52,6 +57,10 @@ const PROFILE_KEY = 'iqra.profile';
 export const EXPIRY_MARGIN_MS = 60_000;
 /** A silent token request that GIS has not answered by now counts as failed. */
 export const SILENT_TIMEOUT_MS = 10_000;
+/** A fresh token is requested this long before the current one reads as expired. */
+export const RENEW_LEAD_MS = 5 * 60_000;
+/** After a failed renewal, the next try comes this much later (while the token is still good). */
+export const RENEW_RETRY_MS = 60_000;
 
 /** The user closed or never opened the Google sign-in popup. The state is left unchanged. */
 export class AuthCancelledError extends Error {
@@ -138,17 +147,25 @@ function writeStoredProfile(profile: Profile | null): void {
 
 /** Google Identity Services token client. The access token is kept in memory only. */
 @Injectable()
-export class GisAuthService extends AuthApi {
+export class GisAuthService extends AuthApi implements OnDestroy {
   private readonly clock = inject(CLOCK);
   private readonly toast = inject(ToastService);
   private readonly stateSignal = signal<AuthState>('signed-out');
   private readonly profileSignal = signal<Profile | null>(null);
+  private readonly versionSignal = signal(0);
   readonly state = this.stateSignal.asReadonly();
   readonly profile = this.profileSignal.asReadonly();
+  readonly tokenVersion = this.versionSignal.asReadonly();
 
   private accessToken: string | null = null;
   private expiresAt = 0;
   private pending: Pending | null = null;
+  private silent: Promise<boolean> | null = null;
+  private renewTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly onVisible = (): void => {
+    if (document.visibilityState === 'visible') this.renewIfDue();
+  };
+  private readonly onOnline = (): void => this.renewIfDue();
 
   constructor() {
     super();
@@ -157,12 +174,24 @@ export class GisAuthService extends AuthApi {
       this.profileSignal.set(stored);
       this.stateSignal.set('expired');
     }
+    document.addEventListener('visibilitychange', this.onVisible);
+    window.addEventListener('online', this.onOnline);
   }
 
+  ngOnDestroy(): void {
+    clearTimeout(this.renewTimer);
+    document.removeEventListener('visibilitychange', this.onVisible);
+    window.removeEventListener('online', this.onOnline);
+  }
+
+  /**
+   * The access token, or null when there is none or it reads as expired. An expired token starts one silent
+   * renewal, so the state never has to flip just because the clock ran out; it turns expired only if the renewal fails.
+   */
   token(): string | null {
     if (this.accessToken === null) return null;
     if (this.clock.now() >= this.expiresAt) {
-      this.markExpired();
+      if (this.stateSignal() === 'signed-in') void this.trySilent();
       return null;
     }
     return this.accessToken;
@@ -191,16 +220,55 @@ export class GisAuthService extends AuthApi {
     this.commit(grant);
   }
 
-  async trySilent(): Promise<boolean> {
+  /**
+   * A token without a popup (prompt 'none', the stored account as hint). Offline it does nothing. A failure changes the
+   * state only when there is no usable token any more; while the current token is still good it changes nothing.
+   */
+  trySilent(): Promise<boolean> {
+    if (!navigator.onLine) return Promise.resolve(false);
+    this.silent ??= this.silentRequest().finally(() => (this.silent = null));
+    return this.silent;
+  }
+
+  private async silentRequest(): Promise<boolean> {
     const stored = this.profileSignal();
     try {
       const grant = await this.requestGrant('none', SILENT_TIMEOUT_MS, stored?.email);
-      if (stored && !(await this.isStoredAccount(grant.token, stored))) return false;
+      if (stored && !(await this.isStoredAccount(grant.token, stored))) {
+        this.silentFailed();
+        return false;
+      }
       this.commit(grant);
       return true;
     } catch {
+      this.silentFailed();
       return false;
     }
+  }
+
+  private hasValidToken(): boolean {
+    return this.accessToken !== null && this.clock.now() < this.expiresAt;
+  }
+
+  /** A renewal failed: expired only when the token is really gone, otherwise try again soon. */
+  private silentFailed(): void {
+    if (this.stateSignal() === 'signed-out') return;
+    if (this.hasValidToken()) {
+      this.scheduleRenewal(RENEW_RETRY_MS);
+      return;
+    }
+    this.expire();
+  }
+
+  /** Renews now when the token is near its end (or gone), the tab is visible and the device is online. */
+  private renewIfDue(): void {
+    if (this.stateSignal() !== 'signed-in' || document.visibilityState !== 'visible' || !navigator.onLine) return;
+    if (this.clock.now() >= this.expiresAt - RENEW_LEAD_MS) void this.trySilent();
+  }
+
+  private scheduleRenewal(delayMs: number): void {
+    clearTimeout(this.renewTimer);
+    this.renewTimer = setTimeout(() => this.renewIfDue(), Math.max(0, delayMs));
   }
 
   /** The scope code and its token cache load on first use; before that no scope token exists. */
@@ -216,6 +284,7 @@ export class GisAuthService extends AuthApi {
   }
 
   signOut(): void {
+    clearTimeout(this.renewTimer);
     this.scopes?.clear();
     this.accessToken = null;
     this.expiresAt = 0;
@@ -224,7 +293,17 @@ export class GisAuthService extends AuthApi {
     this.stateSignal.set('signed-out');
   }
 
+  /** Google rejected the token: drop it and try one silent renewal; the state turns expired only if that fails. */
   markExpired(): void {
+    this.accessToken = null;
+    this.expiresAt = 0;
+    if (!this.profileSignal()) return;
+    if (this.stateSignal() === 'signed-in' && navigator.onLine) void this.trySilent();
+    else if (this.stateSignal() !== 'signed-in') this.expire();
+  }
+
+  private expire(): void {
+    clearTimeout(this.renewTimer);
     this.accessToken = null;
     this.expiresAt = 0;
     if (this.profileSignal()) this.stateSignal.set('expired');
@@ -234,6 +313,8 @@ export class GisAuthService extends AuthApi {
     this.accessToken = grant.token;
     this.expiresAt = grant.expiresAt;
     this.stateSignal.set('signed-in');
+    this.versionSignal.update((v) => v + 1);
+    this.scheduleRenewal(grant.expiresAt - RENEW_LEAD_MS - this.clock.now());
   }
 
   /** prompt undefined leaves the prompt to GIS, which shows consent only when needed. */

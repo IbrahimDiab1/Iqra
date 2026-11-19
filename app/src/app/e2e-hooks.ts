@@ -1,3 +1,4 @@
+import type { AuthApi } from './auth/auth.service';
 import type { FakeCalendar } from './reminders/fake-calendar';
 import type { FakeDrive } from './sync/fake-drive';
 import type { SyncEngine } from './sync/sync-engine';
@@ -6,6 +7,8 @@ import type { SyncEngine } from './sync/sync-engine';
 export interface E2eHandles {
   __iqraSync: SyncEngine;
   __iqraDrive: FakeDrive;
+  /** The fake auth service: tests lapse the session with `markExpired()` to see the Reconnect bar. */
+  __iqraAuth: AuthApi;
   /** Set by the lazy reminder service when it first runs. */
   __iqraCalendar: FakeCalendar;
 }

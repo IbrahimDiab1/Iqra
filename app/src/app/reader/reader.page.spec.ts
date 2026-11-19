@@ -20,6 +20,8 @@ import { AnnotationService } from '../annotations/annotation.service';
 import { PagerComponent } from './pager.component';
 import { PageRenderer, PageSize, ReaderOpenError } from './pdf-session';
 import { PositionService, type RestoredPosition } from './position.service';
+import { SyncScheduler } from '../sync/sync-scheduler';
+import { NavHistory } from '../ui/nav-history.service';
 import { PDF_OPENER, ReaderPage } from './reader.page';
 import { ReaderActions } from './reader-actions';
 import { UndoStack } from './undo-stack';
@@ -88,10 +90,12 @@ describe('ReaderPage', () => {
   let positions: { restore: ReturnType<typeof vi.fn>; schedule: ReturnType<typeof vi.fn>; markOpened: ReturnType<typeof vi.fn>; flush: ReturnType<typeof vi.fn> };
   let restored: RestoredPosition;
   let query: Map<string, string>;
+  let scheduler: { afterReader: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     localStorage.clear();
     query = new Map();
+    scheduler = { afterReader: vi.fn() };
     db = new IqraDb(`iqra-test-${newId()}`);
     session = new FakeSession();
     open = vi.fn(async () => session);
@@ -111,6 +115,7 @@ describe('ReaderPage', () => {
         { provide: CLOCK, useValue: { now: () => 5000 } },
         { provide: DRIVE_ADAPTER, useValue: new FakeDrive() },
         { provide: PositionService, useValue: positions },
+        { provide: SyncScheduler, useValue: scheduler },
         { provide: PDF_OPENER, useValue: open },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: new Map([['bookId', 'book-1']]), queryParamMap: query } } },
       ],
@@ -294,6 +299,38 @@ describe('ReaderPage', () => {
     fixture.destroy();
     expect(positions.flush).toHaveBeenCalled();
     expect(session.destroyed).toBe(true);
+  });
+
+  describe('leaving', () => {
+    it('the header back arrow saves the position first and then goes back through the history', async () => {
+      await create();
+      const order: string[] = [];
+      positions.flush.mockImplementation(async () => void order.push('flush'));
+      vi.spyOn(TestBed.inject(NavHistory), 'back').mockImplementation((to) => void order.push(`back ${to}`));
+      el.querySelector<HTMLAnchorElement>('a[aria-label="Back to library"]')!.click();
+      await vi.waitFor(() => expect(order).toEqual(['flush', 'back /library']));
+    });
+
+    it('the browser Back saves the position at once', async () => {
+      await create();
+      positions.flush.mockClear();
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      expect(positions.flush).toHaveBeenCalledTimes(1);
+    });
+
+    it('closing the reader asks the scheduler to sync only after the position and the session are written', async () => {
+      await create();
+      let finish!: () => void;
+      positions.flush.mockImplementation(() => new Promise<void>((r) => (finish = r)));
+      fixture.destroy();
+      expect(scheduler.afterReader).toHaveBeenCalledTimes(1);
+      let settled = false;
+      void (scheduler.afterReader.mock.calls[0][0] as Promise<unknown>).then(() => (settled = true));
+      await new Promise((r) => setTimeout(r, 10));
+      expect(settled).toBe(false);
+      finish();
+      await vi.waitFor(() => expect(settled).toBe(true));
+    });
   });
 
   it('flushes when the document becomes hidden', async () => {

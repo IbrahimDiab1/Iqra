@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, effect, inject, input, model, output, viewChild } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
-import { RouterLink } from '@angular/router';
+import { BackLinkDirective } from '../ui/back-link.directive';
 import { COPY } from '../ui/copy';
 import { icon, type IconName } from '../ui/icons';
 import { CHROME_COPY } from './chrome-copy';
@@ -8,10 +8,10 @@ import { CHROME_COPY } from './chrome-copy';
 /** The slim always-visible bar: back, title with `chapter › section`, jump history and the page indicator. */
 @Component({
   selector: 'iqra-reader-header',
-  imports: [RouterLink],
+  imports: [BackLinkDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <a class="ib" routerLink="/library" [attr.aria-label]="copy.back" [innerHTML]="ic('back')"></a>
+    <a class="ib" iqraBack="/library" [iqraBackBefore]="beforeBack()" [attr.aria-label]="copy.back" [innerHTML]="ic('back')"></a>
     <div class="titles">
       <div class="t1" dir="auto">{{ title() }}</div>
       @if (chapter(); as c) {
@@ -87,6 +87,8 @@ export class ReaderHeaderComponent {
   readonly canForward = input(false);
   /** The area tool is on: a chip says so, so it never looks stuck. */
   readonly areaActive = input(false);
+  /** Runs before the back arrow leaves: the reader saves its position here. */
+  readonly beforeBack = input<(() => Promise<unknown>) | null>(null);
   /** Whether the Go to page field is showing; the page opens it for the `G` key. */
   readonly gotoOpen = model(false);
   readonly historyBack = output<void>();

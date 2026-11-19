@@ -1,5 +1,5 @@
 import { DOCUMENT } from '@angular/common';
-import { Injectable, inject } from '@angular/core';
+import { Injectable, OnDestroy, inject } from '@angular/core';
 
 const SHOW_DELAY_MS = 350;
 const GAP_PX = 8;
@@ -16,7 +16,7 @@ const TARGET = 'button[aria-label], a[aria-label], [role="button"][aria-label], 
  * visible text of its own, never for a touch pointer, and it names the shortcut from `data-shortcut`.
  */
 @Injectable({ providedIn: 'root' })
-export class TooltipService {
+export class TooltipService implements OnDestroy {
   private readonly doc = inject(DOCUMENT);
   private tip: HTMLElement | null = null;
   private target: HTMLElement | null = null;
@@ -24,6 +24,11 @@ export class TooltipService {
   private pending: HTMLElement | null = null;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private installed: (() => void) | null = null;
+
+  /** The listeners are on the document, so they must go when this service does (a test's injector, a torn-down app). */
+  ngOnDestroy(): void {
+    this.installed?.();
+  }
 
   /** Starts listening; calling it again does nothing. Returns the function that stops it. */
   install(): () => void {

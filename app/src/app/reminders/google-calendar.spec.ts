@@ -45,6 +45,55 @@ describe('GoogleCalendar', () => {
     await expect(cal.remove('c', 'x')).rejects.toBeInstanceOf(CalendarAuthError);
   });
 
+  describe('error details the screen can show', () => {
+    const body403 = {
+      error: {
+        code: 403,
+        message: 'Google Calendar API has not been used in project 123 before or it is disabled.',
+        errors: [{ reason: 'accessNotConfigured' }],
+        status: 'PERMISSION_DENIED',
+      },
+    };
+
+    it('a 403 accessNotConfigured is not an auth error: it carries the status and reason', async () => {
+      fetchMock.mockImplementation(async () => json(403, body403));
+      const e = await cal.ensureCalendar().catch((x: unknown) => x);
+      expect(e).toBeInstanceOf(CalendarTransientError);
+      expect(e).toMatchObject({ status: 403, reason: 'accessNotConfigured' });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('SERVICE_DISABLED found only in the error details counts as accessNotConfigured', async () => {
+      fetchMock.mockImplementation(async () =>
+        json(403, { error: { code: 403, status: 'PERMISSION_DENIED', details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'SERVICE_DISABLED' }] } }),
+      );
+      await expect(cal.listFutureEvents('c')).rejects.toMatchObject({ status: 403, reason: 'accessNotConfigured' });
+    });
+
+    it('the existing-calendar probe does not hide an API that is switched off', async () => {
+      fetchMock.mockImplementation(async () => json(403, body403));
+      await expect(cal.ensureCalendar('old')).rejects.toMatchObject({ reason: 'accessNotConfigured' });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('auth errors carry status and reason', async () => {
+      fetchMock.mockImplementation(async () => err(403, 'insufficientPermissions'));
+      await expect(cal.listFutureEvents('c')).rejects.toMatchObject({ name: 'CalendarAuthError', status: 403, reason: 'insufficientPermissions' });
+      fetchMock.mockImplementation(async () => err(401, 'authError'));
+      await expect(cal.listFutureEvents('c')).rejects.toMatchObject({ status: 401 });
+    });
+
+    it('other failures carry the reason too, whatever the status', async () => {
+      fetchMock.mockImplementation(async () => err(400, 'invalid'));
+      await expect(cal.listFutureEvents('c')).rejects.toMatchObject({ name: 'CalendarTransientError', status: 400, reason: 'invalid' });
+    });
+
+    it('a network failure passes through as the TypeError fetch threw', async () => {
+      fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+      await expect(cal.listFutureEvents('c')).rejects.toBeInstanceOf(TypeError);
+    });
+  });
+
   it('retries a 500 once then throws a transient error', async () => {
     fetchMock.mockImplementation(async () => json(500));
     await expect(cal.listFutureEvents('c')).rejects.toBeInstanceOf(CalendarTransientError);

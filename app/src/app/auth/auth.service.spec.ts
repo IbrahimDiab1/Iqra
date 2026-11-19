@@ -91,12 +91,25 @@ describe('GisAuthService', () => {
     expect(prompts).toEqual([undefined]);
   });
 
-  it('expires the token 60 s before its lifetime ends', async () => {
+  it('a token reads as gone 60 s before its lifetime ends, and the state stays signed-in while a silent renewal can still work', async () => {
     const auth = createService();
     await auth.signIn();
     now += 3541_000;
     expect(auth.token()).toBeNull();
-    expect(auth.state()).toBe('expired');
+    expect(auth.state()).toBe('signed-in');
+    // Reading the expired token starts one silent renewal; it works here, so the state never flips.
+    await vi.waitFor(() => expect(auth.token()).toBe('token-2'));
+    expect(auth.state()).toBe('signed-in');
+    expect(prompts).toEqual([undefined, 'none']);
+  });
+
+  it('a token that expired and could not be renewed silently turns the state to expired', async () => {
+    const auth = createService();
+    await auth.signIn();
+    gis.failWith = 'popup_failed_to_open';
+    now += 3541_000;
+    expect(auth.token()).toBeNull();
+    await vi.waitFor(() => expect(auth.state()).toBe('expired'));
   });
 
   it('starts expired when a profile is stored', () => {
@@ -257,5 +270,146 @@ describe('GisAuthService', () => {
     const auth = createService();
     await expect(auth.trySilent()).resolves.toBe(true);
     expect(auth.state()).toBe('signed-in');
+  });
+
+  describe('silent renewal', () => {
+    const RENEW_AT_MS = (3541 - 300 - 1) * 1000; // 5 minutes before the token reads as gone
+    /** Moves the app clock and the timers together. */
+    async function advance(ms: number): Promise<void> {
+      now += ms;
+      await vi.advanceTimersByTimeAsync(ms);
+    }
+    const setVisible = (visible: boolean) => {
+      Object.defineProperty(document, 'visibilityState', { value: visible ? 'visible' : 'hidden', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+    const setOnline = (online: boolean) => vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(online);
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE));
+      setVisible(true);
+    });
+    afterEach(() => {
+      setVisible(true);
+      vi.restoreAllMocks();
+    });
+
+    it('asks for a fresh token about five minutes before expiry, silently and with the account hint', async () => {
+      const auth = createService();
+      await auth.signIn();
+      await advance(RENEW_AT_MS - 1000);
+      expect(prompts).toEqual([undefined]);
+      await advance(2000);
+      expect(prompts).toEqual([undefined, 'none']);
+      expect(hints.at(-1)).toBe(PROFILE.email);
+      expect(auth.token()).toBe('token-2');
+      expect(auth.state()).toBe('signed-in');
+      // ...and the new token is renewed in turn.
+      await advance(RENEW_AT_MS + 1000);
+      expect(prompts).toHaveLength(3);
+    });
+
+    it('waits while the tab is hidden and renews as soon as it is visible again', async () => {
+      const auth = createService();
+      await auth.signIn();
+      setVisible(false);
+      await advance(RENEW_AT_MS + 5000);
+      expect(prompts).toEqual([undefined]);
+      expect(auth.state()).toBe('signed-in');
+      setVisible(true);
+      await advance(0);
+      expect(prompts).toEqual([undefined, 'none']);
+    });
+
+    it('a failed renewal while the token is still good changes nothing visible, and tries again a minute later', async () => {
+      const auth = createService();
+      const toast = TestBed.inject(ToastService);
+      await auth.signIn();
+      gis.failWith = 'popup_failed_to_open';
+      await advance(RENEW_AT_MS + 1000);
+      expect(prompts).toHaveLength(2);
+      expect(auth.state()).toBe('signed-in');
+      expect(auth.token()).toBe('token-1');
+      expect(toast.current()).toBeNull();
+      gis.failWith = null;
+      await advance(60_000);
+      expect(prompts).toHaveLength(3);
+      expect(auth.token()).toBe('token-3');
+    });
+
+    it('only when renewal kept failing until the token ran out does the state turn expired', async () => {
+      const auth = createService();
+      await auth.signIn();
+      gis.failWith = 'popup_failed_to_open';
+      await advance(RENEW_AT_MS + 1000);
+      expect(auth.state()).toBe('signed-in');
+      await advance(5 * 60_000);
+      expect(auth.state()).toBe('expired');
+      expect(auth.token()).toBeNull();
+      expect(TestBed.inject(ToastService).current()).toBeNull();
+    });
+
+    it('offline it neither asks nor flips the state, and renews when the connection returns', async () => {
+      const auth = createService();
+      await auth.signIn();
+      setOnline(false);
+      await advance(3541_000 + 120_000);
+      expect(prompts).toEqual([undefined]);
+      expect(auth.token()).toBeNull();
+      expect(auth.state()).toBe('signed-in');
+      setOnline(true);
+      window.dispatchEvent(new Event('online'));
+      await advance(0);
+      expect(prompts).toEqual([undefined, 'none']);
+      expect(auth.token()).toBe('token-2');
+    });
+
+    it('a rejected token (a 401 from Google) tries one silent renewal first and keeps the state if it works', async () => {
+      const auth = createService();
+      await auth.signIn();
+      auth.markExpired();
+      expect(auth.state()).toBe('signed-in');
+      await advance(0);
+      expect(prompts).toEqual([undefined, 'none']);
+      expect(auth.token()).toBe('token-2');
+      expect(auth.state()).toBe('signed-in');
+    });
+
+    it('a rejected token that cannot be renewed turns the state to expired', async () => {
+      const auth = createService();
+      await auth.signIn();
+      gis.failWith = 'popup_failed_to_open';
+      auth.markExpired();
+      await advance(0);
+      expect(auth.state()).toBe('expired');
+    });
+
+    it('counts every new token, so waiting work can retry', async () => {
+      const auth = createService();
+      const before = auth.tokenVersion();
+      await auth.signIn();
+      expect(auth.tokenVersion()).toBe(before + 1);
+      await auth.reconnect();
+      expect(auth.tokenVersion()).toBe(before + 2);
+    });
+
+    it('never asks while signed out', async () => {
+      localStorage.clear();
+      const auth = createService();
+      setVisible(false);
+      setVisible(true);
+      await advance(10 * 3600_000);
+      expect(prompts).toEqual([]);
+      expect(auth.state()).toBe('signed-out');
+    });
+
+    it('stops renewing after sign out', async () => {
+      const auth = createService();
+      await auth.signIn();
+      auth.signOut();
+      await advance(RENEW_AT_MS + 10_000);
+      expect(prompts).toEqual([undefined]);
+    });
   });
 });

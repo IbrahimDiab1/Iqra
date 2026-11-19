@@ -82,13 +82,9 @@ export class ReminderService {
     } catch {
       // Offline or Drive trouble: carry on with what this device knows.
     }
-    try {
-      const calendarId = await this.calendar.ensureCalendar((await this.current()).calendarId);
-      await this.save({ enabled: true, calendarId });
-    } catch (e) {
-      if (e instanceof CalendarAuthError) return 'denied';
-      throw e;
-    }
+    // Calendar errors are not swallowed here: the screen names them (API off, scope not granted, network, status and reason).
+    const calendarId = await this.calendar.ensureCalendar((await this.current()).calendarId);
+    await this.save({ enabled: true, calendarId });
     this.needsPermission.set(false);
     await this.fill();
     return 'ok';

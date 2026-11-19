@@ -133,4 +133,11 @@ describe('TooltipService', () => {
     vi.advanceTimersByTime(1000);
     expect(visible()).toBe(false);
   });
+
+  it('destroying the service (a test injector, a torn-down app) removes its listeners too', () => {
+    TestBed.resetTestingModule();
+    pointer('pointerover', btn);
+    vi.advanceTimersByTime(1000);
+    expect(visible()).toBe(false);
+  });
 });

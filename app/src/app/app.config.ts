@@ -7,6 +7,7 @@ import { FakeAuthService } from './auth/fake-auth.service';
 import { routes } from './app.routes';
 import { DRIVE_ADAPTER } from './sync/drive-adapter';
 import { SyncEngine } from './sync/sync-engine';
+import { SyncScheduler } from './sync/sync-scheduler';
 import { FakeDrive } from './sync/fake-drive';
 import { GoogleDrive } from './sync/google-drive';
 import { exposeE2eHandles } from './e2e-hooks';
@@ -19,16 +20,17 @@ export const appConfig: ApplicationConfig = {
     provideAppInitializer(() => {
       const auth = inject(AuthApi);
       const sync = inject(SyncEngine);
+      const scheduler = inject(SyncScheduler);
       if (FAKE_DRIVE) {
         // e2e only: start signed in, and expose the engine and fake Drive to the tests.
         // ?signed-out leaves it signed out so /welcome can be opened.
         if (!location.search.includes('signed-out')) void auth.signIn();
-        exposeE2eHandles({ __iqraSync: sync, __iqraDrive: inject(DRIVE_ADAPTER) as FakeDrive });
+        exposeE2eHandles({ __iqraSync: sync, __iqraDrive: inject(DRIVE_ADAPTER) as FakeDrive, __iqraAuth: auth });
       }
       auth.preload();
       if (auth.state() === 'signed-out') return;
-      sync.start();
-      void sync.resume();
+      // Starts the engine and syncs once; the scheduler decides every later moment (visibility, Library, reader, poll).
+      scheduler.start();
       void fillRemindersOnOpen();
     }),
     provideServiceWorker('ngsw-worker.js', {

@@ -473,6 +473,59 @@ describe('SyncEngine', () => {
     expect(remote.tables.books?.map((r) => r.id).sort()).toEqual(['b1', 'b2']);
   });
 
+  it('a settings change starts a pass by itself 5 s later, and only then', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const listAppData = vi.spyOn(drive, 'listAppData');
+    await a.repo.put<Settings>('settings', {
+      id: 'settings',
+      defaultProgressMode: 'last-page',
+      defaultPageMode: 'swipe',
+      defaultView: 'page',
+      readerTheme: 'night',
+      weekStartsOn: 6,
+      reminders: {},
+      cardDirection: 'mixed',
+    });
+    await vi.advanceTimersByTimeAsync(4900);
+    expect(listAppData).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(200);
+    await vi.waitFor(() => expect(a.engine.status()).toBe('synced'));
+    expect(listAppData).toHaveBeenCalled();
+    const remote = await remoteShard(drive, 'library.json');
+    expect(remote.tables.settings?.map((r) => r.id)).toEqual(['settings']);
+  });
+
+  it('a burst of local changes is one pass: the 5 s timer restarts on each change', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const listAppData = vi.spyOn(drive, 'listAppData');
+    for (const id of ['b1', 'b2', 'b3']) {
+      await a.repo.put<Book>('books', bookDraft(id));
+      await vi.advanceTimersByTimeAsync(3000);
+    }
+    expect(listAppData).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2100);
+    await vi.waitFor(() => expect(a.engine.status()).toBe('synced'));
+    expect(listAppData).toHaveBeenCalledTimes(1);
+  });
+
+  it('lastPassChanged is true when a pass pushed or pulled, false when nothing moved', async () => {
+    await a.repo.put<Book>('books', bookDraft('b1'));
+    await a.engine.syncNow();
+    expect(a.engine.lastPassChanged).toBe(true);
+    await a.engine.syncNow();
+    expect(a.engine.lastPassChanged).toBe(false);
+    await b.engine.syncNow();
+    expect(b.engine.lastPassChanged).toBe(true);
+  });
+
+  it('the engine itself no longer listens for visibility, connection or a timer (the scheduler does)', async () => {
+    const listAppData = vi.spyOn(drive, 'listAppData');
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('online'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(listAppData).not.toHaveBeenCalled();
+  });
+
   it('shares one run between concurrent syncNow calls', async () => {
     const listAppData = vi.spyOn(drive, 'listAppData');
 

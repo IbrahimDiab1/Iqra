@@ -10,6 +10,8 @@ export class FakeAuthService extends AuthApi {
   private readonly profileSignal = signal<Profile | null>(null);
   readonly state = this.stateSignal.asReadonly();
   readonly profile = this.profileSignal.asReadonly();
+  private readonly versionSignal = signal(0);
+  readonly tokenVersion = this.versionSignal.asReadonly();
 
   token(): string | null {
     return this.stateSignal() === 'signed-in' ? 'fake-token' : null;
@@ -18,15 +20,18 @@ export class FakeAuthService extends AuthApi {
   async signIn(): Promise<void> {
     this.profileSignal.set(FAKE_PROFILE);
     this.stateSignal.set('signed-in');
+    this.versionSignal.update((v) => v + 1);
   }
 
   async reconnect(): Promise<void> {
     this.stateSignal.set('signed-in');
+    this.versionSignal.update((v) => v + 1);
   }
 
   async trySilent(): Promise<boolean> {
     if (!this.profileSignal()) return false;
     this.stateSignal.set('signed-in');
+    this.versionSignal.update((v) => v + 1);
     return true;
   }
 

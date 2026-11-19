@@ -5,6 +5,8 @@ const TIMEOUT_MS = 10_000;
 const CALENDAR_NAME = 'Iqra';
 /** 403 reasons that mean "slow down", not "no permission". */
 const RATE_REASONS = new Set(['rateLimitExceeded', 'userRateLimitExceeded', 'quotaExceeded', 'dailyLimitExceeded', 'calendarUsageLimitsExceeded']);
+/** The Calendar API is switched off for the Cloud project: Google's `accessNotConfigured`, or SERVICE_DISABLED in the details. */
+const API_NOT_ENABLED = 'accessNotConfigured';
 /** 403 reasons that mean the permission is missing or revoked. */
 const AUTH_REASONS = new Set(['forbidden', 'insufficientPermissions', 'authError']);
 
@@ -104,25 +106,30 @@ export class GoogleCalendar implements CalendarApi {
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       if (res.ok) return res;
-      const reason = res.status === 403 ? await errorReason(res) : '';
+      const reason = await errorReason(res);
       const slowDown = res.status === 429 || (res.status === 403 && RATE_REASONS.has(reason)) || res.status >= 500;
-      if (!slowDown && accept.includes(res.status)) return res;
+      // An API that is switched off for the project is never "acceptable": it must reach the owner.
+      if (!slowDown && reason !== API_NOT_ENABLED && accept.includes(res.status)) return res;
       if (res.status === 401 || (res.status === 403 && !slowDown && AUTH_REASONS.has(reason))) {
-        throw new CalendarAuthError(`Calendar refused the request (${res.status})`);
+        throw new CalendarAuthError(`Calendar refused the request (${res.status}${reason ? ` ${reason}` : ''})`, res.status, reason);
       }
       if (slowDown && attempt === 0) {
         await new Promise((r) => setTimeout(r, this.retryDelayMs()));
         continue;
       }
-      throw new CalendarTransientError(`Calendar request failed: ${res.status}${reason ? ` ${reason}` : ''}`);
+      throw new CalendarTransientError(`Calendar request failed: ${res.status}${reason ? ` ${reason}` : ''}`, res.status, reason);
     }
   }
 }
 
-/** The first error reason in a Google error body ('' when unreadable). PERMISSION_DENIED counts as 'forbidden'. */
+/**
+ * The error reason in a Google error body ('' when unreadable). PERMISSION_DENIED counts as 'forbidden'; a SERVICE_DISABLED
+ * detail (the newer way Google says the API is off) counts as accessNotConfigured.
+ */
 async function errorReason(res: Response): Promise<string> {
   try {
-    const e = ((await res.clone().json()) as { error?: { status?: string; errors?: { reason?: string }[] } }).error;
+    const e = ((await res.clone().json()) as { error?: { status?: string; errors?: { reason?: string }[]; details?: { reason?: string }[] } }).error;
+    if (e?.details?.some((d) => d.reason === 'SERVICE_DISABLED')) return API_NOT_ENABLED;
     return e?.errors?.[0]?.reason ?? (e?.status === 'PERMISSION_DENIED' ? 'forbidden' : '');
   } catch {
     return '';

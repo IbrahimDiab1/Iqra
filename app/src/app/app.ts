@@ -8,7 +8,9 @@ import { OpenBookSheetComponent } from './books/open-book.sheet';
 import { RemoveBookSheetComponent } from './books/remove-book.sheet';
 import { COPY } from './ui/copy';
 import { icon, IconName } from './ui/icons';
+import { ReconnectBannerComponent } from './sync/reconnect-banner.component';
 import { ToastComponent } from './ui/toast.component';
+import { NavHistory } from './ui/nav-history.service';
 import { TooltipService } from './ui/tooltip.service';
 
 interface Tab {
@@ -26,6 +28,7 @@ const TABLESS_ROUTE = /^\/(welcome|read)(?:[/?#]|$)/;
     RouterLink,
     RouterLinkActive,
     ToastComponent,
+    ReconnectBannerComponent,
     OpenBookSheetComponent,
     RemoveBookSheetComponent,
     BookDetailsSheetComponent,
@@ -41,6 +44,8 @@ export class App {
   constructor() {
     // Hover and focus labels for every icon-only button, from one place.
     inject(TooltipService).install();
+    // Counts the app's navigations from the first one, so back arrows know whether there is a page to go back to.
+    inject(NavHistory);
   }
 
   protected readonly tabs: readonly Tab[] = [

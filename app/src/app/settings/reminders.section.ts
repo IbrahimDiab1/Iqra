@@ -6,6 +6,7 @@ import { ReminderService } from '../reminders/reminder.service';
 import { REMINDER_DEFAULTS, reminderSlots } from '../reminders/schedule';
 import { SheetComponent } from '../ui/sheet.component';
 import { ToastService } from '../ui/toast.service';
+import { describeCalendarError } from '../reminders/calendar-errors';
 import { SETTINGS_COPY } from './settings-copy';
 
 const DEBOUNCE_MS = 600;
@@ -31,6 +32,9 @@ type Day = 0 | 1 | 2 | 3 | 4 | 5 | 6;
     }
     @if (message(); as m) {
       <p class="sub err" role="alert" data-testid="reminders-message">{{ m }}</p>
+      @if (detail(); as d) {
+        <p class="sub detail" data-testid="reminders-detail" dir="ltr">{{ d }}</p>
+      }
     }
 
     @if (service.needsPermission()) {
@@ -139,6 +143,8 @@ export class RemindersSection implements OnDestroy {
   protected readonly confirming = signal(false);
   protected readonly testing = signal(false);
   protected readonly message = signal<string | null>(null);
+  /** Google's status and reason for the message above, e.g. `403 accessNotConfigured`. */
+  protected readonly detail = signal<string | null>(null);
   protected readonly draft = signal('');
   protected readonly lineError = signal<string | null>(null);
 
@@ -177,7 +183,7 @@ export class RemindersSection implements OnDestroy {
 
   protected async toggle(event: Event): Promise<void> {
     const box = event.target as HTMLInputElement;
-    this.message.set(null);
+    this.clearMessage();
     if (!box.checked) {
       box.checked = true; // stays on until the owner answers the question
       this.confirming.set(true);
@@ -188,8 +194,8 @@ export class RemindersSection implements OnDestroy {
       const result = await this.service.enable();
       if (result === 'denied') this.message.set(this.c.denied);
       if (result !== 'ok') box.checked = false;
-    } catch {
-      this.message.set(this.c.failed);
+    } catch (e) {
+      this.report(e);
       box.checked = false;
     } finally {
       this.connecting.set(false);
@@ -233,12 +239,12 @@ export class RemindersSection implements OnDestroy {
   }
 
   protected async reconnect(): Promise<void> {
-    this.message.set(null);
+    this.clearMessage();
     this.connecting.set(true);
     try {
       if ((await this.service.reconnect()) === 'denied') this.message.set(this.c.denied);
-    } catch {
-      this.message.set(this.c.failed);
+    } catch (e) {
+      this.report(e);
     } finally {
       this.connecting.set(false);
     }
@@ -249,7 +255,8 @@ export class RemindersSection implements OnDestroy {
     try {
       const result = await this.service.sendTest();
       if (result === 'ok') this.toast.show(this.c.testSent);
-    } catch {
+    } catch (e) {
+      this.report(e);
       this.toast.show(this.c.testFailed);
     } finally {
       this.testing.set(false);
@@ -275,8 +282,21 @@ export class RemindersSection implements OnDestroy {
     if (Object.keys(this.pending()).length) return; // a newer edit has its own timer
     try {
       await this.service.rebuild();
-    } catch {
-      this.message.set(this.c.failed);
+    } catch (e) {
+      this.report(e);
     }
+  }
+
+  private clearMessage(): void {
+    this.message.set(null);
+    this.detail.set(null);
+  }
+
+  /** Shows what went wrong with Google Calendar, with Google's status and reason, and logs it. */
+  private report(e: unknown): void {
+    const problem = describeCalendarError(e);
+    console.warn('Google Calendar request failed', problem.status, problem.reason, e);
+    this.message.set(problem.message);
+    this.detail.set([problem.status, problem.reason].filter(Boolean).join(' ') || null);
   }
 }

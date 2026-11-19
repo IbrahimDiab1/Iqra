@@ -3,6 +3,7 @@ import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { AuthApi } from '../auth/auth.service';
 import { SyncEngine } from '../sync/sync-engine';
+import { SyncScheduler } from '../sync/sync-scheduler';
 import { DRIVE_ADAPTER } from '../sync/drive-adapter';
 import { COPY } from '../ui/copy';
 import { icon, type IconName } from '../ui/icons';
@@ -183,6 +184,7 @@ export class WelcomePage {
   private readonly drive = inject(DRIVE_ADAPTER);
   private readonly router = inject(Router);
   private readonly sync = inject(SyncEngine);
+  private readonly scheduler = inject(SyncScheduler);
 
   private readonly sanitizer = inject(DomSanitizer);
   protected readonly copy = COPY.welcome;
@@ -214,7 +216,7 @@ export class WelcomePage {
       this.failed.set(true);
       return;
     }
-    this.sync.start();
+    this.scheduler.start();
     try {
       await this.drive.ensureBooksFolder();
       await navigator.storage?.persist?.();
