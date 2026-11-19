@@ -5,6 +5,7 @@ export const SETTINGS_COPY = {
   waitingForWifi: 'Waiting for Wi-Fi',
   sections: {
     account: 'Account',
+    categories: 'Categories',
     defaults: 'Reading defaults',
   },
   account: {
@@ -22,6 +23,21 @@ export const SETTINGS_COPY = {
     confirm: 'Sign out',
     cancel: 'Cancel',
     clearFailed: "Couldn't remove the data from this device. You are signed out; try again.",
+  },
+  categories: {
+    none: 'No categories yet.',
+    newPlaceholder: 'New category',
+    add: 'Add',
+    addLabel: 'New category name',
+    renameLabel: (name: string) => `Rename ${name}`,
+    renameInput: 'Category name',
+    deleteLabel: (name: string) => `Delete ${name}`,
+    moveUp: (name: string) => `Move ${name} up`,
+    moveDown: (name: string) => `Move ${name} down`,
+    drag: (name: string) => `Drag to reorder ${name}`,
+    duplicate: 'A category with that name already exists.',
+    empty: 'Enter a name.',
+    deleted: (name: string) => `Deleted ${name}`,
   },
   defaults: {
     hint: 'Applies to books you open for the first time. Books you have already read keep their own settings.',

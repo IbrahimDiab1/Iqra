@@ -13,6 +13,7 @@ interface SectionDef {
 /** Sections in screen order. Each loads on demand so its code stays out of the main bundle. */
 const SECTIONS: readonly SectionDef[] = [
   { id: 'account', title: SETTINGS_COPY.sections.account, load: () => import('./account.section').then((m) => m.AccountSection) },
+  { id: 'categories', title: SETTINGS_COPY.sections.categories, load: () => import('./categories.section').then((m) => m.CategoriesSection) },
   { id: 'defaults', title: SETTINGS_COPY.sections.defaults, load: () => import('./defaults.section').then((m) => m.DefaultsSection) },
 ];
 
