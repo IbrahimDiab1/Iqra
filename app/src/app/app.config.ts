@@ -10,6 +10,7 @@ import { SyncEngine } from './sync/sync-engine';
 import { FakeDrive } from './sync/fake-drive';
 import { GoogleDrive } from './sync/google-drive';
 import { exposeE2eHandles } from './e2e-hooks';
+import { fillRemindersOnOpen } from './reminders/open-fill';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -28,6 +29,7 @@ export const appConfig: ApplicationConfig = {
       if (auth.state() === 'signed-out') return;
       sync.start();
       void sync.resume();
+      void fillRemindersOnOpen();
     }),
     provideServiceWorker('ngsw-worker.js', {
       // The e2e build runs in dev mode for Angular but has no real Drive; keep the worker out of its way.

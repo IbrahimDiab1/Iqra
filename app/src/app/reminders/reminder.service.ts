@@ -154,7 +154,8 @@ export class ReminderService {
     return ((await this.db.settings.get('settings'))?.reminders as ReminderSettings | null) ?? {};
   }
 
-  private async save(patch: Partial<ReminderSettings>): Promise<void> {
+  /** Saves the given reminder fields over the current ones. */
+  async save(patch: Partial<ReminderSettings>): Promise<void> {
     await this.settings.update({ reminders: { ...(await this.current()), ...patch } });
   }
 
@@ -190,6 +191,26 @@ export class ReminderService {
       }
     }
     return { created, removed };
+  }
+
+  /** Adds one event two minutes from now so the owner can see the popup. */
+  async sendTest(): Promise<'ok' | 'needs-permission'> {
+    const r = await this.current();
+    if (!(await this.token())) {
+      this.needsPermission.set(true);
+      return 'needs-permission';
+    }
+    try {
+      const calendarId = await this.calendar.ensureCalendar(r.calendarId);
+      if (calendarId !== r.calendarId) await this.save({ calendarId });
+      const start = new Date(this.clock.now() + 2 * 60_000);
+      const event = this.buildEvent(start, await this.context(r));
+      await this.calendar.insert(calendarId, { ...event, id: `iqratest${start.getTime()}` });
+      return 'ok';
+    } catch (e) {
+      await this.failed(e);
+      return 'needs-permission';
+    }
   }
 
   private async context(r: ReminderSettings) {

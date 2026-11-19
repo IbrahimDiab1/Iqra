@@ -16,6 +16,7 @@ const SECTIONS: readonly SectionDef[] = [
   { id: 'categories', title: SETTINGS_COPY.sections.categories, load: () => import('./categories.section').then((m) => m.CategoriesSection) },
   { id: 'defaults', title: SETTINGS_COPY.sections.defaults, load: () => import('./defaults.section').then((m) => m.DefaultsSection) },
   { id: 'storage', title: SETTINGS_COPY.sections.storage, load: () => import('./storage.section').then((m) => m.StorageSection) },
+  { id: 'reminders', title: SETTINGS_COPY.sections.reminders, load: () => import('./reminders.section').then((m) => m.RemindersSection) },
   { id: 'data', title: SETTINGS_COPY.sections.data, load: () => import('./data.section').then((m) => m.DataSection) },
 ];
 

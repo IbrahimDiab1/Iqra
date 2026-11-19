@@ -149,7 +149,6 @@ export class GisAuthService extends AuthApi {
   private accessToken: string | null = null;
   private expiresAt = 0;
   private pending: Pending | null = null;
-  private readonly scopeGrants = new Map<string, Grant>();
 
   constructor() {
     super();
@@ -204,22 +203,20 @@ export class GisAuthService extends AuthApi {
     }
   }
 
+  /** The scope code and its token cache load on first use; before that no scope token exists. */
+  private scopes?: typeof import('./scope-grant');
+
   scopeToken(scope: string): string | null {
-    const grant = this.scopeGrants.get(scope);
-    return grant && this.clock.now() < grant.expiresAt ? grant.token : null;
+    return this.scopes?.peek(scope, this.clock) ?? null;
   }
 
-  async requestScope(scope: string, opts: { silent?: boolean } = {}): Promise<string> {
-    const cached = this.scopeToken(scope);
-    if (cached) return cached;
-    const { requestScopeGrant } = await import('./scope-grant');
-    const grant = await requestScopeGrant(scope, this.clock.now.bind(this.clock), opts.silent === true, this.profileSignal()?.email);
-    this.scopeGrants.set(scope, grant);
-    return grant.token;
+  async requestScope(scope: string, opts?: { silent?: boolean }): Promise<string> {
+    this.scopes ??= await import('./scope-grant');
+    return this.scopes.token(scope, this.clock, opts?.silent, this.profileSignal()?.email);
   }
 
   signOut(): void {
-    this.scopeGrants.clear();
+    this.scopes?.clear();
     this.accessToken = null;
     this.expiresAt = 0;
     this.profileSignal.set(null);
