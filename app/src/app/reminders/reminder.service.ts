@@ -1,10 +1,12 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { FAKE_DRIVE } from '../../environments/environment';
 import { AuthApi, AuthCancelledError } from '../auth/auth.service';
+import { ScopeDeniedError } from '../auth/scope-grant';
 import { CLOCK } from '../core/clock';
 import { DB } from '../core/db';
 import type { ReminderSettings } from '../core/models';
 import { SettingsService } from '../core/settings.service';
+import { SyncEngine } from '../sync/sync-engine';
 import { BUILTIN_QUOTES } from './builtin-quotes';
 import { CALENDAR_API, CALENDAR_SCOPE, CalendarAuthError, type CalendarApi, type CalendarEvent } from './calendar-api';
 import { FakeCalendar } from './fake-calendar';
@@ -13,6 +15,8 @@ import { pickQuote } from './quotes';
 import { REMINDER_DEFAULTS, SLOT_EVENT_ID, eventId, reminderSlots } from './schedule';
 
 const EVENT_MINUTES = 15;
+/** Slot events and test events: everything Iqra puts in the calendar. */
+const OUR_EVENT_ID = /^iqra(test)?\d+$/;
 
 export interface FillResult {
   created: number;
@@ -43,18 +47,33 @@ export class ReminderService {
   private readonly auth = inject(AuthApi);
   private readonly clock = inject(CLOCK);
   private readonly settings = inject(SettingsService);
+  private readonly sync = inject(SyncEngine);
   private readonly calendar: CalendarApi =
     inject(CALENDAR_API, { optional: true }) ?? (FAKE_DRIVE ? new FakeCalendar() : new GoogleCalendar((scope) => this.auth.scopeToken(scope)));
 
   /** True when Calendar permission has to be granted again (after a reload or a revoke). */
   readonly needsPermission = signal(false);
 
-  /** User gesture: asks for Calendar access, creates the calendar, switches reminders on and fills. */
+  /**
+   * User gesture: asks for Calendar access, picks up a calendar another device may have created,
+   * switches reminders on and fills. Reconnecting after a revoke is the same call.
+   *
+   * The calendar id is stored in the synced Settings. A second device must let Settings sync before
+   * enabling, or it creates a second "Iqra" calendar (Iqra cannot search the owner's calendars with
+   * the app-created scope). So a sync pass runs first.
+   */
   async enable(): Promise<'ok' | 'denied' | 'cancelled'> {
     try {
       await this.auth.requestScope(CALENDAR_SCOPE);
     } catch (e) {
-      return e instanceof AuthCancelledError ? 'cancelled' : 'denied';
+      if (e instanceof AuthCancelledError) return 'cancelled';
+      if (e instanceof ScopeDeniedError) return 'denied';
+      throw e;
+    }
+    try {
+      await this.sync.syncNow();
+    } catch {
+      // Offline or Drive trouble: carry on with what this device knows.
     }
     try {
       const calendarId = await this.calendar.ensureCalendar((await this.current()).calendarId);
@@ -82,8 +101,43 @@ export class ReminderService {
     }
   }
 
-  /** Keeps the 14-day window filled. Uses the cached Calendar token only. Safe to repeat. */
-  async fill(): Promise<FillResult | 'needs-permission'> {
+  /** Keeps the 14-day window filled and matching the settings. Uses the cached Calendar token only. Safe to repeat. */
+  fill(): Promise<FillResult | 'needs-permission'> {
+    return this.serialize();
+  }
+
+  /** After a settings change: brings the calendar in line with the settings (same diff as fill). */
+  rebuild(): Promise<FillResult | 'needs-permission'> {
+    return this.serialize();
+  }
+
+  /** Same as enable(): asks again for Calendar access. */
+  reconnect(): Promise<'ok' | 'denied' | 'cancelled'> {
+    return this.enable();
+  }
+
+  private running: Promise<FillResult | 'needs-permission'> | null = null;
+  private followUp: Promise<FillResult | 'needs-permission'> | null = null;
+
+  /** One run at a time. A request made during a run queues exactly one follow-up that all such callers share. */
+  private serialize(): Promise<FillResult | 'needs-permission'> {
+    if (!this.running) {
+      const run = this.run().finally(() => {
+        if (this.running === run) this.running = null;
+      });
+      this.running = run;
+      return run;
+    }
+    this.followUp ??= this.running
+      .catch(() => undefined)
+      .then(() => {
+        this.followUp = null;
+        return this.serialize();
+      });
+    return this.followUp;
+  }
+
+  private async run(): Promise<FillResult | 'needs-permission'> {
     const r = await this.current();
     if (!r.enabled) return { created: 0, removed: 0 };
     if (!(await this.token())) {
@@ -93,7 +147,7 @@ export class ReminderService {
     try {
       const calendarId = await this.calendar.ensureCalendar(r.calendarId);
       if (calendarId !== r.calendarId) await this.save({ calendarId });
-      const result = await this.sync(calendarId, r, false);
+      const result = await this.reconcile(calendarId, r);
       this.needsPermission.set(false);
       return result;
     } catch (e) {
@@ -101,37 +155,7 @@ export class ReminderService {
     }
   }
 
-  /** After a settings change: removes all future Iqra events, then fills. */
-  async rebuild(): Promise<FillResult | 'needs-permission'> {
-    const r = await this.current();
-    if (!r.enabled) return { created: 0, removed: 0 };
-    if (!(await this.token())) {
-      this.needsPermission.set(true);
-      return 'needs-permission';
-    }
-    try {
-      const calendarId = await this.calendar.ensureCalendar(r.calendarId);
-      if (calendarId !== r.calendarId) await this.save({ calendarId });
-      const result = await this.sync(calendarId, r, true);
-      this.needsPermission.set(false);
-      return result;
-    } catch (e) {
-      return this.failed(e);
-    }
-  }
-
-  /** User gesture after a reload: asks again for Calendar access and fills. */
-  async reconnect(): Promise<'ok' | 'denied' | 'cancelled'> {
-    try {
-      await this.auth.requestScope(CALENDAR_SCOPE);
-    } catch (e) {
-      return e instanceof AuthCancelledError ? 'cancelled' : 'denied';
-    }
-    this.needsPermission.set(false);
-    const r = await this.fill();
-    return r === 'needs-permission' ? 'denied' : 'ok';
-  }
-
+  /** Refused permission turns reminders off and leaves needsPermission set, so the screen can explain and offer Reconnect. */
   private async failed(e: unknown): Promise<'needs-permission'> {
     if (!(e instanceof CalendarAuthError)) throw e;
     await this.save({ enabled: false });
@@ -159,35 +183,43 @@ export class ReminderService {
     await this.settings.update({ reminders: { ...(await this.current()), ...patch } });
   }
 
+  /** Removes the upcoming Iqra events (slot and test ones). Cancelled ones are already gone. */
   private async removeAll(calendarId: string): Promise<number> {
-    const existing = await this.calendar.listFutureEvents(calendarId);
-    const ours = existing.filter((e) => SLOT_EVENT_ID.test(e.id));
+    const ours = (await this.calendar.listFutureEvents(calendarId)).filter((e) => e.status === 'confirmed' && OUR_EVENT_ID.test(e.id));
     for (const e of ours) await this.calendar.remove(calendarId, e.id);
     return ours.length;
   }
 
-  private async sync(calendarId: string, r: ReminderSettings, clearFirst: boolean): Promise<FillResult> {
+  /**
+   * Makes the calendar match the slots by diffing on the deterministic event ids. Google keeps a
+   * deleted event's id reserved, so an id is never deleted and inserted again: a wanted id that is
+   * cancelled is restored by update, a live one is updated only when its content changed, and only
+   * ids missing altogether are inserted.
+   */
+  private async reconcile(calendarId: string, r: ReminderSettings): Promise<FillResult> {
+    const slots = reminderSlots(new Date(this.clock.now()), r);
+    const wanted = new Map(slots.map((s) => [eventId(s), s]));
+    const existing = new Map((await this.calendar.listFutureEvents(calendarId)).filter((e) => SLOT_EVENT_ID.test(e.id)).map((e) => [e.id, e]));
+    let created = 0;
     let removed = 0;
-    if (clearFirst) removed = await this.removeAll(calendarId);
-    const now = new Date(this.clock.now());
-    const slots = reminderSlots(now, r);
-    const wanted = new Set(slots.map(eventId));
-    const existing = clearFirst ? [] : await this.calendar.listFutureEvents(calendarId);
-    const have = new Set<string>();
-    for (const e of existing) {
-      if (!SLOT_EVENT_ID.test(e.id)) continue;
-      if (wanted.has(e.id)) have.add(e.id);
-      else {
+    for (const e of existing.values()) {
+      if (e.status === 'confirmed' && !wanted.has(e.id)) {
         await this.calendar.remove(calendarId, e.id);
         removed++;
       }
     }
-    const missing = slots.filter((s) => !have.has(eventId(s)));
-    let created = 0;
-    if (missing.length) {
-      const ctx = await this.context(r);
-      for (const slot of missing) {
-        if ((await this.calendar.insert(calendarId, this.buildEvent(slot, ctx))) === 'created') created++;
+    if (!wanted.size) return { created, removed };
+    const ctx = await this.context(r);
+    for (const [id, slot] of wanted) {
+      const event = this.buildEvent(slot, ctx);
+      const have = existing.get(id);
+      if (!have) {
+        if ((await this.calendar.insert(calendarId, event)) === 'created') created++;
+      } else if (have.status === 'cancelled') {
+        await this.calendar.update(calendarId, event);
+        created++;
+      } else if (have.title !== event.title || have.description !== event.description || new Date(have.start).getTime() !== new Date(event.startsAt).getTime()) {
+        await this.calendar.update(calendarId, event);
       }
     }
     return { created, removed };

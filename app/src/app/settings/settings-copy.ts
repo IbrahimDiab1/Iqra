@@ -116,7 +116,7 @@ export const SETTINGS_COPY = {
     testFailed: "Couldn't add the test reminder.",
     next: (when: string) => `Next: ${when}`,
     none: 'No upcoming reminders. Pick at least one day.',
-    needsPermission: 'Iqra needs Google Calendar access again to keep your reminders filled.',
+    needsPermission: 'Iqra needs Google Calendar access again, so your reminders are off for now. Reconnect to turn them back on.',
     reconnect: 'Reconnect Calendar',
     confirmTitle: 'Remove upcoming reminders from the calendar?',
     yes: 'Yes',

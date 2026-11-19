@@ -1,6 +1,9 @@
 import { environment } from '../../environments/environment';
 import { AuthCancelledError, EXPIRY_MARGIN_MS, SILENT_TIMEOUT_MS, loadGis, type Grant } from './auth.service';
 
+/** Google answered the request with a refusal (as opposed to a closed popup or a network fault). */
+export class ScopeDeniedError extends Error {}
+
 /** Tokens for extra scopes (Calendar reminders), kept in memory with their expiry. Lazy: only reminders load this. */
 type Clock = { now(): number };
 let grants: Record<string, Grant> = {};
@@ -35,7 +38,7 @@ export async function token(scope: string, clock: Clock, silent = false, hint?: 
       error_callback: () => done(() => reject(new AuthCancelledError())),
       callback: (response) =>
         done(() => {
-          if (response.error || !response.access_token) reject(new Error(response.error ?? 'No access token'));
+          if (response.error || !response.access_token) reject(new ScopeDeniedError(response.error ?? 'No access token'));
           else resolve({ token: response.access_token, expiresAt: clock.now() + (response.expires_in ?? 0) * 1000 - EXPIRY_MARGIN_MS });
         }),
     });

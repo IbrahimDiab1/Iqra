@@ -10,6 +10,7 @@ import { CALENDAR_API } from '../reminders/calendar-api';
 import { FakeCalendar } from '../reminders/fake-calendar';
 import { fillRemindersOnOpen } from '../reminders/open-fill';
 import { ReminderService } from '../reminders/reminder.service';
+import { SyncEngine } from '../sync/sync-engine';
 import { reminderSlots } from '../reminders/schedule';
 import { RemindersSection } from './reminders.section';
 
@@ -53,6 +54,7 @@ describe('RemindersSection', () => {
         { provide: CLOCK, useValue: { now: () => NOW } },
         { provide: AuthApi, useClass: FakeAuthService },
         { provide: CALENDAR_API, useValue: cal },
+        { provide: SyncEngine, useValue: { syncNow: async () => undefined } },
       ],
     });
     svc = TestBed.inject(ReminderService);
@@ -224,12 +226,32 @@ describe('RemindersSection', () => {
     expect(reconnect).toHaveBeenCalledTimes(1);
   });
 
+  it('explains a revoked permission and offers Reconnect even though reminders are off', async () => {
+    await create({ enabled: true, calendarId: 'c' });
+    await TestBed.inject(AuthApi).requestScope('https://www.googleapis.com/auth/calendar.app.created');
+    const { CalendarAuthError } = await import('../reminders/calendar-api');
+    cal.failWith = new CalendarAuthError('revoked');
+    expect(await svc.fill()).toBe('needs-permission');
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(q('[data-testid="needs-permission"]')).not.toBeNull();
+      expect(q<HTMLInputElement>('[data-testid="reminders-switch"]').checked).toBe(false);
+    });
+    expect(q('[data-testid="reconnect"]')).not.toBeNull();
+    cal.failWith = null;
+    q<HTMLButtonElement>('[data-testid="reconnect"]').click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(q('[data-testid="needs-permission"]')).toBeNull();
+      expect(q<HTMLInputElement>('[data-testid="reminders-switch"]').checked).toBe(true);
+    });
+  });
+
   it('sends a test reminder', async () => {
     await create({ enabled: true, calendarId: 'c' });
     await TestBed.inject(AuthApi).requestScope('https://www.googleapis.com/auth/calendar.app.created');
     q<HTMLButtonElement>('[data-testid="test-reminder"]').click();
-    await settle();
-    expect(cal.events.size).toBe(1);
+    await vi.waitFor(() => expect(cal.live().length).toBe(1));
     const ev = [...cal.events.values()][0];
     expect(new Date(ev.startsAt).getTime()).toBe(NOW + 2 * 60_000);
   });
@@ -246,7 +268,12 @@ describe('fillRemindersOnOpen', () => {
   beforeEach(() => {
     db = new IqraDb(`iqra-test-${newId()}`);
     TestBed.configureTestingModule({
-      providers: [{ provide: DB, useValue: db }, { provide: AuthApi, useClass: FakeAuthService }, { provide: CALENDAR_API, useValue: new FakeCalendar() }],
+      providers: [
+        { provide: DB, useValue: db },
+        { provide: AuthApi, useClass: FakeAuthService },
+        { provide: CALENDAR_API, useValue: new FakeCalendar() },
+        { provide: SyncEngine, useValue: { syncNow: async () => undefined } },
+      ],
     });
   });
 

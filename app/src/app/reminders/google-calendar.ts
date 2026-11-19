@@ -1,26 +1,32 @@
-import { CALENDAR_SCOPE, CalendarAuthError, type CalendarApi, type CalendarEvent } from './calendar-api';
+import { CALENDAR_SCOPE, CalendarAuthError, CalendarTransientError, type CalendarApi, type CalendarEvent, type CalendarEventInfo } from './calendar-api';
 
 const BASE = 'https://www.googleapis.com/calendar/v3';
 const TIMEOUT_MS = 10_000;
-const RETRY_DELAY_MS = 1_000;
 const CALENDAR_NAME = 'Iqra';
+/** 403 reasons that mean "slow down", not "no permission". */
+const RATE_REASONS = new Set(['rateLimitExceeded', 'userRateLimitExceeded', 'quotaExceeded', 'dailyLimitExceeded', 'calendarUsageLimitsExceeded']);
+/** 403 reasons that mean the permission is missing or revoked. */
+const AUTH_REASONS = new Set(['forbidden', 'insufficientPermissions', 'authError']);
 
 /** Reads the cached Calendar token; null when none is valid. */
 export type TokenSource = (scope: string) => string | null;
 
+/** Wait before the single retry: 1 to 2 seconds. */
+const defaultRetryDelay = () => 1000 + Math.random() * 1000;
+
 /** Google Calendar REST adapter. Uses its own token, never the sign-in token. */
 export class GoogleCalendar implements CalendarApi {
-  constructor(private readonly tokenFor: TokenSource) {}
+  constructor(
+    private readonly tokenFor: TokenSource,
+    private readonly retryDelayMs: () => number = defaultRetryDelay,
+  ) {}
 
   async ensureCalendar(existingId?: string): Promise<string> {
     if (existingId) {
-      const res = await this.call(`/calendars/${encodeURIComponent(existingId)}`, 'GET', undefined, [404, 410]);
+      // 403/404/410 all mean this calendar is not usable any more (deleted, or not ours): make a new one.
+      const res = await this.call(`/calendars/${encodeURIComponent(existingId)}`, 'GET', undefined, [403, 404, 410]);
       if (res.ok) return existingId;
     }
-    const list = await this.call('/users/me/calendarList?minAccessRole=owner', 'GET');
-    const items = ((await list.json()) as { items?: { id: string; summary?: string }[] }).items ?? [];
-    const found = items.find((c) => c.summary === CALENDAR_NAME);
-    if (found) return found.id;
     const created = await this.call('/calendars', 'POST', {
       summary: CALENDAR_NAME,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -28,42 +34,65 @@ export class GoogleCalendar implements CalendarApi {
     return ((await created.json()) as { id: string }).id;
   }
 
-  async listFutureEvents(calendarId: string): Promise<{ id: string; start: string }[]> {
-    const out: { id: string; start: string }[] = [];
+  async listFutureEvents(calendarId: string): Promise<CalendarEventInfo[]> {
+    const out: CalendarEventInfo[] = [];
     let pageToken = '';
     do {
-      const q = `timeMin=${encodeURIComponent(new Date().toISOString())}&singleEvents=true&maxResults=250&showDeleted=false${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
+      const q = `timeMin=${encodeURIComponent(new Date().toISOString())}&singleEvents=true&maxResults=250&showDeleted=true${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
       const res = await this.call(`/calendars/${encodeURIComponent(calendarId)}/events?${q}`, 'GET');
-      const json = (await res.json()) as { items?: { id: string; start?: { dateTime?: string; date?: string } }[]; nextPageToken?: string };
-      for (const e of json.items ?? []) out.push({ id: e.id, start: e.start?.dateTime ?? e.start?.date ?? '' });
+      const json = (await res.json()) as {
+        items?: { id: string; status?: string; summary?: string; description?: string; start?: { dateTime?: string; date?: string } }[];
+        nextPageToken?: string;
+      };
+      for (const e of json.items ?? []) {
+        out.push({
+          id: e.id,
+          start: e.start?.dateTime ?? e.start?.date ?? '',
+          status: e.status === 'cancelled' ? 'cancelled' : 'confirmed',
+          title: e.summary ?? '',
+          description: e.description ?? '',
+        });
+      }
       pageToken = json.nextPageToken ?? '';
     } while (pageToken);
     return out;
   }
 
   async insert(calendarId: string, e: CalendarEvent): Promise<'created' | 'exists'> {
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const res = await this.call(
-      `/calendars/${encodeURIComponent(calendarId)}/events`,
-      'POST',
-      {
-        id: e.id,
-        summary: e.title,
-        description: e.description,
-        start: { dateTime: e.startsAt, timeZone },
-        end: { dateTime: e.endsAt, timeZone },
-        reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] },
-      },
-      [409],
-    );
-    return res.status === 409 ? 'exists' : 'created';
+    const res = await this.call(`/calendars/${encodeURIComponent(calendarId)}/events`, 'POST', this.body(e), [409]);
+    if (res.status !== 409) return 'created';
+    // The id is taken. A cancelled event (deleted earlier) is brought back; a live one is another device's.
+    const existing = await this.call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(e.id)}`, 'GET');
+    if (((await existing.json()) as { status?: string }).status !== 'cancelled') return 'exists';
+    await this.update(calendarId, e);
+    return 'created';
+  }
+
+  async update(calendarId: string, e: CalendarEvent): Promise<void> {
+    await this.call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(e.id)}`, 'PUT', { ...this.body(e), status: 'confirmed' });
   }
 
   async remove(calendarId: string, id: string): Promise<void> {
     await this.call(`/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}`, 'DELETE', undefined, [404, 410]);
   }
 
-  /** One request with a timeout; 429 and 5xx retry once after a second. Statuses in `accept` are returned, not thrown. */
+  private body(e: CalendarEvent) {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return {
+      id: e.id,
+      summary: e.title,
+      description: e.description,
+      start: { dateTime: e.startsAt, timeZone },
+      end: { dateTime: e.endsAt, timeZone },
+      reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] },
+    };
+  }
+
+  /**
+   * One request with a timeout. Rate limits (429, or 403 with a rate reason) and 5xx retry once after
+   * 1 to 2 s, then throw CalendarTransientError. 401 and 403 forbidden/permission reasons throw
+   * CalendarAuthError. Statuses in `accept` are returned, not thrown.
+   */
   private async call(path: string, method: string, body?: unknown, accept: number[] = []): Promise<Response> {
     for (let attempt = 0; ; attempt++) {
       const token = this.tokenFor(CALENDAR_SCOPE);
@@ -74,13 +103,28 @@ export class GoogleCalendar implements CalendarApi {
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
-      if (res.ok || accept.includes(res.status)) return res;
-      if (res.status === 401 || res.status === 403) throw new CalendarAuthError(`Calendar refused the request (${res.status})`);
-      if ((res.status === 429 || res.status >= 500) && attempt === 0) {
-        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      if (res.ok) return res;
+      const reason = res.status === 403 ? await errorReason(res) : '';
+      const slowDown = res.status === 429 || (res.status === 403 && RATE_REASONS.has(reason)) || res.status >= 500;
+      if (!slowDown && accept.includes(res.status)) return res;
+      if (res.status === 401 || (res.status === 403 && !slowDown && AUTH_REASONS.has(reason))) {
+        throw new CalendarAuthError(`Calendar refused the request (${res.status})`);
+      }
+      if (slowDown && attempt === 0) {
+        await new Promise((r) => setTimeout(r, this.retryDelayMs()));
         continue;
       }
-      throw new Error(`Calendar request failed: ${res.status}`);
+      throw new CalendarTransientError(`Calendar request failed: ${res.status}${reason ? ` ${reason}` : ''}`);
     }
+  }
+}
+
+/** The first error reason in a Google error body ('' when unreadable). PERMISSION_DENIED counts as 'forbidden'. */
+async function errorReason(res: Response): Promise<string> {
+  try {
+    const e = ((await res.clone().json()) as { error?: { status?: string; errors?: { reason?: string }[] } }).error;
+    return e?.errors?.[0]?.reason ?? (e?.status === 'PERMISSION_DENIED' ? 'forbidden' : '');
+  } catch {
+    return '';
   }
 }

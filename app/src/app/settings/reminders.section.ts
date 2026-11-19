@@ -33,14 +33,14 @@ type Day = 0 | 1 | 2 | 3 | 4 | 5 | 6;
       <p class="sub err" role="alert" data-testid="reminders-message">{{ m }}</p>
     }
 
-    @if (enabled()) {
-      @if (service.needsPermission()) {
-        <div class="row">
-          <p class="grow sub err">{{ c.needsPermission }}</p>
-          <button type="button" class="btn" data-testid="reconnect" (click)="reconnect()">{{ c.reconnect }}</button>
-        </div>
-      }
+    @if (service.needsPermission()) {
+      <div class="row">
+        <p class="grow sub err" role="alert" data-testid="needs-permission">{{ c.needsPermission }}</p>
+        <button type="button" class="btn" data-testid="reconnect" [disabled]="connecting()" (click)="reconnect()">{{ c.reconnect }}</button>
+      </div>
+    }
 
+    @if (enabled()) {
       <span class="cap" id="rem-days">{{ c.days }}</span>
       <div class="days" role="group" aria-labelledby="rem-days">
         @for (d of dayOrder(); track d) {
@@ -234,8 +234,14 @@ export class RemindersSection implements OnDestroy {
 
   protected async reconnect(): Promise<void> {
     this.message.set(null);
-    const result = await this.service.reconnect();
-    if (result === 'denied') this.message.set(this.c.denied);
+    this.connecting.set(true);
+    try {
+      if ((await this.service.reconnect()) === 'denied') this.message.set(this.c.denied);
+    } catch {
+      this.message.set(this.c.failed);
+    } finally {
+      this.connecting.set(false);
+    }
   }
 
   protected async sendTest(): Promise<void> {

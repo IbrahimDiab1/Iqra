@@ -7,6 +7,8 @@ Iqra signs in with Google and stores books in your Drive. For that it needs a fr
    `openid`, `email`, `profile`, `https://www.googleapis.com/auth/drive.file`, `https://www.googleapis.com/auth/drive.appdata`.
    Add your own Google account as a test user, then **Publish app** (status "In production"). Test mode makes sign-ins expire after 7 days. The app stays unverified, which is fine for personal use: you click through the "unverified app" notice once.
    For reading reminders, also enable the **Google Calendar API** in the same Cloud project and add the scope `https://www.googleapis.com/auth/calendar.app.created` to the consent screen. It is a sensitive scope: Iqra asks for it only when you turn reminders on, and while the app is unverified (or in Testing) Google shows its "unverified app" warning on that step too. Click through **Advanced → Go to Iqra**.
+
+   Reminders live in one calendar named "Iqra", and its id is saved in your synced settings. Iqra cannot search your calendars (the app-created scope does not allow it), so on a second device wait for settings to sync (Settings → Account → Sync now) before turning reminders on there. Otherwise that device creates a second "Iqra" calendar. Turning reminders on runs a sync first to reduce the chance of this.
 3. **Credentials → Create credentials → OAuth client ID → Web application.** Authorized JavaScript origins:
    - `http://localhost:4200`
    - `https://ibrahimdiab1.github.io`
