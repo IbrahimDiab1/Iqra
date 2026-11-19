@@ -11,6 +11,7 @@ import { FakeDrive } from '../sync/fake-drive';
 import { COPY } from '../ui/copy';
 import { ReadMarkService } from '../progress/read-mark.service';
 import { PROGRESS_COPY } from './progress-copy';
+import { CHROME_COPY } from './chrome-copy';
 import { ToastService } from '../ui/toast.service';
 import { signal } from '@angular/core';
 import type { PendingSelection } from './selection.service';
@@ -133,13 +134,21 @@ describe('ReaderPage', () => {
   }
 
   const label = () => el.querySelector('.pg')!.textContent!.replace(/\s+/g, ' ').trim();
+  const tool = (name: string) => el.querySelector<HTMLButtonElement>(`button[data-tool="${name}"]`);
   const btn = (name: string) => el.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`);
   const pager = () => fixture.debugElement.query(By.directive(PagerComponent)).componentInstance as PagerComponent;
+
+  const key = (k: string, init: KeyboardEventInit = {}, target: EventTarget = document.body) => {
+    const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...init });
+    target.dispatchEvent(e);
+    fixture.detectChanges();
+    return e;
+  };
 
   it('opens at the restored page and shows it in the label', async () => {
     await create();
     expect(positions.restore).toHaveBeenCalled();
-    expect(label()).toContain(COPY.reader.pageOf(7, 50));
+    expect(label()).toContain(CHROME_COPY.pageIndicator(7, 50));
     expect(el.querySelector('.chapter')!.textContent).toContain('Intro');
     expect(el.querySelector('iqra-pager')).not.toBeNull();
   });
@@ -151,17 +160,19 @@ describe('ReaderPage', () => {
     fixture.detectChanges();
     expect(btn(COPY.reader.jumpBack)).toBeNull();
 
-    const slider = el.querySelector<HTMLInputElement>('input[type=range]')!;
-    slider.value = '30';
-    slider.dispatchEvent(new Event('change'));
+    el.querySelector<HTMLButtonElement>('.pg')!.click();
     fixture.detectChanges();
-    expect(label()).toContain(COPY.reader.pageOf(30, 50));
+    const field = el.querySelector<HTMLInputElement>('input[type=number]')!;
+    field.value = '30';
+    field.form!.dispatchEvent(new Event('submit', { cancelable: true }));
+    fixture.detectChanges();
+    expect(label()).toContain(CHROME_COPY.pageIndicator(30, 50));
     expect(btn(COPY.reader.jumpBack)!.disabled).toBe(false);
     expect(btn(COPY.reader.jumpForward)!.disabled).toBe(true);
 
     btn(COPY.reader.jumpBack)!.click();
     fixture.detectChanges();
-    expect(label()).toContain(COPY.reader.pageOf(8, 50));
+    expect(label()).toContain(CHROME_COPY.pageIndicator(8, 50));
     expect(btn(COPY.reader.jumpForward)!.disabled).toBe(false);
   });
 
@@ -173,7 +184,7 @@ describe('ReaderPage', () => {
     expect(toast.current()?.actionLabel).toBe(COPY.reader.backAction);
     toast.undo();
     fixture.detectChanges();
-    expect(label()).toContain(COPY.reader.pageOf(7, 50));
+    expect(label()).toContain(CHROME_COPY.pageIndicator(7, 50));
     expect(btn(COPY.reader.jumpBack)!.disabled).toBe(false);
   });
 
@@ -213,60 +224,64 @@ describe('ReaderPage', () => {
     expect(el.textContent).toContain(COPY.reader.failed);
   });
 
-  it('hidden bars are inert so the keyboard cannot reach them', async () => {
+  it('has a header and a toolbar and no bottom bar, slider or hide-on-tap', async () => {
     await create();
-    const bars = () => Array.from(el.querySelectorAll<HTMLElement>('.r-top, .r-bottom'));
-    expect(bars().every((b) => !b.hasAttribute('inert'))).toBe(true);
+    expect(el.querySelector('iqra-reader-header')).not.toBeNull();
+    expect(el.querySelector('iqra-reader-toolbar [role=toolbar]')).not.toBeNull();
+    expect(el.querySelector('.r-bottom, input[type=range]')).toBeNull();
     pager().tap.emit();
     fixture.detectChanges();
-    expect(bars()).toHaveLength(2);
-    expect(bars().every((b) => b.hasAttribute('inert'))).toBe(true);
+    expect(el.querySelector('iqra-reader-header')!.hasAttribute('inert')).toBe(false);
+    expect(el.querySelector('.reader')!.classList.contains('immersive')).toBe(false);
+  });
+
+  it('the header shows the title, chapter and section, and the page indicator', async () => {
+    await db.books.put(
+      makeBook({
+        title: 'كتاب',
+        outline: [{ key: '0', title: 'Intro', page: 1, children: [{ key: '0.0', title: 'Part A', page: 5, children: [] }] }],
+      }),
+    );
+    await create();
+    const head = el.querySelector('iqra-reader-header')!;
+    expect(head.querySelector('.t1')!.textContent).toContain('كتاب');
+    expect(head.querySelector('.t1')!.getAttribute('dir')).toBe('auto');
+    expect(head.querySelector('.chapter')!.textContent).toBe('Intro');
+    expect(head.querySelector('.section')!.textContent).toBe('Part A');
+    expect(head.querySelector('.t2')!.getAttribute('dir')).toBe('auto');
+    expect(label()).toBe(CHROME_COPY.pageIndicator(7, 50));
+  });
+
+  it('the page indicator opens Go to page; Enter jumps and records history; Escape closes it', async () => {
+    await create();
+    el.querySelector<HTMLButtonElement>('.pg')!.click();
+    fixture.detectChanges();
+    const field = el.querySelector<HTMLInputElement>('input[type=number]')!;
+    expect(field.getAttribute('aria-label')).toBe(CHROME_COPY.goToPage);
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    expect(el.querySelector('input[type=number]')).toBeNull();
+    key('g');
+    fixture.detectChanges();
+    const again = el.querySelector<HTMLInputElement>('input[type=number]')!;
+    again.value = '99';
+    again.form!.dispatchEvent(new Event('submit', { cancelable: true }));
+    fixture.detectChanges();
+    expect(label()).toBe(CHROME_COPY.pageIndicator(50, 50));
+    expect(btn(COPY.reader.jumpBack)!.disabled).toBe(false);
+  });
+
+  it('an rtl book keeps the chrome and the logical page indicator', async () => {
+    await db.books.put(makeBook({ direction: 'rtl' }));
+    await create();
+    expect(el.querySelector('.pg')!.getAttribute('dir')).toBe('ltr');
+    expect(el.querySelector('iqra-reader-toolbar')).not.toBeNull();
   });
 
   it('opening marks the book opened and schedules no position', async () => {
     await create();
     expect(positions.markOpened).toHaveBeenCalledWith(expect.objectContaining({ id: 'book-1' }));
     expect(positions.schedule).not.toHaveBeenCalled();
-  });
-
-  it('an rtl book mirrors the bottom bar: left chevron is next, the slider runs right to left, the label stays logical', async () => {
-    await db.books.put(makeBook({ direction: 'rtl' }));
-    await create();
-    expect(el.querySelector('.r-row')!.getAttribute('dir')).toBe('rtl');
-    expect(el.querySelector('.r-range')!.getAttribute('dir')).toBe('rtl');
-    expect(el.querySelector('.pg')!.getAttribute('dir')).toBe('ltr');
-    // The "next" button shows the left-pointing chevron (path starts at x=15) and "previous" the right-pointing one.
-    expect(btn(COPY.reader.nextPage)!.innerHTML).toContain('M15 18');
-    expect(btn(COPY.reader.prevPage)!.innerHTML).toContain('M9 6');
-    btn(COPY.reader.nextPage)!.click();
-    fixture.detectChanges();
-    expect(label()).toContain(COPY.reader.pageOf(8, 50));
-  });
-
-  it('an ltr book keeps the usual chevrons and no dir override', async () => {
-    await create();
-    expect(el.querySelector('.r-row')!.hasAttribute('dir')).toBe(false);
-    expect(btn(COPY.reader.prevPage)!.innerHTML).toContain('M15 18');
-  });
-
-  it('reserves the bars space for content via --reader-top / --reader-bottom and releases it when hidden', async () => {
-    await create();
-    const root = el.querySelector<HTMLElement>('.reader')!;
-    expect(root.style.getPropertyValue('--reader-top')).toMatch(/px$/);
-    expect(root.style.getPropertyValue('--reader-bottom')).toMatch(/px$/);
-    pager().tap.emit();
-    fixture.detectChanges();
-    expect(root.style.getPropertyValue('--reader-top')).toBe('0px');
-    expect(root.style.getPropertyValue('--reader-bottom')).toBe('0px');
-  });
-
-  it('tapping the page toggles the immersive class', async () => {
-    await create();
-    const root = el.querySelector('.reader')!;
-    expect(root.classList.contains('immersive')).toBe(false);
-    pager().tap.emit();
-    fixture.detectChanges();
-    expect(root.classList.contains('immersive')).toBe(true);
   });
 
   it('schedules position saves on page changes and flushes on destroy', async () => {
@@ -318,16 +333,16 @@ describe('ReaderPage', () => {
     el.querySelector<HTMLButtonElement>(`button[aria-label="${COPY.reader.readingMode}"]`)!.click();
     fixture.detectChanges();
     expect(el.querySelector('iqra-reflow-view')).not.toBeNull();
-    expect(label()).toContain(COPY.reader.pageOf(7, 50));
+    expect(label()).toContain(CHROME_COPY.pageIndicator(7, 50));
   });
 
-  it('the Contents pill opens the sheet and an entry jumps', async () => {
+  it('the Contents button opens the drawer and an entry jumps', async () => {
     await create();
-    Array.from(el.querySelectorAll<HTMLButtonElement>('.pill')).find((b) => b.textContent!.includes(COPY.reader.contents))!.click();
+    tool('contents')!.click();
     fixture.detectChanges();
     el.querySelectorAll<HTMLButtonElement>('.row')[1].click();
     fixture.detectChanges();
-    expect(label()).toContain(COPY.reader.pageOf(20, 50));
+    expect(label()).toContain(CHROME_COPY.pageIndicator(20, 50));
     expect(btn(COPY.reader.jumpBack)!.disabled).toBe(false);
   });
 
@@ -347,7 +362,7 @@ describe('ReaderPage', () => {
       fixture.detectChanges();
       expect(el.querySelector('iqra-scroller')).not.toBeNull();
     });
-    expect(label()).toContain(COPY.reader.pageOf(7, 50));
+    expect(label()).toContain(CHROME_COPY.pageIndicator(7, 50));
   });
 
   describe('area tool', () => {
@@ -371,13 +386,14 @@ describe('ReaderPage', () => {
       expect(area()!.getAttribute('aria-pressed')).toBe('false');
     });
 
-    it('the button is absent in reading mode and switching to it turns the tool off', async () => {
+    it('the button is off in reading mode and switching to it turns the tool off', async () => {
       await create();
       area()!.click();
       fixture.detectChanges();
       el.querySelector<HTMLButtonElement>(`button[aria-label="${COPY.reader.readingMode}"]`)!.click();
       fixture.detectChanges();
-      expect(area()).toBeNull();
+      expect(area()!.disabled).toBe(true);
+      expect(area()!.getAttribute('aria-pressed')).toBe('false');
       el.querySelector<HTMLButtonElement>(`button[aria-label="${COPY.reader.pageView}"]`)!.click();
       fixture.detectChanges();
       expect(area()!.getAttribute('aria-pressed')).toBe('false');
@@ -438,7 +454,7 @@ describe('ReaderPage', () => {
 
     it('the Contents button shows how many notes the current page has, and hides at zero; bookmarks do not count', async () => {
       await create();
-      const pill = () => Array.from(el.querySelectorAll<HTMLButtonElement>('button.pill')).find((b) => b.textContent!.includes(COPY.reader.contents))!;
+      const pill = () => tool('contents')!;
       expect(pill().querySelector('.badge')).toBeNull();
       const svc = TestBed.inject(AnnotationService);
       await svc.create({ bookId: 'book-1', type: 'bookmark', page: 7 });
@@ -455,29 +471,29 @@ describe('ReaderPage', () => {
       const rec = await hl('far', 30);
       await vi.waitFor(() => {
         fixture.detectChanges();
-        el.querySelector<HTMLButtonElement>('button.pill')!.click();
+        tool('contents')!.click();
         fixture.detectChanges();
-        expect(el.querySelector('iqra-book-panel-sheet .tabs')).not.toBeNull();
+        expect(el.querySelector('iqra-book-panel-drawer .tabs')).not.toBeNull();
       });
-      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-sheet [role=tab]')).find((t) => t.textContent!.trim() === COPY.reader.notes)!.click();
+      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-drawer [role=tab]')).find((t) => t.textContent!.trim() === COPY.reader.notes)!.click();
       await vi.waitFor(() => {
         fixture.detectChanges();
-        expect(el.querySelector('iqra-book-panel-sheet .nrow')).not.toBeNull();
+        expect(el.querySelector('iqra-book-panel-drawer .nrow')).not.toBeNull();
       });
-      el.querySelector<HTMLButtonElement>('iqra-book-panel-sheet .nrow')!.click();
+      el.querySelector<HTMLButtonElement>('iqra-book-panel-drawer .nrow')!.click();
       fixture.detectChanges();
-      expect(label()).toContain(COPY.reader.pageOf(30, 50));
+      expect(label()).toContain(CHROME_COPY.pageIndicator(30, 50));
       expect(btn(COPY.reader.jumpBack)!.disabled).toBe(false);
       expect((fixture.componentInstance as unknown as { state(): { flash(): string | null } }).state().flash()).toBe(rec.id);
     });
 
     it('typing into a panel-made side note and closing at once keeps the note with its text', async () => {
       await create();
-      el.querySelector<HTMLButtonElement>('button.pill')!.click();
+      tool('contents')!.click();
       fixture.detectChanges();
-      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-sheet [role=tab]')).find((t) => t.textContent!.trim() === COPY.reader.notes)!.click();
+      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-drawer [role=tab]')).find((t) => t.textContent!.trim() === COPY.reader.notes)!.click();
       fixture.detectChanges();
-      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-sheet .act')).find((b) => b.textContent!.includes('Side note'))!.click();
+      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-drawer .act')).find((b) => b.textContent!.includes('Side note'))!.click();
       await vi.waitFor(() => {
         fixture.detectChanges();
         expect(el.querySelector('iqra-text-editor-sheet .panel.open')).not.toBeNull();
@@ -494,11 +510,11 @@ describe('ReaderPage', () => {
 
     it('a side note made from the panel opens the editor; closing it empty removes it', async () => {
       await create();
-      el.querySelector<HTMLButtonElement>('button.pill')!.click();
+      tool('contents')!.click();
       fixture.detectChanges();
-      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-sheet [role=tab]')).find((t) => t.textContent!.trim() === COPY.reader.notes)!.click();
+      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-drawer [role=tab]')).find((t) => t.textContent!.trim() === COPY.reader.notes)!.click();
       fixture.detectChanges();
-      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-sheet .act')).find((b) => b.textContent!.includes('Side note'))!.click();
+      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-drawer .act')).find((b) => b.textContent!.includes('Side note'))!.click();
       await vi.waitFor(() => {
         fixture.detectChanges();
         expect(el.querySelector('iqra-text-editor-sheet .panel.open')).not.toBeNull();
@@ -511,7 +527,7 @@ describe('ReaderPage', () => {
 
   describe('bookmarks and summaries', () => {
     const stored = () => db.annotations.toArray();
-    const bookmarkBtn = () => el.querySelector<HTMLButtonElement>('button.bookmark')!;
+    const bookmarkBtn = () => el.querySelector<HTMLButtonElement>('button[data-tool="bookmark"]')!;
 
     it('the bookmark button toggles a bookmark on the current page; removing offers Undo', async () => {
       await create();
@@ -542,17 +558,17 @@ describe('ReaderPage', () => {
     });
 
     async function openContents() {
-      (Array.from(el.querySelectorAll<HTMLButtonElement>('button.pill')).find((b) => b.textContent!.includes(COPY.reader.contents)))!.click();
+      tool('contents')!.click();
       await vi.waitFor(() => {
         fixture.detectChanges();
-        expect(el.querySelector('iqra-book-panel-sheet .book-sum')).not.toBeNull();
+        expect(el.querySelector('iqra-book-panel-drawer .book-sum')).not.toBeNull();
       });
     }
 
     it('Contents shows the book summary card; + Summary opens the editor and closing it untouched creates nothing', async () => {
       await create();
       await openContents();
-      el.querySelector<HTMLButtonElement>('iqra-book-panel-sheet .sum')!.click();
+      el.querySelector<HTMLButtonElement>('iqra-book-panel-drawer .sum')!.click();
       await vi.waitFor(() => {
         fixture.detectChanges();
         expect(el.querySelector('iqra-text-editor-sheet .panel.open')).not.toBeNull();
@@ -565,7 +581,7 @@ describe('ReaderPage', () => {
     it('typing in a new summary creates it with the chapter scope', async () => {
       await create();
       await openContents();
-      el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-sheet .sum')[2].click();
+      el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-drawer .sum')[2].click();
       await vi.waitFor(() => {
         fixture.detectChanges();
         expect(el.querySelector('iqra-text-editor-sheet .panel.open')).not.toBeNull();
@@ -742,7 +758,7 @@ describe('ReaderPage', () => {
       query.set('a', 'ann-1');
       await seedHighlight();
       await create();
-      expect(label()).toContain(COPY.reader.pageOf(7, 50));
+      expect(label()).toContain(CHROME_COPY.pageIndicator(7, 50));
       expect(stateOf().flash()).toBe('ann-1');
       expect(btn(COPY.reader.jumpBack)!.disabled).toBe(false);
     });
@@ -771,7 +787,7 @@ describe('ReaderPage', () => {
       restored = { place: { page: 20, offset: 0 }, zoom: 1, view: 'page', fromOtherDevice: true, previousLocal: { page: 3, offset: 0 } };
       query.set('page', '7');
       await create();
-      expect(label()).toContain(COPY.reader.pageOf(7, 50));
+      expect(label()).toContain(CHROME_COPY.pageIndicator(7, 50));
       expect(TestBed.inject(ToastService).current()).toBeNull();
     });
 
@@ -780,7 +796,7 @@ describe('ReaderPage', () => {
       query.set('a', 'ann-1');
       await seedHighlight();
       await create();
-      expect(label()).toContain(COPY.reader.pageOf(7, 50));
+      expect(label()).toContain(CHROME_COPY.pageIndicator(7, 50));
       expect(stateOf().flash()).toBeNull();
     });
 
@@ -789,21 +805,27 @@ describe('ReaderPage', () => {
       query.set('a', 'ann-1');
       await seedHighlight(true);
       await create();
-      expect(label()).toContain(COPY.reader.pageOf(9, 50));
+      expect(label()).toContain(CHROME_COPY.pageIndicator(9, 50));
       expect(stateOf().flash()).toBeNull();
     });
   });
   describe('progress', () => {
-    const markButton = () => el.querySelector<HTMLButtonElement>('button.mark-read');
+    const markButton = () => el.querySelector<HTMLButtonElement>('button[data-tool="mark"]');
 
-    it('shows the Mark read button only in marked mode, and it toggles', async () => {
+    it('the Mark page read button is disabled with a hint in last-page mode, and in marked mode it toggles', async () => {
       await create();
-      expect(markButton()).toBeNull();
+      expect(markButton()!.getAttribute('aria-disabled')).toBe('true');
+      expect(markButton()!.getAttribute('aria-label')).toBe(CHROME_COPY.markDisabled);
+      expect(markButton()!.hasAttribute('aria-pressed')).toBe(false);
+      markButton()!.click();
+      key('m');
+      expect(await db.readMarks.count()).toBe(0);
       fixture.destroy();
       await db.books.put(makeBook({ progressMode: 'marked' }));
       await create();
       const b = markButton()!;
-      expect(b.textContent).toContain(PROGRESS_COPY.markRead);
+      expect(b.hasAttribute('aria-disabled')).toBe(false);
+      expect(b.getAttribute('aria-label')).toBe(CHROME_COPY.markPageRead);
       expect(b.getAttribute('aria-pressed')).toBe('false');
       b.click();
       await vi.waitFor(async () => {
@@ -811,7 +833,7 @@ describe('ReaderPage', () => {
         expect((await db.readMarks.get('book-1:7'))?.read).toBe(true);
         expect(markButton()!.getAttribute('aria-pressed')).toBe('true');
       });
-      expect(markButton()!.textContent).toContain(PROGRESS_COPY.markedRead);
+      expect(markButton()!.getAttribute('aria-label')).toBe(CHROME_COPY.unmarkPageRead);
       markButton()!.click();
       await vi.waitFor(async () => expect((await db.readMarks.get('book-1:7'))?.read).toBe(false));
     });
@@ -911,6 +933,134 @@ describe('ReaderPage', () => {
       const release = vi.spyOn(marks, 'release');
       fixture.destroy();
       expect(release).toHaveBeenCalledWith('book-1');
+    });
+  });
+
+  describe('shortcuts', () => {
+    const area = () => tool('area')!;
+    const annotationsOf = () => db.annotations.toArray();
+
+    it('B toggles the bookmark, A the area tool, R the reading mode, C/N/\\/ open the drawer', async () => {
+      await create();
+      key('b');
+      await vi.waitFor(async () => expect((await annotationsOf()).filter((r) => r.type === 'bookmark' && !r.deleted)).toHaveLength(1));
+      key('a');
+      expect(area().getAttribute('aria-pressed')).toBe('true');
+      key('a');
+      expect(area().getAttribute('aria-pressed')).toBe('false');
+      key('r');
+      expect(el.querySelector('iqra-reflow-view')).not.toBeNull();
+      key('r');
+      expect(el.querySelector('iqra-pager')).not.toBeNull();
+      key('c');
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-drawer .panel.open')).not.toBeNull();
+        expect(el.querySelector('iqra-drawer h3')!.textContent).toBe(COPY.reader.contents);
+      });
+      key('n');
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-drawer h3')!.textContent).toBe(COPY.reader.notes);
+      });
+      key('/');
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('input[type=search]')).not.toBeNull();
+      });
+    });
+
+    it('M marks the page in marked mode and explains itself in last-page mode', async () => {
+      await create();
+      key('m');
+      expect(TestBed.inject(ToastService).current()?.message).toBe(CHROME_COPY.markDisabled);
+      fixture.destroy();
+      await db.books.put(makeBook({ progressMode: 'marked' }));
+      await create();
+      key('m');
+      await vi.waitFor(async () => expect((await db.readMarks.get('book-1:7'))?.read).toBe(true));
+    });
+
+    it('F toggles full screen, G opens Go to page, ? opens the cheat-sheet, Ctrl+F is taken', async () => {
+      await create();
+      const request = vi.fn(async () => undefined);
+      (document.documentElement as unknown as { requestFullscreen: () => Promise<void> }).requestFullscreen = request;
+      key('f');
+      expect(request).toHaveBeenCalled();
+      key('g');
+      expect(el.querySelector('input[type=number]')).not.toBeNull();
+      key('?', { shiftKey: true });
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-shortcut-help .panel.open')).not.toBeNull();
+      });
+      expect(key('f', { ctrlKey: true }).defaultPrevented).toBe(true);
+      delete (document.documentElement as unknown as { requestFullscreen?: unknown }).requestFullscreen;
+    });
+
+    it('browser shortcuts stay alone: Ctrl+B, Ctrl+A and Ctrl+R do nothing here', async () => {
+      await create();
+      for (const k of ['b', 'a', 'r', 'c', 'm']) expect(key(k, { ctrlKey: true }).defaultPrevented).toBe(false);
+      expect(area().getAttribute('aria-pressed')).toBe('false');
+      expect(el.querySelector('iqra-reflow-view')).toBeNull();
+      expect(await annotationsOf()).toHaveLength(0);
+    });
+
+    it('is ignored while typing in a field', async () => {
+      await create();
+      tool('contents')!.click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-drawer .panel.open')).not.toBeNull();
+      });
+      key('/');
+      let field!: HTMLInputElement;
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        field = el.querySelector<HTMLInputElement>('input[type=search]')!;
+        expect(field).not.toBeNull();
+      });
+      for (const k of ['b', 'a', 'r', 'm', 'g', 'f', '?']) key(k, {}, field);
+      expect(area().getAttribute('aria-pressed')).toBe('false');
+      expect(el.querySelector('iqra-reflow-view')).toBeNull();
+      expect(await annotationsOf()).toHaveLength(0);
+      expect(el.querySelector('input[type=number]')).toBeNull();
+    });
+  });
+
+  describe('progress mode switch', () => {
+    const choose = async (label: string) => {
+      tool('progress')!.click();
+      fixture.detectChanges();
+      Array.from(el.querySelectorAll<HTMLButtonElement>('[role=menuitemradio]')).find((b) => b.textContent!.includes(label))!.click();
+    };
+
+    it('switches to marked mode, keeps the data, and the Mark button becomes active', async () => {
+      await db.books.put(makeBook({ lastPageReached: 12 }));
+      await db.readMarks.put({ id: 'book-1:3', bookId: 'book-1', page: 3, read: true, updatedAt: 1, deviceId: 'dev' });
+      await create();
+      expect(tool('mark')!.getAttribute('aria-disabled')).toBe('true');
+      await choose(CHROME_COPY.trackByMarked);
+      await vi.waitFor(async () => {
+        fixture.detectChanges();
+        expect((await db.books.get('book-1'))!.progressMode).toBe('marked');
+        expect(tool('mark')!.hasAttribute('aria-disabled')).toBe(false);
+      });
+      expect(TestBed.inject(ToastService).current()?.message).toBe(CHROME_COPY.nowMarked);
+      expect((await db.books.get('book-1'))!.lastPageReached).toBe(12);
+      expect((await db.readMarks.get('book-1:3'))!.read).toBe(true);
+    });
+
+    it('switches back to last-page mode and says so', async () => {
+      await db.books.put(makeBook({ progressMode: 'marked' }));
+      await create();
+      await choose(CHROME_COPY.trackByLast);
+      await vi.waitFor(async () => {
+        fixture.detectChanges();
+        expect((await db.books.get('book-1'))!.progressMode).toBe('last-page');
+        expect(tool('mark')!.getAttribute('aria-disabled')).toBe('true');
+      });
+      expect(TestBed.inject(ToastService).current()?.message).toBe(CHROME_COPY.nowLast);
     });
   });
 });

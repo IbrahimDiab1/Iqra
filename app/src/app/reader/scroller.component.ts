@@ -79,7 +79,7 @@ const DEFAULT_RATIO = 1.414;
   `,
   styles: `
     :host { display: block; width: 100%; height: 100%; }
-    .viewport { box-sizing: border-box; width: 100%; height: 100%; overflow: auto; overscroll-behavior: contain; touch-action: pan-x pan-y; padding-top: var(--reader-top, 0px); padding-bottom: var(--reader-bottom, 0px); }
+    .viewport { box-sizing: border-box; width: 100%; height: 100%; overflow: auto; overscroll-behavior: contain; touch-action: pan-x pan-y; }
     .column { position: relative; margin: 0 auto; }
     .page { position: absolute; }
   `,

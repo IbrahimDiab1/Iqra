@@ -23,7 +23,7 @@ import { COPY } from '../ui/copy';
 import { PROGRESS_COPY } from './progress-copy';
 import { icon } from '../ui/icons';
 import { ToastService } from '../ui/toast.service';
-import { SheetComponent } from '../ui/sheet.component';
+import { DrawerComponent } from './drawer.component';
 import type { Place } from './jump-history';
 import { BookmarksTabComponent } from './bookmarks-tab.component';
 import { flattenOutline, nodeRange } from './outline';
@@ -39,14 +39,14 @@ const INDENT_PX = 16;
 const MIN_QUERY = 2;
 
 @Component({
-  selector: 'iqra-book-panel-sheet',
-  imports: [SheetComponent, NotesTabComponent, BookmarksTabComponent],
+  selector: 'iqra-book-panel-drawer',
+  imports: [DrawerComponent, NotesTabComponent, BookmarksTabComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <f-sheet [open]="open()" [title]="titles[tab()]" [tall]="true" (closed)="close()">
+    <iqra-drawer [open]="open()" [title]="titles[tab()]" (closed)="close()">
       <div class="tabs" role="tablist">
         @for (t of tabs; track t.id) {
-          <button type="button" role="tab" [attr.aria-selected]="tab() === t.id" [class.on]="tab() === t.id" (click)="tab.set(t.id)">{{ t.label }}</button>
+          <button type="button" role="tab" [attr.aria-selected]="tab() === t.id" [class.on]="tab() === t.id" (click)="selectTab(t.id)">{{ t.label }}</button>
         }
       </div>
 
@@ -141,7 +141,7 @@ const MIN_QUERY = 2;
           </ul>
         }
       }
-    </f-sheet>
+    </iqra-drawer>
   `,
   styles: `
     .tabs { display: flex; gap: 4px; padding: 3px; margin-bottom: 10px; border-radius: var(--radius-control); background: var(--surface-2); }
@@ -172,7 +172,7 @@ const MIN_QUERY = 2;
     .field { box-sizing: border-box; width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--fg); font: 16px var(--ui); }
   `,
 })
-export class BookPanelSheetComponent implements OnDestroy {
+export class BookPanelDrawerComponent implements OnDestroy {
   readonly open = input(false);
   /** The tab to show whenever this input changes. */
   readonly initialTab = input<PanelTab>('contents', { alias: 'tab' });
@@ -184,6 +184,8 @@ export class BookPanelSheetComponent implements OnDestroy {
   /** The pages marked read in this book (marked mode). */
   readonly marked = input<ReadonlySet<number>>(new Set());
   readonly closed = output<void>();
+  /** The tab the reader picked inside the panel, so the page can keep its own copy in step. */
+  readonly tabChange = output<PanelTab>();
   readonly jump = output<Place>();
   /** The panel asks for the summary editor on this scope (existing or new). */
   readonly summary = output<SummaryScope>();
@@ -270,6 +272,11 @@ export class BookPanelSheetComponent implements OnDestroy {
   ngOnDestroy(): void {
     clearTimeout(this.debounce);
     this.abort?.abort();
+  }
+
+  protected selectTab(id: PanelTab): void {
+    this.tab.set(id);
+    this.tabChange.emit(id);
   }
 
   protected close(): void {

@@ -4,7 +4,6 @@ import {
   ElementRef,
   HostListener,
   Signal,
-  WritableSignal,
   effect,
   InjectionToken,
   OnDestroy,
@@ -32,18 +31,23 @@ import { ReadMarkService } from '../progress/read-mark.service';
 import { DRIVE_ADAPTER } from '../sync/drive-adapter';
 import { COPY } from '../ui/copy';
 import { PROGRESS_COPY } from './progress-copy';
+import { CHROME_COPY } from './chrome-copy';
 import { icon, type IconName } from '../ui/icons';
 import { ToastService } from '../ui/toast.service';
 import type { Place } from './jump-history';
 import { isReaderKeyIgnored } from './keys';
-import { chapterTitleAt } from './outline';
-import { BookPanelSheetComponent, type PanelTab } from './book-panel.sheet';
+import { chapterTitleAt, sectionTitleAt } from './outline';
+import { BookPanelDrawerComponent, type PanelTab } from './book-panel.drawer';
 import { PagerComponent } from './pager.component';
 import { PdfSession, ReaderOpenError, type PageRenderer, type PdfSource } from './pdf-session';
 import { PositionService } from './position.service';
 import { ReaderState } from './reader.state';
 import { SessionService, type ReaderSessionHandle } from './session.service';
 import { ReadingSettingsSheetComponent } from './reading-settings.sheet';
+import { ReaderHeaderComponent } from './reader-header.component';
+import { ReaderToolbarComponent, type ToolbarAction } from './reader-toolbar.component';
+import { ShortcutHelpComponent } from './shortcut-help.component';
+import { shortcutFor, type ShortcutAction } from './shortcuts';
 import { ReflowViewComponent } from './reflow-view.component';
 import { ScrollerComponent } from './scroller.component';
 import { SelectionService, type PendingSelection } from './selection.service';
@@ -68,7 +72,7 @@ const FINISH_TOAST_MS = 8000;
 
 @Component({
   selector: 'iqra-reader-page',
-  imports: [RouterLink, BookPanelSheetComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective, SelectionToolbarComponent, NoteSheetComponent, TextEditorSheet],
+  imports: [RouterLink, ReaderHeaderComponent, ReaderToolbarComponent, ShortcutHelpComponent, BookPanelDrawerComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective, SelectionToolbarComponent, NoteSheetComponent, TextEditorSheet],
   providers: [SelectionService],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -92,55 +96,21 @@ const FINISH_TOAST_MS = 8000;
         @let s = state()!;
         @let r = session()!;
         @let b = book()!;
-        <section
-          class="reader ready"
-          [attr.data-rt]="theme()"
-          [class.immersive]="!s.chrome()"
-          [style.--reader-top.px]="s.chrome() ? topH() : 0"
-          [style.--reader-bottom.px]="s.chrome() ? bottomH() : 0"
-        >
-          <header #topBar class="r-top" [attr.inert]="s.chrome() ? null : ''">
-            <a class="ib" routerLink="/library" [attr.aria-label]="copy.back" [innerHTML]="ic('back')"></a>
-            <div class="r-title">
-              <div class="t1" dir="auto">{{ b.title }}</div>
-              @if (chapter(); as c) {
-                <div class="t2 chapter" dir="auto">{{ c }}</div>
-              }
-            </div>
-            @if (s.canBack() || s.canForward()) {
-              <button type="button" class="ib" [attr.aria-label]="copy.jumpBack" [disabled]="!s.canBack()" (click)="historyBack()" [innerHTML]="ic('histBack')"></button>
-              <button type="button" class="ib" [attr.aria-label]="copy.jumpForward" [disabled]="!s.canForward()" (click)="historyForward()" [innerHTML]="ic('histFwd')"></button>
-            }
-            <button
-              type="button"
-              class="ib"
-              [attr.aria-label]="s.view() === 'page' ? copy.readingMode : copy.pageView"
-              (click)="s.setView(s.view() === 'page' ? 'reflow' : 'page')"
-              [innerHTML]="ic(s.view() === 'page' ? 'reflow' : 'pageview')"
-            ></button>
-            @if (s.view() === 'page') {
-              <button
-                type="button"
-                class="ib"
-                [attr.aria-label]="annCopy.area"
-                [attr.aria-pressed]="s.tool() === 'area'"
-                [class.on]="s.tool() === 'area'"
-                (click)="toggleArea()"
-                [innerHTML]="ic('areaSelect')"
-              ></button>
-            }
-            <button
-              type="button"
-              class="ib bookmark"
-              [attr.aria-label]="bookmark() ? annCopy.removeBookmark : annCopy.addBookmark"
-              [attr.aria-pressed]="!!bookmark()"
-              [class.on]="!!bookmark()"
-              (click)="toggleBookmark()"
-              [innerHTML]="ic(bookmark() ? 'bookmarkFill' : 'bookmark')"
-            ></button>
-            <button type="button" class="ib" [attr.aria-label]="copy.search" (click)="openPanel('search')" [innerHTML]="ic('search')"></button>
-            <button type="button" class="ib" [attr.aria-label]="copy.settings" (click)="settingsOpen.set(true)" [innerHTML]="ic('type')"></button>
-          </header>
+        <section class="reader ready" [attr.data-rt]="theme()">
+          <iqra-reader-header
+            class="r-top"
+            [title]="b.title"
+            [chapter]="chapter()"
+            [section]="section()"
+            [page]="s.page()"
+            [numPages]="r.numPages"
+            [canBack]="s.canBack()"
+            [canForward]="s.canForward()"
+            [(gotoOpen)]="gotoOpen"
+            (historyBack)="historyBack()"
+            (historyForward)="historyForward()"
+            (goTo)="goToPage($event)"
+          />
 
           <main class="stage">
             @if (s.view() === 'reflow') {
@@ -155,7 +125,6 @@ const FINISH_TOAST_MS = 8000;
                 [annotations]="annotations()"
                 [flashId]="s.flash()"
                 (annotationTap)="onAnnotationTap($event)"
-                (tap)="s.toggleChrome()"
               />
             } @else if (b.pageMode === 'scroll') {
               <iqra-scroller
@@ -170,7 +139,6 @@ const FINISH_TOAST_MS = 8000;
                 (placeChange)="s.placeChange($event)"
                 (zoomChange)="s.setZoom($event)"
                 (annotationTap)="onAnnotationTap($event)"
-                (tap)="s.toggleChrome()"
               />
             } @else {
               <div
@@ -195,91 +163,77 @@ const FINISH_TOAST_MS = 8000;
                   (pageChange)="s.pageChange($event)"
                   (zoomChange)="s.setZoom($event)"
                   (annotationTap)="onAnnotationTap($event)"
-                  (tap)="s.toggleChrome()"
                 />
               </div>
             }
           </main>
 
-          <iqra-selection-toolbar
-            [selection]="toolbarTarget()"
-            (color)="highlight($event)"
-            (note)="addNote()"
-            (copy)="copySelection()"
+          <iqra-reader-toolbar
+            class="r-tools"
+            [view]="s.view()"
+            [tool]="s.tool()"
+            [bookmarked]="!!bookmark()"
+            [progressMode]="b.progressMode"
+            [pageMarked]="pageMarked()"
+            [fullscreen]="fullscreen()"
+            [noteCount]="pageNoteCount()"
+            (action)="onToolbar($event)"
+            (progressModeChange)="setProgressMode($event)"
           />
 
-          <div class="zoompair">
-            <button type="button" class="ib" [attr.aria-label]="copy.zoom + ' +'" (click)="s.setZoom(zoomIn(s.zoom(), s.view()))" [innerHTML]="ic('zoomIn')"></button>
-            <button type="button" class="ib" [attr.aria-label]="copy.zoom + ' −'" (click)="s.setZoom(zoomOut(s.zoom(), s.view()))" [innerHTML]="ic('zoomOut')"></button>
+          <div class="overlays">
+            <iqra-selection-toolbar
+              [selection]="toolbarTarget()"
+              (color)="highlight($event)"
+              (note)="addNote()"
+              (copy)="copySelection()"
+            />
+
+            <div class="zoompair">
+              <button type="button" class="ib" [attr.aria-label]="copy.zoom + ' +'" (click)="s.setZoom(zoomIn(s.zoom(), s.view()))" [innerHTML]="ic('zoomIn')"></button>
+              <button type="button" class="ib" [attr.aria-label]="copy.zoom + ' −'" (click)="s.setZoom(zoomOut(s.zoom(), s.view()))" [innerHTML]="ic('zoomOut')"></button>
+            </div>
+
+            <iqra-book-panel-drawer
+              [open]="panel() !== null"
+              [tab]="panel() ?? 'contents'"
+              [book]="b"
+              [renderer]="r"
+              [page]="s.page()"
+              [annotations]="annotations()"
+              [marked]="marked()"
+              (closed)="panel.set(null)"
+              (tabChange)="panel.set($event)"
+              (jump)="jump($event)"
+              (summary)="editSummary($event)"
+              (edit)="editText($event)"
+              (note)="noteTarget.set($event)"
+              (sideNote)="startSideNote($event)"
+              (flash)="s.flashAnnotation($event)"
+            />
+            <iqra-shortcut-help [open]="helpOpen()" (closed)="helpOpen.set(false)" />
+            <iqra-text-editor-sheet
+              [annotation]="textTarget()"
+              [draft]="textIsDraft()"
+              [isNew]="textTarget()?.id === newSideNoteId()"
+              [pageCount]="r.numPages"
+              [tagSuggestions]="tagSuggestions()"
+              (closed)="closeText($event.empty)"
+            />
+            <iqra-note-sheet
+              [annotation]="noteTarget()"
+              [isNew]="noteTarget()?.id === newNoteId()"
+              [tagSuggestions]="tagSuggestions()"
+              (closed)="noteTarget.set(null)"
+            />
+            <iqra-reading-settings-sheet
+              [open]="settingsOpen()"
+              [book]="b"
+              [state]="s"
+              (closed)="settingsOpen.set(false)"
+              (bookChange)="book.set($event)"
+            />
           </div>
-
-          <footer #bottomBar class="r-bottom" [attr.inert]="s.chrome() ? null : ''">
-            <div class="r-range" [attr.dir]="rtl() ? 'rtl' : null">
-              <input
-                type="range"
-                min="1"
-                [max]="r.numPages"
-                step="1"
-                [value]="preview() ?? s.page()"
-                [attr.aria-label]="copy.pageOf(preview() ?? s.page(), r.numPages)"
-                (input)="preview.set(sliderValue($event))"
-                (change)="slide($event)"
-              />
-            </div>
-            <div class="r-row" [attr.dir]="rtl() ? 'rtl' : null">
-              <button type="button" class="ib" [attr.aria-label]="copy.prevPage" [disabled]="s.page() <= 1" (click)="step(-1)" [innerHTML]="ic(rtl() ? 'chevR' : 'chevL')"></button>
-              <span class="pg" dir="ltr">{{ copy.pageOf(preview() ?? s.page(), r.numPages) }} <span>· {{ percent() }}%</span></span>
-              @if (b.progressMode === 'marked') {
-                <button type="button" class="pill mark-read" [attr.aria-pressed]="pageMarked()" [class.on]="pageMarked()" (click)="toggleMark()">
-                  {{ pageMarked() ? progressCopy.markedRead : progressCopy.markRead }}
-                </button>
-              }
-              <button type="button" class="pill" (click)="openPanel('contents')">
-                {{ copy.contents }}
-                @if (pageNoteCount() > 0) {
-                  <span class="badge">{{ pageNoteCount() }}</span>
-                }
-              </button>
-              <button type="button" class="ib" [attr.aria-label]="copy.nextPage" [disabled]="s.page() >= r.numPages" (click)="step(1)" [innerHTML]="ic(rtl() ? 'chevL' : 'chevR')"></button>
-            </div>
-          </footer>
-          <iqra-book-panel-sheet
-            [open]="panel() !== null"
-            [tab]="panel() ?? 'contents'"
-            [book]="b"
-            [renderer]="r"
-            [page]="s.page()"
-            [annotations]="annotations()"
-            [marked]="marked()"
-            (closed)="panel.set(null)"
-            (jump)="jump($event)"
-            (summary)="editSummary($event)"
-            (edit)="editText($event)"
-            (note)="noteTarget.set($event)"
-            (sideNote)="startSideNote($event)"
-            (flash)="s.flashAnnotation($event)"
-          />
-          <iqra-text-editor-sheet
-            [annotation]="textTarget()"
-            [draft]="textIsDraft()"
-            [isNew]="textTarget()?.id === newSideNoteId()"
-            [pageCount]="r.numPages"
-            [tagSuggestions]="tagSuggestions()"
-            (closed)="closeText($event.empty)"
-          />
-          <iqra-note-sheet
-            [annotation]="noteTarget()"
-            [isNew]="noteTarget()?.id === newNoteId()"
-            [tagSuggestions]="tagSuggestions()"
-            (closed)="noteTarget.set(null)"
-          />
-          <iqra-reading-settings-sheet
-            [open]="settingsOpen()"
-            [book]="b"
-            [state]="s"
-            (closed)="settingsOpen.set(false)"
-            (bookChange)="book.set($event)"
-          />
         </section>
       }
     }
@@ -292,49 +246,29 @@ const FINISH_TOAST_MS = 8000;
     .actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
     .btn { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; padding: 0 16px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--fg); font: 15px var(--ui); text-decoration: none; cursor: pointer; }
     .btn.link { color: var(--accent); }
-    .btn:focus-visible, .ib:focus-visible, .pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .btn:focus-visible, .ib:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
     .reader {
       --paper: var(--paper-light); --ink: var(--ink-light);
-      position: fixed; inset: 0; display: flex; flex-direction: column; color: var(--ink);
-      transition: --reader-top 240ms cubic-bezier(.2, .8, .2, 1), --reader-bottom 240ms cubic-bezier(.2, .8, .2, 1);
+      --reader-header-h: calc(52px + env(safe-area-inset-top, 0px)); --reader-toolbar-w: 52px;
+      position: fixed; inset: 0; display: grid; color: var(--ink);
+      grid-template-columns: minmax(0, 1fr) var(--reader-toolbar-w); grid-template-rows: var(--reader-header-h) minmax(0, 1fr);
       background: color-mix(in srgb, var(--ink) 7%, var(--paper));
     }
     .reader[data-rt='sepia'] { --paper: var(--paper-sepia); --ink: var(--ink-sepia); }
     .reader[data-rt='night'] { --paper: var(--paper-night); --ink: var(--ink-night); }
-    .stage { position: absolute; inset: 0; }
+    .r-top { grid-column: 1 / -1; grid-row: 1; }
+    .stage { grid-column: 1; grid-row: 2; position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+    .r-tools { grid-column: 2; grid-row: 2; min-height: 0; }
+    /* Sheets, the drawer and the floating toolbars position themselves; they take no grid cell. */
+    .overlays { display: contents; }
     .zoomwrap { width: 100%; height: 100%; }
-    .r-top, .r-bottom {
-      position: absolute; left: 0; right: 0; z-index: 5;
-      background: color-mix(in srgb, var(--paper) 94%, transparent);
-      -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
-      transition: transform 240ms cubic-bezier(.2, .8, .2, 1), opacity 200ms;
-    }
-    .r-top { top: 0; display: flex; align-items: center; padding: calc(8px + env(safe-area-inset-top, 0px)) 6px 8px 2px; border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); }
-    .r-bottom { bottom: 0; display: grid; gap: 4px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); }
-    .immersive .r-top { transform: translateY(-100%); opacity: 0; pointer-events: none; }
-    .immersive .r-bottom { transform: translateY(100%); opacity: 0; pointer-events: none; }
-    .r-title { flex: 1; min-width: 0; padding: 0 4px; }
-    .t1 { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .t2 { font-size: 12px; color: color-mix(in srgb, var(--ink) 58%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ib { display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none; padding: 0; border: 0; border-radius: var(--radius-control); background: none; color: inherit; cursor: pointer; }
     .ib:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 8%, transparent); }
-    .ib:disabled { opacity: 0.35; cursor: default; }
-    .ib.on { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
-    .r-row { display: flex; align-items: center; gap: 6px; }
-    .pg { flex: 1; min-width: 0; font-size: 13px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
-    .pg span { color: color-mix(in srgb, var(--ink) 55%, transparent); }
-    .badge { display: inline-block; min-width: 18px; margin-inline-start: 6px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: var(--on-accent, #fff); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
-    .pill.on { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: var(--accent); color: var(--accent); }
-    .pill { min-height: 40px; padding: 0 14px; border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); border-radius: 999px; background: none; color: inherit; font: 13px var(--ui); cursor: pointer; }
-    .r-range { display: flex; align-items: center; padding: 0 6px; }
-    .r-range input { direction: inherit; flex: 1; min-width: 0; min-height: 24px; accent-color: var(--accent); }
     .zoompair { display: none; }
     @media (min-width: 900px) {
-      .zoompair { position: absolute; right: 16px; bottom: 120px; z-index: 5; display: grid; gap: 6px; background: color-mix(in srgb, var(--paper) 94%, transparent); border-radius: var(--radius-control); box-shadow: var(--shadow); }
-      .immersive .zoompair { bottom: 24px; }
+      .zoompair { position: absolute; right: calc(var(--reader-toolbar-w) + 16px); bottom: 24px; z-index: 5; display: grid; gap: 6px; background: color-mix(in srgb, var(--paper) 94%, transparent); border-radius: var(--radius-control); box-shadow: var(--shadow); }
     }
-    @media (prefers-reduced-motion: reduce) { .reader, .r-top, .r-bottom { transition: none; } }
   `,
 })
 export class ReaderPage implements OnDestroy {
@@ -361,11 +295,6 @@ export class ReaderPage implements OnDestroy {
   private readonly repo = inject(Repo);
   protected readonly selection = inject(SelectionService);
   private readonly scroller = viewChild(ScrollerComponent);
-  private readonly topBar = viewChild<ElementRef<HTMLElement>>('topBar');
-  private readonly bottomBar = viewChild<ElementRef<HTMLElement>>('bottomBar');
-  /** Heights of the bars (safe areas included): the space the content reserves while the chrome is visible. */
-  protected readonly topH = signal(0);
-  protected readonly bottomH = signal(0);
 
   protected readonly status = signal<Status>('loading');
   protected readonly statusKind = computed(() => {
@@ -419,9 +348,12 @@ export class ReaderPage implements OnDestroy {
   protected readonly toolbarTarget = computed(() => this.pendingArea() ?? this.selection.pending());
   protected readonly session = signal<ReaderSession | null>(null);
   protected readonly state = signal<ReaderState | null>(null);
-  protected readonly preview = signal<number | null>(null);
   protected readonly panel = signal<PanelTab | null>(null);
   protected readonly settingsOpen = signal(false);
+  /** The header's Go to page field. */
+  protected readonly gotoOpen = signal(false);
+  protected readonly helpOpen = signal(false);
+  protected readonly fullscreen = signal(false);
 
   protected readonly theme = computed(() => this.settings.settings().readerTheme);
   protected readonly rtl = computed(() => this.book()?.direction === 'rtl');
@@ -430,10 +362,10 @@ export class ReaderPage implements OnDestroy {
     const s = this.state();
     return b && s ? chapterTitleAt(b.outline, s.page()) : null;
   });
-  protected readonly percent = computed(() => {
+  protected readonly section = computed(() => {
+    const b = this.book();
     const s = this.state();
-    const n = this.session()?.numPages ?? 0;
-    return s && n > 0 ? Math.round(((this.preview() ?? s.page()) / n) * 100) : 0;
+    return b && s ? sectionTitleAt(b.outline, s.page()) : null;
   });
 
   private stopListening: () => void = () => undefined;
@@ -441,8 +373,6 @@ export class ReaderPage implements OnDestroy {
   private loadId = 0;
 
   constructor() {
-    this.measure(this.topBar, this.topH);
-    this.measure(this.bottomBar, this.bottomH);
     effect(() => {
       const s = this.state();
       if (!s) return;
@@ -472,19 +402,6 @@ export class ReaderPage implements OnDestroy {
       document.removeEventListener('selectionchange', activity);
     };
     void this.load();
-  }
-
-  private measure(bar: () => ElementRef<HTMLElement> | undefined, into: WritableSignal<number>): void {
-    effect((onCleanup) => {
-      const el = bar()?.nativeElement;
-      if (!el) return;
-      const read = () => into.set(el.offsetHeight);
-      read();
-      if (typeof ResizeObserver === 'undefined') return;
-      const observer = new ResizeObserver(read);
-      observer.observe(el);
-      onCleanup(() => observer.disconnect());
-    });
   }
 
   protected ic(name: IconName) {
@@ -605,16 +522,6 @@ export class ReaderPage implements OnDestroy {
   protected historyForward(): void {
     const place = this.state()?.historyForward();
     if (place) this.scroller()?.scrollTo(place);
-  }
-
-  protected step(dir: 1 | -1): void {
-    const s = this.state();
-    const n = this.session()?.numPages ?? 0;
-    if (!s) return;
-    const page = Math.min(n, Math.max(1, s.page() + dir));
-    if (page === s.page()) return;
-    s.pageChange(page);
-    this.scroller()?.scrollTo({ page, offset: 0 });
   }
 
   protected showPage(): void {
@@ -796,15 +703,6 @@ export class ReaderPage implements OnDestroy {
     }
   }
 
-  protected sliderValue(e: Event): number {
-    return Number((e.target as HTMLInputElement).value);
-  }
-
-  protected slide(e: Event): void {
-    this.preview.set(null);
-    this.jump({ page: this.sliderValue(e), offset: 0 });
-  }
-
   @HostListener('document:keydown', ['$event'])
   protected onKey(e: KeyboardEvent): void {
     if (!this.state() || isReaderKeyIgnored(e)) return;
@@ -814,18 +712,89 @@ export class ReaderPage implements OnDestroy {
       e.preventDefault();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'f') {
-      this.openPanel('search');
-      e.preventDefault();
+    const action = shortcutFor(e);
+    if (action && this.run(action)) e.preventDefault();
+  }
+
+  /** Runs a shortcut; false when it does nothing here, so the key keeps its browser meaning. */
+  private run(action: ShortcutAction): boolean {
+    switch (action) {
+      case 'bookmark': void this.toggleBookmark(); return true;
+      case 'mark': void this.markPage(); return true;
+      case 'area': this.toggleArea(); return true;
+      case 'mode': this.toggleView(); return true;
+      case 'search': this.openPanel('search'); return true;
+      case 'contents': this.openPanel('contents'); return true;
+      case 'notes': this.openPanel('notes'); return true;
+      case 'fullscreen': this.toggleFullscreen(); return true;
+      case 'goto': this.gotoOpen.set(true); return true;
+      case 'help': this.helpOpen.set(true); return true;
+      case 'historyBack': this.historyBack(); return true;
+      case 'historyForward': this.historyForward(); return true;
+      // Undo and redo arrive with the undo stack; until then the keys keep their browser meaning.
+      default: return false;
+    }
+  }
+
+  protected onToolbar(action: ToolbarAction): void {
+    switch (action) {
+      case 'contents': this.panel.set(this.panel() === null ? 'contents' : null); break;
+      case 'search': this.openPanel('search'); break;
+      case 'bookmark': void this.toggleBookmark(); break;
+      case 'mark': void this.markPage(); break;
+      case 'area': this.toggleArea(); break;
+      case 'mode': this.toggleView(); break;
+      case 'settings': this.settingsOpen.set(true); break;
+      case 'fullscreen': this.toggleFullscreen(); break;
+      default: break;
+    }
+  }
+
+  private toggleView(): void {
+    const s = this.state();
+    s?.setView(s.view() === 'page' ? 'reflow' : 'page');
+  }
+
+  protected goToPage(page: number): void {
+    this.jump({ page, offset: 0 });
+  }
+
+  private toggleFullscreen(): void {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch((err) => console.warn('Could not leave full screen', err));
+    } else {
+      document.documentElement.requestFullscreen?.().catch((err) => console.warn('Could not enter full screen', err));
+    }
+  }
+
+  @HostListener('document:fullscreenchange')
+  protected onFullscreenChange(): void {
+    this.fullscreen.set(document.fullscreenElement !== null);
+  }
+
+  /** The Mark page read toggle; outside marked mode it says why it does nothing. */
+  private async markPage(): Promise<void> {
+    if (this.book()?.progressMode !== 'marked') {
+      this.toast.show(CHROME_COPY.markDisabled);
       return;
     }
-    if (!e.altKey || e.ctrlKey || e.metaKey) return;
-    if (e.key === 'ArrowLeft') {
-      this.historyBack();
-      e.preventDefault();
-    } else if (e.key === 'ArrowRight') {
-      this.historyForward();
-      e.preventDefault();
+    await this.toggleMark();
+  }
+
+  /** Switches how this book's progress is counted; both the marks and the last page reached are kept. */
+  protected async setProgressMode(mode: Book['progressMode']): Promise<void> {
+    const b = this.book();
+    if (!b || b.progressMode === mode) return;
+    try {
+      const saved = await this.repo.update<Book>('books', b.id, () => ({ progressMode: mode }));
+      if (!saved || this.destroyed) return;
+      // The completeness check starts afresh in the new mode, so an old reading cannot raise the finish prompt.
+      this.markedComplete = undefined;
+      this.book.set(saved);
+      this.toast.show(mode === 'marked' ? CHROME_COPY.nowMarked : CHROME_COPY.nowLast);
+    } catch (err) {
+      console.warn('Could not change the progress mode', err);
+      this.toast.show(COPY.annotations.saveFailed);
     }
   }
 
@@ -859,7 +828,7 @@ export class ReaderPage implements OnDestroy {
     this.markedComplete = complete;
   }
 
-  protected async toggleMark(): Promise<void> {
+  private async toggleMark(): Promise<void> {
     const s = this.state();
     const b = this.book();
     if (!s || !b) return;

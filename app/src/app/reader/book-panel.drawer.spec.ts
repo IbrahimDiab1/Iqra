@@ -7,7 +7,7 @@ import { DB, IqraDb } from '../core/db';
 import { newId } from '../core/ids';
 import { COPY } from '../ui/copy';
 import { PROGRESS_COPY } from './progress-copy';
-import { BookPanelSheetComponent } from './book-panel.sheet';
+import { BookPanelDrawerComponent } from './book-panel.drawer';
 import type { Place } from './jump-history';
 import type { PageRenderer } from './pdf-session';
 import { SearchService } from './search.service';
@@ -29,8 +29,8 @@ const renderer = {
 } as unknown as PageRenderer;
 
 @Component({
-  imports: [BookPanelSheetComponent],
-  template: `<iqra-book-panel-sheet
+  imports: [BookPanelDrawerComponent],
+  template: `<iqra-book-panel-drawer
     [open]="open()"
     [tab]="tab()"
     [book]="book"
@@ -64,7 +64,7 @@ class HostComponent {
   jumps: Place[] = [];
 }
 
-describe('BookPanelSheetComponent', () => {
+describe('BookPanelDrawerComponent', () => {
   let fixture: ComponentFixture<HostComponent>;
   let host: HostComponent;
   let el: HTMLElement;

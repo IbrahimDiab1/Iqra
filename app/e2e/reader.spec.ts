@@ -36,13 +36,13 @@ async function openBook(page: Page): Promise<void> {
   await expectPage(page, 1);
 }
 
-/** The page label in the bottom bar, e.g. "9 of 12". */
+/** The page indicator in the header, e.g. "p. 9 / 12". */
 function label(page: Page): Locator {
-  return page.locator('.r-bottom .pg');
+  return page.locator('.r-top .pg');
 }
 
 async function expectPage(page: Page, n: number): Promise<void> {
-  await expect(label(page)).toContainText(`${n} of 12`);
+  await expect(label(page)).toContainText(`p. ${n} / 12`);
 }
 
 /** Pages forward with the arrow key, one turn at a time (a key pressed during the 220 ms slide is ignored). */
@@ -66,9 +66,10 @@ async function sync(page: Page): Promise<void> {
   });
 }
 
+/** Opens the side drawer from the toolbar: Contents & notes, or Search. */
 async function openPanel(page: Page, name: 'Contents' | 'Search'): Promise<void> {
-  await page.getByRole('button', { name, exact: true }).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByRole('button', { name: name === 'Contents' ? 'Contents & notes' : 'Search', exact: true }).click();
+  await expect(page.locator('iqra-drawer .panel.open')).toBeVisible();
 }
 
 test.describe('reader', () => {
@@ -127,18 +128,118 @@ test.describe('reader', () => {
     await expectPage(page, 2);
   });
 
-  test('tapping the page hides and shows the bars, which are not keyboard reachable while hidden', async () => {
+  test('the header and toolbar stay visible when the page is tapped; there is no bottom bar or slider', async () => {
     await openBook(page);
-    const top = page.locator('.r-top');
     const box = (await page.locator('main.stage').boundingBox())!;
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-    await expect(top).toHaveAttribute('inert', '');
-    await expect(page.locator('.r-bottom')).toHaveAttribute('inert', '');
-    // A second tap within 350 ms counts as a double tap and is ignored.
     await page.waitForTimeout(450);
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-    await expect(top).not.toHaveAttribute('inert', '');
-    await expect(page.getByRole('button', { name: 'Contents', exact: true })).toBeVisible();
+    await expect(page.locator('.r-top')).toBeVisible();
+    await expect(page.getByRole('toolbar', { name: 'Reader tools' })).toBeVisible();
+    await expect(page.locator('.r-bottom, input[type="range"]')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Contents & notes' })).toBeVisible();
+  });
+
+  test('the toolbar is a strip at the right edge, centred, beside the page', async () => {
+    await openBook(page);
+    const bar = (await page.getByRole('toolbar', { name: 'Reader tools' }).boundingBox())!;
+    const stage = (await page.locator('main.stage').boundingBox())!;
+    const header = (await page.locator('.r-top').boundingBox())!;
+    const view = page.viewportSize()!;
+    expect(bar.x + bar.width).toBeCloseTo(view.width, 0);
+    expect(stage.x + stage.width).toBeLessThanOrEqual(bar.x + 1);
+    expect(stage.y).toBeGreaterThanOrEqual(header.y + header.height - 1);
+    expect(stage.y + stage.height).toBeCloseTo(view.height, 0);
+    const first = (await page.getByRole('button', { name: 'Contents & notes' }).boundingBox())!;
+    const last = (await page.getByRole('button', { name: 'Full screen' }).boundingBox())!;
+    const middle = (first.y + last.y + last.height) / 2;
+    expect(Math.abs(middle - (header.y + header.height + view.height) / 2)).toBeLessThan(30);
+  });
+
+  test('the drawer sits left of the toolbar and below the header, and Escape closes it', async () => {
+    await openBook(page);
+    await openPanel(page, 'Contents');
+    const bar = (await page.getByRole('toolbar', { name: 'Reader tools' }).boundingBox())!;
+    const header = (await page.locator('.r-top').boundingBox())!;
+    // The panel slides in over 220 ms; measure where it comes to rest.
+    await expect
+      .poll(async () => {
+        const b = (await page.locator('iqra-drawer .panel').boundingBox())!;
+        return b.x + b.width <= bar.x + 1;
+      })
+      .toBe(true);
+    const drawer = (await page.locator('iqra-drawer .panel').boundingBox())!;
+    expect(drawer.y).toBeGreaterThanOrEqual(header.y + header.height - 1);
+    await expect(page.getByRole('button', { name: 'Contents & notes' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('iqra-drawer .panel.open')).toHaveCount(0);
+  });
+
+  test('keyboard: B bookmarks, G goes to a page, / opens search, ? lists the shortcuts, R switches the reading mode', async () => {
+    await openBook(page);
+    await page.keyboard.press('b');
+    await expect(page.getByRole('button', { name: 'Remove bookmark' })).toBeVisible();
+    await expect(page.locator('.toast')).toContainText('Bookmarked');
+    await page.keyboard.press('b');
+    await expect(page.getByRole('button', { name: 'Bookmark this page' })).toBeVisible();
+
+    await page.keyboard.press('g');
+    const field = page.getByRole('spinbutton', { name: 'Go to page' });
+    await expect(field).toBeFocused();
+    await field.fill('9');
+    await page.keyboard.press('Enter');
+    await expectPage(page, 9);
+    await page.keyboard.press('Alt+ArrowLeft');
+    await expectPage(page, 1);
+
+    await page.keyboard.press('/');
+    await expect(page.getByRole('searchbox')).toBeFocused();
+    // Typing a shortcut letter into the field types it.
+    await page.keyboard.type('bar');
+    await expect(page.getByRole('searchbox')).toHaveValue('bar');
+    await expect(page.getByRole('button', { name: 'Remove bookmark' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('iqra-drawer .panel.open')).toHaveCount(0);
+
+    await page.keyboard.press('r');
+    await expect(page.locator('iqra-reflow-view')).toBeVisible();
+    await page.keyboard.press('r');
+    await expect(page.locator('iqra-pager')).toBeVisible();
+
+    await page.keyboard.press('?');
+    const help = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    await expect(help).toBeVisible();
+    await expect(help).toContainText('Bookmark this page');
+  });
+
+  test('progress mode: the popover switches to marked mode, Mark page read then works, and the mark survives switching back', async () => {
+    await openBook(page);
+    const mark = page.locator('button[data-tool="mark"]');
+    await expect(mark).toHaveAttribute('aria-disabled', 'true');
+    await page.getByRole('button', { name: 'Progress mode' }).click();
+    await page.getByRole('menuitemradio', { name: 'Track by marked pages' }).click();
+    await expect(page.locator('.toast')).toContainText('Now tracking by marked pages');
+    await expect(mark).not.toHaveAttribute('aria-disabled', 'true');
+    await mark.click();
+    await expect(mark).toHaveAttribute('aria-pressed', 'true');
+
+    await page.getByRole('button', { name: 'Progress mode' }).click();
+    await page.getByRole('menuitemradio', { name: 'Track by last page' }).click();
+    await expect(mark).toHaveAttribute('aria-disabled', 'true');
+    await page.getByRole('button', { name: 'Progress mode' }).click();
+    await page.getByRole('menuitemradio', { name: 'Track by marked pages' }).click();
+    await expect(mark).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('hovering an icon button shows its label and shortcut after a short delay', async () => {
+    await openBook(page);
+    await page.getByRole('button', { name: 'Bookmark this page' }).hover();
+    const tip = page.getByRole('tooltip');
+    await expect(tip).toBeVisible();
+    await expect(tip).toContainText('Bookmark this page');
+    await expect(tip).toContainText('B');
+    await page.keyboard.press('Escape');
+    await expect(tip).toBeHidden();
   });
 
   test('scrolling mode updates the page label while scrolling', async () => {
@@ -154,7 +255,7 @@ test.describe('reader', () => {
       .poll(async () => {
         await page.mouse.wheel(0, 2500);
         const text = (await label(page).textContent()) ?? '';
-        return Number(/^\s*(\d+) of/.exec(text)?.[1] ?? 0);
+        return Number(/p\.\s*(\d+)\s*\//.exec(text)?.[1] ?? 0);
       }, { intervals: [150] })
       .toBeGreaterThan(5);
   });
@@ -454,7 +555,7 @@ test.describe('reader geometry', () => {
     await page.locator('input[type="file"]').setInputFiles([SAMPLE]);
     await page.getByRole('tab', { name: /To read/ }).click();
     await page.locator('[data-grid="main"] li').filter({ hasText: 'Sample Book' }).click();
-    await expect(page.locator('.r-bottom .pg')).toContainText('1 of 5');
+    await expect(page.locator('.r-top .pg')).toContainText('p. 1 / 5');
 
     const slot = page.locator('[data-slot="cur"]');
     const canvas = slot.locator('canvas');
@@ -462,27 +563,21 @@ test.describe('reader geometry', () => {
     const sizes = await slot.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
     expect(sizes.scroll).toBeGreaterThan(sizes.client);
 
-    // The lower edge starts below the fold, and the mouse wheel brings it into view above the bottom bar.
+    // The lower edge starts below the fold, and the mouse wheel brings it into view above the window bottom.
     const edgeBefore = (await canvas.boundingBox())!;
     const slotBox = (await slot.boundingBox())!;
     expect(edgeBefore.y + edgeBefore.height).toBeGreaterThan(slotBox.y + slotBox.height);
-    const bottomBar = (await page.locator('.r-bottom').boundingBox())!;
-    // The bar-space padding eases in at open (240 ms). A wheel before it has settled stops at the then-smaller
-    // scroll range and is never repeated, so wait for the padding to reach the bar's height first.
-    await expect
-      .poll(() => slot.evaluate((el) => parseFloat(getComputedStyle(el).paddingBottom)))
-      .toBeCloseTo(bottomBar.height, 0);
     await page.mouse.move(slotBox.x + slotBox.width / 2, slotBox.y + slotBox.height / 2);
     await page.mouse.wheel(0, 5000);
     await expect.poll(() => slot.evaluate((el) => el.scrollTop >= el.scrollHeight - el.clientHeight - 1)).toBe(true);
     // The page height is fractional (1813.33 px) and scrollTop is not, so the edge may sit up to a pixel or two low.
     const edge = (await canvas.boundingBox())!;
-    expect(edge.y + edge.height).toBeLessThanOrEqual(bottomBar.y + 2);
-    expect(edge.y + edge.height).toBeGreaterThan(slotBox.y + slotBox.height - bottomBar.height - 4);
+    expect(edge.y + edge.height).toBeLessThanOrEqual(slotBox.y + slotBox.height + 2);
+    expect(edge.y + edge.height).toBeGreaterThan(slotBox.y + slotBox.height - 4);
 
     // Turning the page puts the new page back at its top.
     await page.keyboard.press('ArrowRight');
-    await expect(page.locator('.r-bottom .pg')).toContainText('2 of 5');
+    await expect(page.locator('.r-top .pg')).toContainText('p. 2 / 5');
     await expect.poll(() => page.locator('[data-slot="cur"]').evaluate((el) => el.scrollTop)).toBe(0);
   });
 
@@ -497,7 +592,7 @@ test.describe('reader geometry', () => {
       .poll(async () => {
         await page.mouse.wheel(0, 700);
         const text = (await label(page).textContent()) ?? '';
-        return Number(/^\s*(\d+) of/.exec(text)?.[1] ?? 0);
+        return Number(/p\.\s*(\d+)\s*\//.exec(text)?.[1] ?? 0);
       })
       .toBeGreaterThanOrEqual(3);
     const pageEl = page.locator('iqra-scroller .page[data-page="3"]');
@@ -559,7 +654,7 @@ test.describe('reader geometry', () => {
     await expect.poll(async () => (await stamp())[0], { timeout: 5000 }).toBeGreaterThan(before[0]);
   });
 
-  test('with the bars shown, a jumped-to page and reading-mode text start below the top bar', async () => {
+  test('a jumped-to page and reading-mode text start below the header and end above the window bottom', async () => {
     await openBook(page);
     await useScrolling(page);
     await openPanel(page, 'Contents');
@@ -577,16 +672,16 @@ test.describe('reader geometry', () => {
     await expect.poll(async () => (await first.boundingBox())!.y).toBeGreaterThanOrEqual(barBottom - 1);
     const next = page.locator('iqra-reflow-view .nav.next');
     await next.scrollIntoViewIfNeeded();
-    const bottomBar = (await page.locator('.r-bottom').boundingBox())!;
+    const view = page.viewportSize()!;
     await expect.poll(async () => {
       const b = (await next.boundingBox())!;
-      return b.y + b.height <= bottomBar.y + 1;
+      return b.y + b.height <= view.height + 1;
     }).toBe(true);
   });
 });
 
 async function expectPageLabel(page: Page, n: number): Promise<void> {
-  await expect(page.locator('.r-bottom .pg')).toContainText(`${n} of 12`);
+  await expect(page.locator('.r-top .pg')).toContainText(`p. ${n} / 12`);
 }
 
 test('two devices: the newest position wins and Back returns to the older one', async ({ browser }) => {

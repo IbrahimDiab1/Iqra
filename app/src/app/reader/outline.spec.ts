@@ -1,5 +1,5 @@
 import type { OutlineNode } from '../core/models';
-import { chapterAt, chapterTitleAt, flattenOutline, nodeRange } from './outline';
+import { chapterAt, chapterTitleAt, flattenOutline, nodeRange, sectionTitleAt } from './outline';
 
 function node(key: string, title: string, page: number, children: OutlineNode[] = []): OutlineNode {
   return { key, title, page, children };
@@ -55,5 +55,20 @@ describe('nodeRange and chapterAt', () => {
     expect(chapterAt(o, 2)?.key).toBe('0');
     expect(chapterAt(o, 12)?.key).toBe('1');
     expect(chapterAt([], 1)).toBeNull();
+  });
+});
+
+describe('sectionTitleAt', () => {
+  const o: OutlineNode[] = [node('0', 'One', 1, [node('0.0', 'One A', 3, [node('0.0.0', 'One A i', 4)])]), node('1', 'Two', 10)];
+
+  it('is the deepest section under the top-level chapter', () => {
+    expect(sectionTitleAt(o, 4)).toBe('One A i');
+    expect(sectionTitleAt(o, 3)).toBe('One A');
+  });
+
+  it('is null when the chapter itself is the deepest node, or before the first node', () => {
+    expect(sectionTitleAt(o, 2)).toBeNull();
+    expect(sectionTitleAt(o, 12)).toBeNull();
+    expect(sectionTitleAt(o, 0)).toBeNull();
   });
 });

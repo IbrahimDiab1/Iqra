@@ -61,7 +61,7 @@ test('library syncs between devices', async ({ browser }) => {
     await deviceB.getByRole('button', { name: 'Download to this device' }).click();
 
     await expect(deviceB).toHaveURL(/\/read\//);
-    await expect(deviceB.getByText('1 of 5')).toBeVisible();
+    await expect(deviceB.getByText('p. 1 / 5')).toBeVisible();
   } finally {
     await contextA.close();
     await contextB.close();

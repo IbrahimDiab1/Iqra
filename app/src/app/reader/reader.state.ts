@@ -6,18 +6,16 @@ import { clampZoom } from './zoom';
 
 type View = 'page' | 'reflow';
 
-const CHROME_TAP_GAP_MS = 350;
 const FLASH_MS = 1200;
 /** A place report closer than this to the last saved offset is not a change (the scroller reports on mount). */
 const OFFSET_TOLERANCE = 0.005;
 
-/** The reader's place, zoom, view and chrome visibility, plus jump history and position saving. */
+/** The reader's place, zoom and view, plus jump history and position saving. */
 export class ReaderState {
   readonly page = signal(1);
   readonly offset = signal(0);
   readonly zoom = signal(1);
   readonly view = signal<View>('page');
-  readonly chrome = signal(true);
   readonly lastCustomZoom = signal(1);
   /** The annotation id whose rects pulse after a jump to it. */
   readonly flash = signal<string | null>(null);
@@ -36,7 +34,6 @@ export class ReaderState {
   /** What was last restored or handed to the position service. */
   private saved: { page: number; offset: number; zoom: number; view: View } | undefined;
   private flashTimer: ReturnType<typeof setTimeout> | undefined;
-  private lastChromeTap = Number.NEGATIVE_INFINITY;
 
   constructor(
     private readonly book: Book,
@@ -110,14 +107,6 @@ export class ReaderState {
     clearTimeout(this.flashTimer);
     this.flash.set(id);
     this.flashTimer = setTimeout(() => this.flash.set(null), FLASH_MS);
-  }
-
-  /** Shows or hides the bars; a tap right after another (a double tap) is ignored. */
-  toggleChrome(): void {
-    const now = performance.now();
-    const ignore = now - this.lastChromeTap < CHROME_TAP_GAP_MS;
-    this.lastChromeTap = now;
-    if (!ignore) this.chrome.update((c) => !c);
   }
 
   /** Writes the pending position now; failures are logged, never thrown. */

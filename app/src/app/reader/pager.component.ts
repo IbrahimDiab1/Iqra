@@ -100,13 +100,12 @@ interface Slot {
     /* Zoomed: the browser may pan but never pinch-zooms the whole app (that is the directive's job). */
     .viewport.zoomed { touch-action: pan-x pan-y; }
     .track { display: flex; height: 100%; will-change: transform; }
-    /* A page taller than the viewport scrolls inside its slot; the bars' space is reserved as padding. */
+    /* A page taller than the viewport scrolls inside its slot. */
     .slot {
       flex: none; box-sizing: border-box; height: 100%; display: flex; align-items: flex-start; justify-content: center;
       overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; outline: none;
-      padding: var(--reader-top, 0px) 0 var(--reader-bottom, 0px);
     }
-    .pan { box-sizing: border-box; width: 100%; height: 100%; overflow: auto; touch-action: pan-x pan-y; padding: var(--reader-top, 0px) 0 var(--reader-bottom, 0px); }
+    .pan { box-sizing: border-box; width: 100%; height: 100%; overflow: auto; touch-action: pan-x pan-y; }
   `,
 })
 export class PagerComponent implements OnDestroy {

@@ -9,6 +9,7 @@ import { RemoveBookSheetComponent } from './books/remove-book.sheet';
 import { COPY } from './ui/copy';
 import { icon, IconName } from './ui/icons';
 import { ToastComponent } from './ui/toast.component';
+import { TooltipService } from './ui/tooltip.service';
 
 interface Tab {
   path: string;
@@ -36,6 +37,11 @@ const TABLESS_ROUTE = /^\/(welcome|read)(?:[/?#]|$)/;
 export class App {
   private readonly router = inject(Router);
   private readonly sanitizer = inject(DomSanitizer);
+
+  constructor() {
+    // Hover and focus labels for every icon-only button, from one place.
+    inject(TooltipService).install();
+  }
 
   protected readonly tabs: readonly Tab[] = [
     { path: '/library', label: COPY.nav.library, icon: 'library' },

@@ -18,7 +18,6 @@ describe('ReaderState', () => {
     const { state } = setup();
     expect(state.page()).toBe(5);
     expect(state.offset()).toBe(0.25);
-    expect(state.chrome()).toBe(true);
   });
 
   it('a plain page change does not touch history but schedules a save', () => {
@@ -76,21 +75,6 @@ describe('ReaderState', () => {
     const { state } = setup();
     state.setZoom(9);
     expect(state.zoom()).toBe(4);
-  });
-
-  it('ignores a chrome tap that follows another within 350 ms', () => {
-    const { state } = setup();
-    let now = 1000;
-    vi.spyOn(performance, 'now').mockImplementation(() => now);
-    state.toggleChrome();
-    expect(state.chrome()).toBe(false);
-    now += 200;
-    state.toggleChrome();
-    expect(state.chrome()).toBe(false);
-    now += 400;
-    state.toggleChrome();
-    expect(state.chrome()).toBe(true);
-    vi.restoreAllMocks();
   });
 
   it('warns instead of rejecting when a flush fails', async () => {

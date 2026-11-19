@@ -83,3 +83,10 @@ function topLevel(nodes: OutlineNode[]): OutlineNode[] {
 export function chapterTitleAt(nodes: OutlineNode[], page: number): string | null {
   return chapterAt(topLevel(nodes), page)?.title ?? null;
 }
+
+/** The deepest section under the top-level chapter at `page`; null when the chapter itself is the deepest node. */
+export function sectionTitleAt(nodes: OutlineNode[], page: number): string | null {
+  const deepest = chapterAt(nodes, page);
+  const top = chapterAt(topLevel(nodes), page);
+  return deepest && top && deepest.key !== top.key ? deepest.title : null;
+}

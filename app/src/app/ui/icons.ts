@@ -39,6 +39,12 @@ const ICON = {
   grip: '<path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/>',
   highlighter: '<path d="M14.5 4.5l5 5L11 18l-5 1 1-5z"/><path d="M4 21h9"/>',
   areaSelect: '<path d="M4 4h16v16H4z" stroke-dasharray="2.5 2.5"/><path d="M8 8h8v8H8z"/>',
+  checkCircle: '<circle cx="12" cy="12" r="8.5"/><path d="M8.3 12.3l2.5 2.5 4.9-5.4"/>',
+  checkCircleFill: '<circle cx="12" cy="12" r="8.5" fill="currentColor"/><path d="M8.3 12.3l2.5 2.5 4.9-5.4" stroke="var(--paper, #fff)"/>',
+  progress: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 8.5 8.5H12z" fill="currentColor"/>',
+  undo: '<path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-6.7L3 9"/>',
+  redo: '<path d="M21 7v6h-6"/><path d="M21 13a9 9 0 1 1-3-6.7L21 9"/>',
+  fullscreen: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
 } as const;
 
 export type IconName = keyof typeof ICON;

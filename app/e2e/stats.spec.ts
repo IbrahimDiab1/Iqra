@@ -23,11 +23,11 @@ async function addBook(page: Page): Promise<void> {
 }
 
 function label(page: Page): Locator {
-  return page.locator('.r-bottom .pg');
+  return page.locator('.r-top .pg');
 }
 
 async function expectPage(page: Page, n: number): Promise<void> {
-  await expect(label(page)).toContainText(`${n} of 12`);
+  await expect(label(page)).toContainText(`p. ${n} / 12`);
 }
 
 async function readTo(page: Page, from: number, to: number): Promise<void> {
@@ -110,7 +110,7 @@ test.describe('progress and stats', () => {
     await page.getByRole('tab', { name: /Reading/ }).click();
     await expect(bookCard(page)).toContainText('0%');
     await openBook(page);
-    const mark = page.getByRole('button', { name: /Mark read|Marked as read/ });
+    const mark = page.locator('button[data-tool="mark"]');
     await expect(mark).toHaveAttribute('aria-pressed', 'false');
     await mark.click();
     await expect(mark).toHaveAttribute('aria-pressed', 'true');
@@ -139,7 +139,7 @@ test.describe('progress and stats', () => {
   test('contents: shows chapter bars and "N of M chapters done"', async () => {
     await configureBook(page, { mode: 'Pages I mark as read' });
     await openBook(page);
-    await page.getByRole('button', { name: 'Contents', exact: true }).click();
+    await page.getByRole('button', { name: 'Contents & notes', exact: true }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.getByText('0 of 3 chapters done')).toBeVisible();
     await expect(page.locator('.row')).toHaveCount(3);
