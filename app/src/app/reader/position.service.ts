@@ -108,11 +108,10 @@ export class PositionService {
    */
   markOpened(book: Book): Promise<void> {
     const run = this.writes.then(async () => {
-      const current = await this.db.books.get(book.id);
-      if (!current || current.deleted) return;
-      const patch: Partial<Book> = { lastOpenedAt: this.clock.now() };
-      if (current.status === 'to-read') patch.status = 'reading';
-      await this.repo.put<Book>('books', { ...current, ...patch });
+      await this.repo.update<Book>('books', book.id, (current) => ({
+        lastOpenedAt: this.clock.now(),
+        ...(current.status === 'to-read' ? { status: 'reading' as const } : {}),
+      }));
     });
     this.writes = run.catch(() => undefined);
     return run;
@@ -133,12 +132,6 @@ export class PositionService {
       view: w.view,
     });
 
-    const book = await this.db.books.get(w.bookId);
-    if (!book || book.deleted) return;
-    const patch: Partial<Book> = {};
-    if (w.page > book.lastPageReached) patch.lastPageReached = w.page;
-    if (Object.keys(patch).length > 0) {
-      await this.repo.put<Book>('books', { ...book, ...patch });
-    }
+    await this.repo.update<Book>('books', w.bookId, (book) => (w.page > book.lastPageReached ? { lastPageReached: w.page } : null));
   }
 }

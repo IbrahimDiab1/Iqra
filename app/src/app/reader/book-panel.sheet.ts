@@ -20,6 +20,7 @@ import type { Annotation, Book, SummaryScope } from '../core/models';
 import { chapterProgress, chaptersDone } from '../progress/progress';
 import { ReadMarkService } from '../progress/read-mark.service';
 import { COPY } from '../ui/copy';
+import { PROGRESS_COPY } from './progress-copy';
 import { icon } from '../ui/icons';
 import { ToastService } from '../ui/toast.service';
 import { SheetComponent } from '../ui/sheet.component';
@@ -199,7 +200,7 @@ export class BookPanelSheetComponent implements OnDestroy {
   private readonly sanitizer = inject(DomSanitizer);
   private readonly toast = inject(ToastService);
   protected readonly ann = COPY.annotations;
-  protected readonly prog = COPY.progress;
+  protected readonly prog = PROGRESS_COPY;
   protected readonly checkIcon = this.sanitizer.bypassSecurityTrustHtml(icon('check', 20));
   protected readonly tabs: { id: PanelTab; label: string }[] = [
     { id: 'contents', label: COPY.reader.contents },

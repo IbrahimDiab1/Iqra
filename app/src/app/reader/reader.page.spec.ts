@@ -9,6 +9,7 @@ import type { Book } from '../core/models';
 import { DRIVE_ADAPTER } from '../sync/drive-adapter';
 import { FakeDrive } from '../sync/fake-drive';
 import { COPY } from '../ui/copy';
+import { PROGRESS_COPY } from './progress-copy';
 import { ToastService } from '../ui/toast.service';
 import { signal } from '@angular/core';
 import type { PendingSelection } from './selection.service';
@@ -801,7 +802,7 @@ describe('ReaderPage', () => {
       await db.books.put(makeBook({ progressMode: 'marked' }));
       await create();
       const b = markButton()!;
-      expect(b.textContent).toContain(COPY.progress.markRead);
+      expect(b.textContent).toContain(PROGRESS_COPY.markRead);
       expect(b.getAttribute('aria-pressed')).toBe('false');
       b.click();
       await vi.waitFor(async () => {
@@ -809,7 +810,7 @@ describe('ReaderPage', () => {
         expect((await db.readMarks.get('book-1:7'))?.read).toBe(true);
         expect(markButton()!.getAttribute('aria-pressed')).toBe('true');
       });
-      expect(markButton()!.textContent).toContain(COPY.progress.markedRead);
+      expect(markButton()!.textContent).toContain(PROGRESS_COPY.markedRead);
       markButton()!.click();
       await vi.waitFor(async () => expect((await db.readMarks.get('book-1:7'))?.read).toBe(false));
     });
@@ -820,8 +821,8 @@ describe('ReaderPage', () => {
       expect(toast.current()).toBeNull();
       pager().pageChange.emit(50);
       fixture.detectChanges();
-      expect(toast.current()?.message).toBe(COPY.progress.finishPrompt);
-      expect(toast.current()?.actionLabel).toBe(COPY.progress.markFinished);
+      expect(toast.current()?.message).toBe(PROGRESS_COPY.finishPrompt);
+      expect(toast.current()?.actionLabel).toBe(PROGRESS_COPY.markFinished);
       toast.dismiss();
       pager().pageChange.emit(49);
       fixture.detectChanges();
@@ -875,7 +876,7 @@ describe('ReaderPage', () => {
       pager().pageChange.emit(7);
       fixture.detectChanges();
       markButton()!.click();
-      await vi.waitFor(() => expect(TestBed.inject(ToastService).current()?.message).toBe(COPY.progress.finishPrompt));
+      await vi.waitFor(() => expect(TestBed.inject(ToastService).current()?.message).toBe(PROGRESS_COPY.finishPrompt));
     });
   });
 });

@@ -6,6 +6,7 @@ import { CLOCK } from '../core/clock';
 import { DB, IqraDb } from '../core/db';
 import { newId } from '../core/ids';
 import { COPY } from '../ui/copy';
+import { PROGRESS_COPY } from './progress-copy';
 import { BookPanelSheetComponent } from './book-panel.sheet';
 import type { Place } from './jump-history';
 import type { PageRenderer } from './pdf-session';
@@ -215,15 +216,15 @@ describe('BookPanelSheetComponent', () => {
         h.book = { id: 'b1', pageCount: 9, outline: one, progressMode: 'last-page', lastPageReached: 5 } as unknown as Book;
       });
       expect(fills()[0].style.width).toBe('55.6%');
-      expect(bars()[0].getAttribute('aria-label')).toBe(COPY.progress.chapterPct(56));
-      expect(el.textContent).toContain(COPY.progress.chaptersDone(0, 1));
+      expect(bars()[0].getAttribute('aria-label')).toBe(PROGRESS_COPY.chapterPct(56));
+      expect(el.textContent).toContain(PROGRESS_COPY.chaptersDone(0, 1));
     });
 
     it('counts finished top-level chapters in the header line', () => {
       create((h) => {
         h.book = { id: 'b1', pageCount: 40, outline: OUTLINE, progressMode: 'last-page', lastPageReached: 25 } as unknown as Book;
       });
-      expect(el.textContent).toContain(COPY.progress.chaptersDone(1, 2));
+      expect(el.textContent).toContain(PROGRESS_COPY.chaptersDone(1, 2));
       expect(fills().map((f) => f.style.width)).toEqual(['100%', '28.6%', '6.3%']);
     });
 

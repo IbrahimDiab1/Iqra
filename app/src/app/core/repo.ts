@@ -39,15 +39,35 @@ export class Repo {
 
   /** Marks a record deleted. The record stays so the deletion can sync. No-op if it does not exist. */
   async softDelete(table: TableName, id: ID): Promise<void> {
+    await this.modify(table, id, () => ({ deleted: true }), true);
+  }
+
+  /**
+   * Read-modify-write in one transaction, so concurrent updates cannot overwrite each other's fields.
+   * The patcher returns the fields to change, or null for no change. Returns the stored record, or
+   * undefined when the record is missing, deleted, or left unchanged. Emits on changes$ after commit.
+   */
+  update<T extends SyncMeta>(table: TableName, id: ID, patcher: (current: T) => Partial<T> | null): Promise<T | undefined> {
+    return this.modify(table, id, patcher, false);
+  }
+
+  private async modify<T extends SyncMeta>(
+    table: TableName,
+    id: ID,
+    patcher: (current: T) => Partial<T> | null,
+    includeDeleted: boolean,
+  ): Promise<T | undefined> {
     const store = this.table(table);
-    const deleted = await this.db.transaction('rw', store, async () => {
-      const existing = await store.get(id);
-      if (!existing) return undefined;
-      const rec = { ...existing, deleted: true, updatedAt: this.clock.now(), deviceId: this.deviceId };
+    const stored = await this.db.transaction('rw', store, async () => {
+      const existing = (await store.get(id)) as T | undefined;
+      const patch = existing && (includeDeleted || !existing.deleted) ? patcher(existing) : null;
+      if (!patch) return undefined;
+      const rec = { ...existing, ...patch, updatedAt: this.clock.now(), deviceId: this.deviceId } as T;
       await store.put(rec);
       return rec;
     });
-    if (deleted) this.changes.next({ table, rec: deleted as SyncRecord });
+    if (stored) this.changes.next({ table, rec: stored as unknown as SyncRecord });
+    return stored;
   }
 
   /** Writes remote records as they are: no stamping, no change events. Used by the sync engine. */

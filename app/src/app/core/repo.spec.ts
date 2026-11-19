@@ -71,6 +71,34 @@ describe('Repo', () => {
     });
   });
 
+  describe('update', () => {
+    it('two concurrent updates of different fields both survive', async () => {
+      await repo.put<Book>('books', bookDraft('b1'));
+      await Promise.all([
+        repo.update<Book>('books', 'b1', () => ({ lastPageReached: 9 })),
+        repo.update<Book>('books', 'b1', () => ({ startedAt: 123 })),
+      ]);
+      const stored = (await db.books.get('b1'))!;
+      expect(stored.lastPageReached).toBe(9);
+      expect(stored.startedAt).toBe(123);
+    });
+
+    it('stamps, emits once after commit, and is a no-op for missing, deleted or null patches', async () => {
+      await repo.put<Book>('books', bookDraft('b1'));
+      clock.t = 3000;
+      const spy = vi.fn();
+      const sub = repo.changes$.subscribe(spy);
+      const rec = await repo.update<Book>('books', 'b1', () => ({ status: 'reading' }));
+      expect(rec).toMatchObject({ status: 'reading', updatedAt: 3000 });
+      expect(await repo.update<Book>('books', 'b1', () => null)).toBeUndefined();
+      expect(await repo.update<Book>('books', 'missing', () => ({ status: 'paused' }))).toBeUndefined();
+      await repo.softDelete('books', 'b1');
+      expect(await repo.update<Book>('books', 'b1', () => ({ status: 'paused' }))).toBeUndefined();
+      sub.unsubscribe();
+      expect(spy).toHaveBeenCalledTimes(2); // the update and the softDelete
+    });
+  });
+
   describe('softDelete', () => {
     it('keeps the record, marks it deleted and updates updatedAt', async () => {
       await repo.put<Book>('books', bookDraft('b1'));

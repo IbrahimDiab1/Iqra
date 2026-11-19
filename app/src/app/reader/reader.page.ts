@@ -31,6 +31,7 @@ import { SettingsService } from '../core/settings.service';
 import { ReadMarkService } from '../progress/read-mark.service';
 import { DRIVE_ADAPTER } from '../sync/drive-adapter';
 import { COPY } from '../ui/copy';
+import { PROGRESS_COPY } from './progress-copy';
 import { icon, type IconName } from '../ui/icons';
 import { ToastService } from '../ui/toast.service';
 import type { Place } from './jump-history';
@@ -339,7 +340,7 @@ const FINISH_TOAST_MS = 8000;
 export class ReaderPage implements OnDestroy {
   protected readonly copy = COPY.reader;
   protected readonly annCopy = COPY.annotations;
-  protected readonly progressCopy = COPY.progress;
+  protected readonly progressCopy = PROGRESS_COPY;
   protected readonly zoomIn = zoomIn;
   protected readonly zoomOut = zoomOut;
 
@@ -856,8 +857,8 @@ export class ReaderPage implements OnDestroy {
     const b = this.book();
     if (!b || b.status === 'finished' || this.finishOffered) return;
     this.finishOffered = true;
-    this.toast.show(COPY.progress.finishPrompt, {
-      actionLabel: COPY.progress.markFinished,
+    this.toast.show(PROGRESS_COPY.finishPrompt, {
+      actionLabel: PROGRESS_COPY.markFinished,
       durationMs: FINISH_TOAST_MS,
       undo: () => void this.markFinished(b.id),
     });
@@ -865,9 +866,8 @@ export class ReaderPage implements OnDestroy {
 
   private async markFinished(bookId: string): Promise<void> {
     try {
-      const stored = await this.db.books.get(bookId);
-      if (!stored || stored.deleted) return;
-      const saved = await this.repo.put<Book>('books', { ...stored, status: 'finished', finishedAt: this.clock.now() });
+      const saved = await this.repo.update<Book>('books', bookId, () => ({ status: 'finished', finishedAt: this.clock.now() }));
+      if (!saved) return;
       if (!this.destroyed) this.book.set(saved);
     } catch (err) {
       console.warn('Could not mark the book finished', err);

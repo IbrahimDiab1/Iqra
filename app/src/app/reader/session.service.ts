@@ -61,18 +61,12 @@ class Run {
     const pages = new Set<number>(snap.pagesRead);
     for (const s of sessions) for (const p of s.pagesRead) pages.add(p);
     if (pages.size < STARTED_AFTER_PAGES) return;
-    await this.db.transaction('rw', this.db.books, async () => {
-      const book = await this.db.books.get(this.bookId);
-      if (!book || book.deleted) return;
+    const day = new Date(snap.startedAt);
+    const startedAt = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+    await this.repo.update<Book>('books', this.bookId, (book) => {
       this.started = true;
-      if (book.startedAt !== undefined) return;
-      const day = new Date(snap.startedAt);
-      const startedAt = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
-      await this.repo.put<Book>('books', {
-        ...book,
-        startedAt,
-        status: book.status === 'to-read' ? 'reading' : book.status,
-      });
+      if (book.startedAt !== undefined) return null;
+      return { startedAt, status: book.status === 'to-read' ? 'reading' : book.status };
     });
   }
 }
