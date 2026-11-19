@@ -9,6 +9,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
+import { RouterLink } from '@angular/router';
 import { CatalogService } from '../../books/catalog.service';
 import { FilesService } from '../../books/files.service';
 import { ImportService } from '../../books/import/import.service';
@@ -68,6 +69,7 @@ function isPdf(file: File): boolean {
 @Component({
   selector: 'f-library-page',
   imports: [
+    RouterLink,
     SyncStatusComponent,
     BookCardComponent,
     ContinueCardComponent,
@@ -91,7 +93,7 @@ function isPdf(file: File): boolean {
             (click)="toggleSearch()"
             [innerHTML]="searchIcon"
           ></button>
-          <button type="button" class="icon-btn" [attr.aria-label]="copy.settings" disabled [innerHTML]="settingsIcon"></button>
+          <a class="icon-btn" routerLink="/settings" [attr.aria-label]="copy.settings" [innerHTML]="settingsIcon"></a>
           <button type="button" class="add" (click)="pickFiles()">
             <span [innerHTML]="uploadIcon"></span>{{ copy.add }}
           </button>

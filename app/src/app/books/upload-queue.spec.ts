@@ -94,6 +94,22 @@ describe('UploadQueue', () => {
     expect(pdfFile?.info.appProperties?.['iqraBookId']).toBe(book.id);
   });
 
+  it('leaves uploads waiting for Wi-Fi when mobile data is off and the connection is cellular', async () => {
+    const book = await importBook();
+    await auth.signIn();
+    localStorage.setItem('iqra.device.syncOnMobile', 'false');
+    Object.defineProperty(navigator, 'connection', { value: { type: 'cellular' }, configurable: true });
+    try {
+      await queue.run();
+      expect((await pendingFor(book.id)).length).toBeGreaterThan(0);
+      expect((await db.books.get(book.id))!.driveFileId).toBe('');
+    } finally {
+      Object.defineProperty(navigator, 'connection', { value: undefined, configurable: true });
+    }
+    await queue.run();
+    expect(await pendingFor(book.id)).toEqual([]);
+  });
+
   it('keeps a failed entry with one attempt, then succeeds on the next run', async () => {
     const book = await importBook();
     await auth.signIn();

@@ -4,6 +4,7 @@ import { CLOCK } from '../core/clock';
 import { DB, type PendingUpload } from '../core/db';
 import type { Book, ID } from '../core/models';
 import { Repo } from '../core/repo';
+import { ToastService } from '../ui/toast.service';
 import { DRIVE_ADAPTER, DriveAuthError, DriveQuotaError } from '../sync/drive-adapter';
 
 /**
@@ -18,6 +19,7 @@ export class UploadQueue {
   private readonly drive = inject(DRIVE_ADAPTER);
   private readonly auth = inject(AuthApi);
   private readonly clock = inject(CLOCK);
+  private readonly toast = inject(ToastService);
 
   private readonly progressSignal = signal<Map<ID, number>>(new Map());
   /** Upload fraction per book, for PDFs only. A book is absent while its PDF is not uploading. */
@@ -55,6 +57,8 @@ export class UploadQueue {
 
   private async drain(): Promise<void> {
     if (!navigator.onLine || this.auth.token() === null) return;
+    // Uploads wait for Wi-Fi when the owner turned off mobile data. A failed load of the check never blocks.
+    if (await import('../core/network-gate').then((g) => g.blockedOnMobile(this.toast, true), () => false)) return;
     for (;;) {
       const next = await this.db.pendingUploads.toCollection().first();
       if (!next) return;

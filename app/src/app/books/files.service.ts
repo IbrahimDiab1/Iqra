@@ -84,6 +84,8 @@ export class FilesService {
     this.downloading.add(b.id);
     this.setProgress(b.id, 0);
     try {
+      // Waits for Wi-Fi when the owner turned off mobile data. A failed load of the check never blocks.
+      if (await import('../core/network-gate').then((g) => g.blockedOnMobile(this.toast, false), () => false)) return;
       const blob = await this.drive.downloadBlob(b.driveFileId, (fraction) => this.setProgress(b.id, fraction));
       await this.db.pdfFiles.put({ bookId: b.id, blob, sizeBytes: blob.size, savedAt: this.clock.now() });
     } catch {

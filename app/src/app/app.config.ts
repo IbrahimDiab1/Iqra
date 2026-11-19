@@ -1,7 +1,7 @@
 import { ApplicationConfig, inject, isDevMode, provideAppInitializer, provideBrowserGlobalErrorListeners } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
-import { environment } from '../environments/environment';
+import { FAKE_DRIVE } from '../environments/environment';
 import { AuthApi, GisAuthService } from './auth/auth.service';
 import { FakeAuthService } from './auth/fake-auth.service';
 import { routes } from './app.routes';
@@ -18,7 +18,7 @@ export const appConfig: ApplicationConfig = {
     provideAppInitializer(() => {
       const auth = inject(AuthApi);
       const sync = inject(SyncEngine);
-      if (environment.fakeDrive) {
+      if (FAKE_DRIVE) {
         // e2e only: start signed in, and expose the engine and fake Drive to the tests.
         // ?signed-out leaves it signed out so /welcome can be opened.
         if (!location.search.includes('signed-out')) void auth.signIn();
@@ -31,13 +31,13 @@ export const appConfig: ApplicationConfig = {
     }),
     provideServiceWorker('ngsw-worker.js', {
       // The e2e build runs in dev mode for Angular but has no real Drive; keep the worker out of its way.
-      enabled: !isDevMode() && !environment.fakeDrive,
+      enabled: !isDevMode() && !FAKE_DRIVE,
       registrationStrategy: 'registerWhenStable:30000',
     }),
-    { provide: AuthApi, useClass: environment.fakeDrive ? FakeAuthService : GisAuthService },
+    { provide: AuthApi, useClass: FAKE_DRIVE ? FakeAuthService : GisAuthService },
     {
       provide: DRIVE_ADAPTER,
-      useFactory: () => (environment.fakeDrive ? new FakeDrive() : new GoogleDrive(inject(AuthApi))),
+      useFactory: () => (FAKE_DRIVE ? new FakeDrive() : new GoogleDrive(inject(AuthApi))),
     },
   ],
 };

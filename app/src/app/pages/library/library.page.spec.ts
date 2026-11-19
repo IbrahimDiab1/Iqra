@@ -160,6 +160,12 @@ describe('LibraryPage', () => {
     await waitFor(() => mainCards().length === 1);
   });
 
+  it('has a Settings gear that links to /settings', async () => {
+    await create();
+    const gear = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>(`a[aria-label="${COPY.library.settings}"]`)!;
+    expect(gear.getAttribute('href')).toBe('/settings');
+  });
+
   it('marks a book that is not downloaded', async () => {
     await seed([toRead]);
     await create();
