@@ -19,6 +19,15 @@ async function openDevice(context: BrowserContext): Promise<Page> {
   return page;
 }
 
+/** A full pass: syncNow() shares a pass already running, which may predate the caller's latest change, so run it twice. */
+async function syncTwice(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const engine = (window as unknown as E2eWindow).__iqraSync;
+    await engine.syncNow();
+    await engine.syncNow();
+  });
+}
+
 function bookCard(page: Page, title: string): Locator {
   return page.locator('[data-grid="main"] li').filter({ hasText: title });
 }
@@ -36,13 +45,13 @@ test('library syncs between devices', async ({ browser }) => {
     await expect(bookCard(deviceA, 'Sample Book')).toBeVisible();
 
     // Push device A's library to Drive, then copy the fake Drive to device B.
-    await deviceA.evaluate(() => (window as unknown as E2eWindow).__iqraSync.syncNow());
+    await syncTwice(deviceA);
     const driveState = await deviceA.evaluate(() => (window as unknown as E2eWindow).__iqraDrive.exportState());
 
     // Device B: load the app, take the Drive state, and pull the library.
     const deviceB = await openDevice(contextB);
     await deviceB.evaluate((state) => (window as unknown as E2eWindow).__iqraDrive.importState(state), driveState);
-    await deviceB.evaluate(() => (window as unknown as E2eWindow).__iqraSync.syncNow());
+    await syncTwice(deviceB);
     await deviceB.getByRole('tab', { name: /To read/ }).click();
 
     const card = bookCard(deviceB, 'Sample Book');

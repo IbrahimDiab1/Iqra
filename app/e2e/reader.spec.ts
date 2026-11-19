@@ -53,8 +53,17 @@ async function readTo(page: Page, from: number, to: number): Promise<void> {
   }
 }
 
+/**
+ * Runs a full sync pass. syncNow() shares a pass that is already running (the one at startup, or a debounced
+ * one), and that pass may have read Drive or the local database before the caller's latest change, so a second
+ * call is what guarantees a pass that started after it.
+ */
 async function sync(page: Page): Promise<void> {
-  await page.evaluate(() => (window as unknown as E2eWindow).__iqraSync.syncNow());
+  await page.evaluate(async () => {
+    const engine = (window as unknown as E2eWindow).__iqraSync;
+    await engine.syncNow();
+    await engine.syncNow();
+  });
 }
 
 async function openPanel(page: Page, name: 'Contents' | 'Search'): Promise<void> {
@@ -279,18 +288,15 @@ test.describe('reader geometry', () => {
     const edgeBefore = (await canvas.boundingBox())!;
     const slotBox = (await slot.boundingBox())!;
     expect(edgeBefore.y + edgeBefore.height).toBeGreaterThan(slotBox.y + slotBox.height);
+    const bottomBar = (await page.locator('.r-bottom').boundingBox())!;
+    // The bar-space padding eases in at open (240 ms). A wheel before it has settled stops at the then-smaller
+    // scroll range and is never repeated, so wait for the padding to reach the bar's height first.
+    await expect
+      .poll(() => slot.evaluate((el) => parseFloat(getComputedStyle(el).paddingBottom)))
+      .toBeCloseTo(bottomBar.height, 0);
     await page.mouse.move(slotBox.x + slotBox.width / 2, slotBox.y + slotBox.height / 2);
     await page.mouse.wheel(0, 5000);
-    const bottomBar = (await page.locator('.r-bottom').boundingBox())!;
-    // The bar-space padding eases in at open, so wait until it has settled and the slot is at its end.
-    await expect
-      .poll(() =>
-        slot.evaluate((el) => {
-          const pad = parseFloat(getComputedStyle(el).paddingBottom);
-          return pad > 0 && Number.isInteger(pad) && el.scrollTop >= el.scrollHeight - el.clientHeight - 1;
-        }),
-      )
-      .toBe(true);
+    await expect.poll(() => slot.evaluate((el) => el.scrollTop >= el.scrollHeight - el.clientHeight - 1)).toBe(true);
     // The page height is fractional (1813.33 px) and scrollTop is not, so the edge may sit up to a pixel or two low.
     const edge = (await canvas.boundingBox())!;
     expect(edge.y + edge.height).toBeLessThanOrEqual(bottomBar.y + 2);
