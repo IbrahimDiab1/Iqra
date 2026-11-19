@@ -170,14 +170,17 @@ export class CategoriesSection {
   }
 
   protected async add(input: HTMLInputElement): Promise<void> {
-    if (input.value.trim() === '') return;
-    const failed = await this.categories.add(input.value);
+    const raw = input.value;
+    if (raw.trim() === '') return;
+    // Cleared at once, as before the shared service: the next name can be typed while this one saves.
+    input.value = '';
+    const failed = await this.categories.add(raw);
     if (failed) {
+      if (input.value === '') input.value = raw;
       this.error.set(this.message(failed));
       return;
     }
     this.error.set(null);
-    input.value = '';
   }
 
   /** Deletes the category; the toast offers Undo. */
