@@ -196,6 +196,16 @@ describe('PdfSession', () => {
     expect(c.getTextContent).toHaveBeenCalledTimes(1);
   });
 
+  it('hands out the text items of a right-to-left line in reading order, and the page text follows', async () => {
+    const c = install();
+    const at = (str: string, x: number, hasEOL = false) => ({ str, transform: [22, 0, 0, 22, x, 500], width: 40, height: 22, hasEOL });
+    // A PDF that draws its words left to right: القراءة غذاء العقل
+    c.getTextContent.mockResolvedValue({ items: [at('العقل', 10), at('غذاء', 60), at('القراءة', 110, true)] });
+    const s = await PdfSession.open(local());
+    expect((await s.textItems(1)).map((i) => i.str)).toEqual(['القراءة', 'غذاء', 'العقل']);
+    expect(await s.pageText(1)).toBe('القراءة غذاء العقل');
+  });
+
   it('destroy destroys the document', async () => {
     const c = install();
     const s = await PdfSession.open(local());

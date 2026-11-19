@@ -76,6 +76,8 @@ const FILTERS: Record<PageTheme, string> = {
       overflow: hidden;
       line-height: 1;
       color: transparent;
+      /* Each span carries pdf.js's own dir; the layer itself must not force a direction on Arabic text. */
+      unicode-bidi: plaintext;
       user-select: text;
       -webkit-user-select: text;
     }

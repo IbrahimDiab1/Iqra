@@ -50,3 +50,17 @@ writeFileSync(join(here, 'broken.pdf'), 'not a pdf');
   outlineDoc.catalog.set(PDFName.of('Outlines'), rootRef);
   writeFileSync(join(here, 'outline.pdf'), await outlineDoc.save());
 }
+
+// arabic.pdf: 4 pages of Arabic, written glyph by glyph (see arabic-pdf.mjs for what each page exercises).
+{
+  const { buildArabicPdf } = await import('./arabic-pdf.mjs');
+  writeFileSync(
+    join(here, 'arabic.pdf'),
+    await buildArabicPdf([
+      { mode: 'presentation', lines: ['العلم نور والجهل ظلام', 'خير جليس في الزمان كتاب', 'نقرأ كتابا جديدا كل أسبوع في الحياة', 'الجميلة والهادئة'] },
+      { mode: 'base', lines: ['طلب العلم فريضة على كل مسلم', 'الكتاب صديق وفي'] },
+      { mode: 'base', lines: ['الْكِتَابُ نُورٌ ١٢٣ صفحة', 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ'] },
+      { mode: 'base', split: true, gap: 30, lines: ['القراءة غذاء العقل والروح', 'من جد وجد ومن زرع حصد'] },
+    ]),
+  );
+}

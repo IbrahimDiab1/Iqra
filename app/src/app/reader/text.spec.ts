@@ -25,8 +25,8 @@ describe('normalizeWithMap', () => {
     expect(normalizeWithMap('مـحمد').text).toBe('محمد');
   });
 
-  it('keeps Arabic-Indic digits and other Arabic punctuation', () => {
-    expect(normalizeWithMap('١٢٣').text).toBe('١٢٣');
+  it('unifies Arabic-Indic digits with Western ones (since Plan 6) and keeps Arabic punctuation', () => {
+    expect(normalizeWithMap('١٢٣').text).toBe('123');
     expect(normalizeWithMap('٪٫٬').text).toBe('٪٫٬');
   });
 
@@ -160,6 +160,11 @@ describe('buildReflow', () => {
     const r = buildReflow([item('second', 100, 700), item('first', 300, 700)], { rtl: true });
     expect(r[0].text.startsWith('first')).toBe(true);
     expect(r[0].text).toBe('first second');
+  });
+
+  it('orders the items of an Arabic line right to left even when the book is not marked rtl', () => {
+    const r = buildReflow([item('العقل', 100, 700), item('غذاء', 200, 700), item('القراءة', 300, 700), item('Hello', 10, 600), item('world', 60, 600)], { rtl: false });
+    expect(r.map((p) => p.text)).toEqual(['القراءة غذاء العقل Hello world']);
   });
 
   it('marks Arabic paragraphs rtl and Latin paragraphs not rtl', () => {

@@ -1,3 +1,5 @@
+export { findMatches, normalizeWithMap } from './arabic-text';
+
 /** A pdf.js text item, reduced to the fields this module reads. */
 export interface TextItem {
   str: string;
@@ -12,17 +14,6 @@ export interface Paragraph {
   rtl: boolean;
 }
 
-/** Latin combining marks, tatweel, and Arabic harakat (U+064B-U+065F, U+0670). */
-const STRIPPED = /[\u0300-\u036F\u0640\u064B-\u065F\u0670]/;
-/** Letters folded to a single form so that spelling variants match. */
-const FOLDED: Record<string, string> = {
-  'أ': 'ا', // أ -> ا
-  'إ': 'ا', // إ -> ا
-  'آ': 'ا', // آ -> ا
-  'ٱ': 'ا', // ٱ -> ا
-  'ى': 'ي', // ى -> ي
-  'ة': 'ه', // ة -> ه
-};
 const ARABIC = /[؀-ۿﭐ-﷿ﹰ-﻿]/;
 const SENTENCE_END = /[.؟!?:]$/;
 const LATIN_HYPHEN_END = /[A-Za-z]-$/;
@@ -31,63 +22,6 @@ const PARAGRAPH_GAP_FACTOR = 1.6;
 const SHORT_LINE_FACTOR = 0.6;
 const SAME_LINE_FACTOR = 0.5;
 const ARABIC_SHARE = 0.3;
-
-/**
- * Lowercases, strips marks and folds spelling variants, and collapses whitespace.
- * `map[i]` is the index in `s` of normalized character `i`.
- */
-export function normalizeWithMap(s: string): { text: string; map: number[] } {
-  let text = '';
-  const map: number[] = [];
-  let index = 0;
-  let lastWasSpace = false;
-  for (const ch of s) {
-    const at = index;
-    index += ch.length;
-    if (/\s/.test(ch)) {
-      if (!lastWasSpace) {
-        text += ' ';
-        map.push(at);
-        lastWasSpace = true;
-      }
-      continue;
-    }
-    lastWasSpace = false;
-    for (const part of ch.normalize('NFD')) {
-      if (STRIPPED.test(part)) continue;
-      const lower = part.toLowerCase();
-      for (const out of FOLDED[lower] ?? lower) {
-        text += out;
-        map.push(at);
-      }
-    }
-  }
-  return { text, map };
-}
-
-/** Non-overlapping matches of `query` in `pageText`, as indexes and lengths in the original text. */
-export function findMatches(
-  pageText: string,
-  query: string,
-  max = Number.POSITIVE_INFINITY,
-): { index: number; length: number }[] {
-  const needle = normalizeWithMap(query.trim()).text;
-  if (needle.length < 2) return [];
-  const { text, map } = normalizeWithMap(pageText);
-  const out: { index: number; length: number }[] = [];
-  let from = 0;
-  while (out.length < max) {
-    const found = text.indexOf(needle, from);
-    if (found < 0) break;
-    const start = map[found];
-    const next = found + needle.length;
-    // The match ends where the next normalized character begins, so trailing marks are included.
-    const end = next < map.length ? map[next] : pageText.length;
-    out.push({ index: start, length: end - start });
-    from = next;
-  }
-  return out;
-}
 
 /** The text around a match, trimmed, with an ellipsis on each side that was cut. */
 export function snippet(
@@ -150,7 +84,9 @@ function groupLines(items: TextItem[], rtl: boolean): Line[] {
   }
   return groups.map((g) => {
     const xOf = (it: TextItem) => it.transform[4];
-    const ordered = [...g.items].sort((a, b) => (rtl ? xOf(b) - xOf(a) : xOf(a) - xOf(b)));
+    // An Arabic line reads right to left whatever the book's direction says.
+    const lineRtl = rtl || isArabicParagraph(g.items.map((it) => it.str).join(' '));
+    const ordered = [...g.items].sort((a, b) => (lineRtl ? xOf(b) - xOf(a) : xOf(a) - xOf(b)));
     const text = ordered
       .map((it) => it.str)
       .join(' ')

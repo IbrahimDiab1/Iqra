@@ -1,6 +1,7 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import { loadPdfjs } from '../books/import/pdf-meta';
-import { alignSpans } from './text-layer';
+import { toReadingOrder } from './arabic-text';
+import { alignSpans, applyReadingOrder } from './text-layer';
 import { pageTextOf, type TextItem } from './text';
 import { canvasScale } from './zoom';
 
@@ -184,7 +185,7 @@ export class PdfSession implements PageRenderer {
     try {
       const base = p.getViewport({ scale: 1 });
       const viewport = p.getViewport({ scale: cssWidthPx / base.width });
-      const items = await this.textItems(page);
+      const raw = await this.rawTextItems(page);
       if (signal.aborted) throw abortError();
       container.replaceChildren();
       // pdf.js's own viewer sets this on the layer; the text-layer CSS (page-view.component.ts) sizes the fonts from it.
@@ -201,13 +202,21 @@ export class PdfSession implements PageRenderer {
         signal.removeEventListener('abort', onAbort);
       }
       if (signal.aborted) throw abortError();
-      alignSpans(items, layer.textDivs);
+      // Spans are tagged with pdf.js's item index first, then moved to reading order along with `textItems`.
+      alignSpans(raw, layer.textDivs);
+      applyReadingOrder(container, layer.textDivs, toReadingOrder(raw).order);
     } finally {
       p.cleanup();
     }
   }
 
+  /** The page's text items in reading order: a right-to-left line the PDF draws left to right is reversed. */
   async textItems(page: number): Promise<TextItem[]> {
+    return toReadingOrder(await this.rawTextItems(page)).items;
+  }
+
+  /** The items in the order pdf.js produced them (the order its text-layer spans are in). */
+  private async rawTextItems(page: number): Promise<TextItem[]> {
     const p = await this.doc.getPage(page);
     let content;
     try {
