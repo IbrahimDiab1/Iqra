@@ -15,6 +15,23 @@ export interface PendingArea {
 const WIDTH = 296;
 const HEIGHT = 48;
 const MARGIN = 8;
+/** On touch the system's selection handles hang under the selection; the bar sits this much further away. */
+export const TOUCH_CLEARANCE = 28;
+
+/**
+ * Where the toolbar goes: below the selection with an 8 px gap, flipped above only if it would run off the bottom of
+ * the viewport, centred on the selection and kept inside the viewport.
+ */
+export function placeToolbar(o: { rect: DOMRect; touch: boolean; vw: number; vh: number }): { left: number; top: number } {
+  const { rect: r, vw, vh } = o;
+  const gap = MARGIN + (o.touch ? TOUCH_CLEARANCE : 0);
+  const left = Math.min(Math.max(r.left + r.width / 2 - WIDTH / 2, MARGIN), Math.max(MARGIN, vw - WIDTH - MARGIN));
+  const lowest = Math.max(MARGIN, vh - HEIGHT - MARGIN);
+  const below = r.bottom + gap;
+  if (below <= lowest) return { left, top: below };
+  const above = r.top - HEIGHT - gap;
+  return { left, top: above >= MARGIN ? above : lowest };
+}
 
 /** Floating toolbar for a text selection: four highlight colors, Note, Copy. Rendered once by the reader. */
 @Component({
@@ -77,9 +94,7 @@ export class SelectionToolbarComponent {
     if (!r) return { left: 0, top: 0 };
     const vw = typeof innerWidth === 'number' ? innerWidth : 1024;
     const vh = typeof innerHeight === 'number' ? innerHeight : 768;
-    const left = Math.min(Math.max(r.left + r.width / 2 - WIDTH / 2, MARGIN), Math.max(MARGIN, vw - WIDTH - MARGIN));
-    const above = r.top - HEIGHT - MARGIN;
-    const top = above >= MARGIN ? above : Math.min(r.bottom + MARGIN, Math.max(MARGIN, vh - HEIGHT - MARGIN));
-    return { left, top };
+    const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    return placeToolbar({ rect: r, touch, vw, vh });
   });
 }

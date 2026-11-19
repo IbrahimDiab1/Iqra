@@ -17,6 +17,9 @@ import { COPY } from '../ui/copy';
 import { SheetComponent } from '../ui/sheet.component';
 import { ToastService } from '../ui/toast.service';
 import { AnnotationService, HIGHLIGHT_COLORS, type HighlightColor } from './annotation.service';
+import { CHROME_COPY } from '../reader/chrome-copy';
+import { UndoStack, recordCommand } from '../reader/undo-stack';
+import { FieldEdits, removalCommand } from './edit-undo';
 import { TagInputComponent } from './tag-input.component';
 
 const SAVE_DEBOUNCE_MS = 400;
@@ -115,6 +118,9 @@ export class NoteSheetComponent {
 
   private readonly service = inject(AnnotationService);
   private readonly toast = inject(ToastService);
+  /** The reader's undo history; absent where the sheet is used outside a reader. */
+  private readonly undoStack = inject(UndoStack, { optional: true });
+  private readonly edits = new FieldEdits();
   private readonly textarea = viewChild<ElementRef<HTMLTextAreaElement>>('ta');
   private readonly openId = computed(() => this.annotation()?.id ?? null);
   private startedEmpty = false;
@@ -155,6 +161,7 @@ export class NoteSheetComponent {
     this.flush();
     this.done = true;
     if (this.startedEmpty && this.body().trim() === '' && this.tags().length === 0) {
+      this.undoStack?.discardSubject(a.id);
       void this.service.remove(a.id).catch((err) => this.failed(err));
     }
   }
@@ -186,20 +193,28 @@ export class NoteSheetComponent {
     this.timer = undefined;
     const a = this.annotation();
     if (!a || this.done || this.body() === this.savedBody) return;
+    const before = this.savedBody;
     this.savedBody = this.body();
+    this.edits.record(this.undoStack, this.service, a.id, CHROME_COPY.actions.editText, { body: before }, { body: this.savedBody });
     void this.service.update(a.id, { body: this.body() }).catch((err) => this.failed(err));
   }
 
   protected onTags(next: string[]): void {
+    const before = this.tags();
     this.tags.set(next);
     const a = this.annotation();
-    if (a) void this.service.update(a.id, { tags: next }).catch((err) => this.failed(err));
+    if (!a) return;
+    this.edits.record(this.undoStack, this.service, a.id, CHROME_COPY.actions.editTags, { tags: before }, { tags: next });
+    void this.service.update(a.id, { tags: next }).catch((err) => this.failed(err));
   }
 
   protected onColor(c: HighlightColor): void {
+    const before = this.color();
     this.color.set(c);
     const a = this.annotation();
-    if (a) void this.service.update(a.id, { color: c }).catch((err) => this.failed(err));
+    if (!a) return;
+    if (before !== c) this.edits.record(this.undoStack, this.service, a.id, CHROME_COPY.actions.color, { color: before }, { color: c });
+    void this.service.update(a.id, { color: c }).catch((err) => this.failed(err));
   }
 
   protected close(): void {
@@ -215,7 +230,7 @@ export class NoteSheetComponent {
     this.done = true;
     try {
       const rec = await this.service.remove(a.id);
-      if (rec) this.toast.show(this.copy.deleted, { undo: () => void this.service.restore(rec) });
+      if (rec) this.toast.show(this.copy.deleted, { undo: recordCommand(this.undoStack, removalCommand(this.service, rec)) });
       this.closed.emit();
     } catch (err) {
       this.done = false;

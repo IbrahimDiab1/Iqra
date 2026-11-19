@@ -482,6 +482,78 @@ test.describe('annotations', () => {
     await expect(highlightMarks(page).first()).toHaveAttribute('style', /--hl-pink/);
   });
 
+  test('selection toolbar sits just below the selected text', async () => {
+    await selectFirstSpan(page);
+    const bar = selectionToolbar(page);
+    await expect(bar).toBeVisible();
+    const sel = await page.evaluate(() => {
+      const r = window.getSelection()!.getRangeAt(0).getBoundingClientRect();
+      return { bottom: r.bottom, top: r.top };
+    });
+    const box = (await bar.boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(sel.bottom + 4);
+    expect(box.y).toBeLessThanOrEqual(sel.bottom + 14);
+  });
+
+  test('right-click opens the page menu inside the window; Add side note writes a note on the page', async () => {
+    const view = page.viewportSize()!;
+    // Near the bottom-right corner of the page area, so the menu has to be pulled back inside the window.
+    await page.mouse.click(view.width - 70, view.height - 12, { button: 'right' });
+    const menu = page.getByRole('menu', { name: 'Page actions' });
+    await expect(menu).toBeVisible();
+    const box = (await menu.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(view.width);
+    expect(box.y + box.height).toBeLessThanOrEqual(view.height);
+    await menu.getByRole('menuitem', { name: 'Add side note on p. 1' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('textbox', { name: 'Side note' }).fill('a side thought');
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await openPanel(page, 'Contents');
+    await page.getByRole('tab', { name: 'Notes' }).click();
+    await expect(page.locator('iqra-drawer')).toContainText('a side thought');
+  });
+
+  test('right-click on selected text offers the colours, and Escape closes the menu', async () => {
+    await selectFirstSpan(page);
+    const span = (await page.locator('[data-slot="cur"] .text-layer span[data-item]').first().boundingBox())!;
+    await page.mouse.click(span.x + 4, span.y + span.height / 2, { button: 'right' });
+    const menu = page.getByRole('menu', { name: 'Page actions' });
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Green' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+  });
+
+  test('right-click on the header leaves the browser menu alone', async () => {
+    const prevented = await page.evaluate(() => {
+      const e = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+      document.querySelector('.r-top')!.dispatchEvent(e);
+      return e.defaultPrevented;
+    });
+    expect(prevented).toBe(false);
+  });
+
+  test('undo and redo: Ctrl+Z removes a just-made highlight and Ctrl+Shift+Z brings it back', async () => {
+    await highlightFirstSpan(page, 'Green');
+    await page.keyboard.press('Control+z');
+    await expect(highlightMarks(page)).toHaveCount(0);
+    await expect(page.locator('.toast')).toContainText('Undid highlight');
+    await page.keyboard.press('Control+Shift+z');
+    await expect(highlightMarks(page).first()).toHaveAttribute('style', /--hl-green/);
+  });
+
+  test('area tool: a chip says it is on, right-click cancels it and removes the chip', async () => {
+    const tool = page.getByRole('button', { name: 'Highlight an area' });
+    await tool.click();
+    await expect(page.getByRole('status').filter({ hasText: 'Area highlight on' })).toBeVisible();
+    const canvas = (await page.locator('[data-slot="cur"] canvas').boundingBox())!;
+    await page.mouse.click(canvas.x + 40, canvas.y + 40, { button: 'right' });
+    await expect(tool).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByRole('menu', { name: 'Page actions' })).toBeHidden();
+    await expect(page.getByRole('status').filter({ hasText: 'Area highlight on' })).toBeHidden();
+  });
+
   test('bookmark: toggling lists it in the Bookmarks tab and tapping it jumps', async () => {
     await page.getByRole('button', { name: 'Bookmark this page' }).click();
     await expect(page.getByRole('button', { name: 'Remove bookmark' })).toBeVisible();

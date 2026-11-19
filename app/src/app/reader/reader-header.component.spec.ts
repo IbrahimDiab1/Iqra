@@ -16,6 +16,7 @@ import { ReaderHeaderComponent } from './reader-header.component';
     [numPages]="300"
     [canBack]="canBack()"
     [canForward]="false"
+    [areaActive]="area()"
     [(gotoOpen)]="goto"
     (historyBack)="backs = backs + 1"
     (goTo)="jumps.push($event)"
@@ -26,6 +27,7 @@ class HostComponent {
   chapter = signal<string | null>('Chapter');
   section = signal<string | null>(null);
   canBack = signal(false);
+  area = signal(false);
   goto = signal(false);
   backs = 0;
   jumps: number[] = [];
@@ -109,5 +111,15 @@ describe('ReaderHeaderComponent', () => {
     fixture.detectChanges();
     expect(host.goto()).toBe(false);
     el.remove();
+  });
+
+  it('shows a status chip while the area tool is on, and nothing otherwise', () => {
+    create();
+    expect(el.querySelector('.chip')).toBeNull();
+    update(() => host.area.set(true));
+    const chip = el.querySelector('[role=status].chip')!;
+    expect(chip.textContent!.trim()).toBe(CHROME_COPY.areaOn);
+    update(() => host.area.set(false));
+    expect(el.querySelector('.chip')).toBeNull();
   });
 });

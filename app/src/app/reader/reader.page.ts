@@ -37,7 +37,11 @@ import { chapterTitleAt, sectionTitleAt } from './outline';
 import { BookPanelDrawerComponent, type PanelTab } from './book-panel.drawer';
 import { PagerComponent } from './pager.component';
 import { PdfSession, ReaderOpenError, type PageRenderer, type PdfSource } from './pdf-session';
+import { ContextMenuComponent } from './context-menu.component';
+import { contextMenuModel, type ContextActionId } from './context-menu';
 import { ReaderActions } from './reader-actions';
+import { UndoStack } from './undo-stack';
+import type { HighlightColor } from '../annotations/annotation.service';
 import { PositionService } from './position.service';
 import { ReaderState } from './reader.state';
 import { SessionService, type ReaderSessionHandle } from './session.service';
@@ -66,11 +70,13 @@ const SYNC_TOAST_MS = 8000;
 /** A jump to an annotation lands a little above it. */
 const ANNOTATION_JUMP_MARGIN = 0.05;
 const FINISH_TOAST_MS = 8000;
+const LONG_PRESS_MS = 550;
+const LONG_PRESS_SLOP_PX = 10;
 
 @Component({
   selector: 'iqra-reader-page',
-  imports: [RouterLink, ReaderHeaderComponent, ReaderToolbarComponent, ShortcutHelpComponent, BookPanelDrawerComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective, SelectionToolbarComponent, NoteSheetComponent, TextEditorSheet],
-  providers: [SelectionService, ReaderActions],
+  imports: [RouterLink, ContextMenuComponent, ReaderHeaderComponent, ReaderToolbarComponent, ShortcutHelpComponent, BookPanelDrawerComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective, SelectionToolbarComponent, NoteSheetComponent, TextEditorSheet],
+  providers: [SelectionService, UndoStack, ReaderActions],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @switch (statusKind()) {
@@ -103,13 +109,21 @@ const FINISH_TOAST_MS = 8000;
             [numPages]="r.numPages"
             [canBack]="s.canBack()"
             [canForward]="s.canForward()"
+            [areaActive]="s.tool() === 'area'"
             [(gotoOpen)]="gotoOpen"
             (historyBack)="historyBack()"
             (historyForward)="historyForward()"
             (goTo)="goToPage($event)"
           />
 
-          <main class="stage">
+          <main
+            class="stage"
+            (contextmenu)="onContextMenu($event)"
+            (pointerdown)="onStagePointerDown($event)"
+            (pointermove)="onStagePointerMove($event)"
+            (pointerup)="cancelPress()"
+            (pointercancel)="cancelPress()"
+          >
             @if (s.view() === 'reflow') {
               <iqra-reflow-view
                 [renderer]="r"
@@ -169,18 +183,20 @@ const FINISH_TOAST_MS = 8000;
             class="r-tools"
             [view]="s.view()"
             [tool]="s.tool()"
-            [bookmarked]="!!actions.bookmark()"
+            [bookmarked]="actions.bookmarked()"
             [progressMode]="b.progressMode"
             [pageMarked]="pageMarked()"
             [fullscreen]="fullscreen()"
             [noteCount]="pageNoteCount()"
+            [canUndo]="actions.undoStack.canUndo()"
+            [canRedo]="actions.undoStack.canRedo()"
             (action)="onToolbar($event)"
             (progressModeChange)="setProgressMode($event)"
           />
 
           <div class="overlays">
             <iqra-selection-toolbar
-              [selection]="actions.toolbarTarget()"
+              [selection]="menuAt() ? null : actions.toolbarTarget()"
               (color)="actions.highlight($event)"
               (note)="actions.addNote()"
               (copy)="actions.copySelection()"
@@ -207,6 +223,13 @@ const FINISH_TOAST_MS = 8000;
               (note)="actions.noteTarget.set($event)"
               (sideNote)="actions.startSideNote($event)"
               (flash)="s.flashAnnotation($event)"
+            />
+            <iqra-context-menu
+              [at]="menuAt()"
+              [model]="menuModel()"
+              (pick)="onMenuPick($event)"
+              (color)="onMenuColor($event)"
+              (closed)="menuAt.set(null)"
             />
             <iqra-shortcut-help [open]="helpOpen()" (closed)="helpOpen.set(false)" />
             <iqra-text-editor-sheet
@@ -332,6 +355,19 @@ export class ReaderPage implements OnDestroy {
   protected readonly gotoOpen = signal(false);
   protected readonly helpOpen = signal(false);
   protected readonly fullscreen = signal(false);
+  /** Where the page-actions menu is open, in viewport coordinates. */
+  protected readonly menuAt = signal<{ x: number; y: number; keyboard?: boolean } | null>(null);
+  protected readonly menuModel = computed(() =>
+    contextMenuModel({
+      page: this.state()?.page() ?? 1,
+      bookmarked: this.actions.bookmarked(),
+      pageMarked: this.pageMarked(),
+      markedMode: this.book()?.progressMode === 'marked',
+      hasSelection: this.selection.pending() !== null && this.actions.pendingArea() === null,
+      reflow: this.state()?.view() === 'reflow',
+    }),
+  );
+  private press: { id: number; x: number; y: number; timer: ReturnType<typeof setTimeout> } | undefined;
 
   protected readonly theme = computed(() => this.settings.settings().readerTheme);
   protected readonly rtl = computed(() => this.book()?.direction === 'rtl');
@@ -384,6 +420,8 @@ export class ReaderPage implements OnDestroy {
       book: this.book,
       session: this.session,
       annotations: this.annotations,
+      marked: this.marked,
+      pageText: (page) => this.session()!.pageText(page),
       pageBox: (page) => this.host.nativeElement.querySelector(`.text-layer[data-page="${page}"]`)?.getBoundingClientRect(),
     });
     void this.load();
@@ -438,6 +476,7 @@ export class ReaderPage implements OnDestroy {
       this.tracking = this.sessions.start(book, state.page());
       this.finishOffered = false;
       this.markedComplete = undefined;
+      this.actions.undoStack.clear();
       if (this.openBookId) this.readMarks.release(this.openBookId);
       this.openBookId = book.id;
       this.markSource.set(this.readMarks.marked(book.id));
@@ -521,9 +560,7 @@ export class ReaderPage implements OnDestroy {
   @HostListener('document:keydown', ['$event'])
   protected onKey(e: KeyboardEvent): void {
     if (!this.state() || isReaderKeyIgnored(e)) return;
-    if (e.key === 'Escape' && (this.state()!.tool() !== 'none' || this.actions.pendingArea())) {
-      this.state()!.tool.set('none');
-      this.actions.pendingArea.set(null);
+    if (e.key === 'Escape' && this.actions.cancelArea()) {
       e.preventDefault();
       return;
     }
@@ -546,7 +583,9 @@ export class ReaderPage implements OnDestroy {
       case 'help': this.helpOpen.set(true); return true;
       case 'historyBack': this.historyBack(); return true;
       case 'historyForward': this.historyForward(); return true;
-      // Undo and redo arrive with the undo stack; until then the keys keep their browser meaning.
+      case 'undo': void this.actions.undo(); return true;
+      case 'redo': void this.actions.redo(); return true;
+      case 'menu': this.openMenuAtCentre(); return true;
       default: return false;
     }
   }
@@ -560,6 +599,8 @@ export class ReaderPage implements OnDestroy {
       case 'area': this.actions.toggleArea(); break;
       case 'mode': this.toggleView(); break;
       case 'settings': this.settingsOpen.set(true); break;
+      case 'undo': void this.actions.undo(); break;
+      case 'redo': void this.actions.redo(); break;
       case 'fullscreen': this.toggleFullscreen(); break;
       default: break;
     }
@@ -582,6 +623,71 @@ export class ReaderPage implements OnDestroy {
     }
   }
 
+  /** Right-click in the page area: cancels a running area tool, otherwise opens the page-actions menu. Elsewhere the native menu stays. */
+  protected onContextMenu(e: MouseEvent): void {
+    if (!this.state()) return;
+    e.preventDefault();
+    this.cancelPress();
+    if (this.actions.cancelArea()) return;
+    this.menuAt.set({ x: e.clientX, y: e.clientY });
+  }
+
+  /** Shift+F10 / the Menu key: the menu opens at the middle of the page area. */
+  private openMenuAtCentre(): void {
+    const box = this.host.nativeElement.querySelector('.stage')?.getBoundingClientRect();
+    if (!box) return;
+    this.actions.cancelArea();
+    this.menuAt.set({ x: box.left + box.width / 2, y: box.top + box.height / 2, keyboard: true });
+  }
+
+  /** Touch long-press on blank page area opens the menu; pressing text is left to the system's own selection. */
+  protected onStagePointerDown(e: PointerEvent): void {
+    this.cancelPress();
+    if (e.pointerType !== 'touch' || e.isPrimary === false || this.state()?.tool() !== 'none') return;
+    if ((e.target as Element | null)?.closest?.('[data-item], .reflow-article p')) return;
+    const x = e.clientX;
+    const y = e.clientY;
+    this.press = {
+      id: e.pointerId,
+      x,
+      y,
+      timer: setTimeout(() => {
+        this.press = undefined;
+        this.menuAt.set({ x, y });
+      }, LONG_PRESS_MS),
+    };
+  }
+
+  protected onStagePointerMove(e: PointerEvent): void {
+    const p = this.press;
+    if (p && e.pointerId === p.id && Math.hypot(e.clientX - p.x, e.clientY - p.y) > LONG_PRESS_SLOP_PX) this.cancelPress();
+  }
+
+  protected cancelPress(): void {
+    if (this.press) clearTimeout(this.press.timer);
+    this.press = undefined;
+  }
+
+  protected onMenuPick(id: ContextActionId): void {
+    this.menuAt.set(null);
+    switch (id) {
+      case 'note': void this.actions.addNote(); break;
+      case 'copySelection': void this.actions.copySelection(); break;
+      case 'sideNote': void this.actions.addSideNote(); break;
+      case 'bookmark': void this.actions.toggleBookmark(); break;
+      case 'mark': void this.markPage(); break;
+      case 'area': this.actions.toggleArea(); break;
+      case 'summary': this.actions.addRangeSummary(); break;
+      case 'goto': this.gotoOpen.set(true); break;
+      case 'copyPage': void this.actions.copyPageText(); break;
+    }
+  }
+
+  protected onMenuColor(color: HighlightColor): void {
+    this.menuAt.set(null);
+    void this.actions.highlight(color);
+  }
+
   @HostListener('document:fullscreenchange')
   protected onFullscreenChange(): void {
     this.fullscreen.set(document.fullscreenElement !== null);
@@ -593,7 +699,7 @@ export class ReaderPage implements OnDestroy {
       this.toast.show(CHROME_COPY.markDisabled);
       return;
     }
-    await this.toggleMark();
+    await this.actions.toggleMark();
   }
 
   /** Switches how this book's progress is counted; both the marks and the last page reached are kept. */
@@ -643,19 +749,6 @@ export class ReaderPage implements OnDestroy {
     this.markedComplete = complete;
   }
 
-  private async toggleMark(): Promise<void> {
-    const s = this.state();
-    const b = this.book();
-    if (!s || !b) return;
-    const page = s.page();
-    try {
-      await this.readMarks.toggle(b.id, page);
-    } catch (err) {
-      console.warn('Could not change the read mark', err);
-      this.toast.show(COPY.annotations.saveFailed);
-    }
-  }
-
   private offerFinish(): void {
     const b = this.book();
     if (!b || b.status === 'finished' || this.finishOffered) return;
@@ -680,6 +773,7 @@ export class ReaderPage implements OnDestroy {
 
   ngOnDestroy(): void {
     this.destroyed = true;
+    this.cancelPress();
     this.stopListening();
     void this.tracking?.end();
     this.tracking = null;

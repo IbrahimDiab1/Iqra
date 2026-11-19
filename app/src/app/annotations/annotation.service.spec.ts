@@ -190,4 +190,36 @@ describe('AnnotationService', () => {
     expect(restored.text?.quote).toBe('abcde');
     expect(restored.deleted).toBeUndefined();
   });
+
+  it('redoAddHighlight after an undo brings the merged highlight back and removes the originals again', async () => {
+    const a = await service.create({
+      bookId: 'b1',
+      type: 'highlight',
+      page: 3,
+      color: 'green',
+      text: anchor(3, [1, 0], [1, 5]),
+      body: 'a',
+      tags: ['x'],
+    });
+    const signal = service.forBook('b1');
+    await vi.waitFor(() => expect(signal()).toHaveLength(1));
+    const result = await service.addHighlight('b1', anchor(3, [1, 3], [1, 8]), 'pink', GEOMETRY);
+    await service.undoAddHighlight(result);
+    await vi.waitFor(() => expect(signal()?.[0]?.id).toBe(a.id));
+
+    await service.redoAddHighlight(result);
+
+    await vi.waitFor(() => expect(signal()?.map((r) => r.id)).toEqual([result.created.id]));
+    expect(signal()![0].color).toBe('pink');
+    expect(signal()![0].body).toBe('a');
+  });
+
+  it('redoAddHighlight without a merge just restores the new highlight', async () => {
+    const result = await service.addHighlight('b1', anchor(3, [1, 0], [1, 5]), 'blue', GEOMETRY);
+    await service.undoAddHighlight(result);
+    const signal = service.forBook('b1');
+    await vi.waitFor(() => expect(signal()).toHaveLength(0));
+    await service.redoAddHighlight(result);
+    await vi.waitFor(() => expect(signal()?.map((r) => r.id)).toEqual([result.created.id]));
+  });
 });

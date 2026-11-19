@@ -22,6 +22,7 @@ import { PageRenderer, PageSize, ReaderOpenError } from './pdf-session';
 import { PositionService, type RestoredPosition } from './position.service';
 import { PDF_OPENER, ReaderPage } from './reader.page';
 import { ReaderActions } from './reader-actions';
+import { UndoStack } from './undo-stack';
 import { ScrollerComponent } from './scroller.component';
 
 class FakeSession implements PageRenderer {
@@ -369,17 +370,18 @@ describe('ReaderPage', () => {
   describe('area tool', () => {
     const area = () => el.querySelector<HTMLButtonElement>(`button[aria-label="${COPY.annotations.area}"]`);
 
-    it('the Area button toggles aria-pressed, shows a hint toast, and Escape turns it off', async () => {
+    it('the Area button toggles aria-pressed, shows a header chip, and Escape turns it off', async () => {
       await create();
       expect(area()).not.toBeNull();
       expect(area()!.getAttribute('aria-pressed')).toBe('false');
       area()!.click();
       fixture.detectChanges();
       expect(area()!.getAttribute('aria-pressed')).toBe('true');
-      expect(TestBed.inject(ToastService).current()?.message).toBe(COPY.annotations.areaHint);
+      expect(el.querySelector('iqra-reader-header [role=status].chip')!.textContent!.trim()).toBe(CHROME_COPY.areaOn);
       document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       fixture.detectChanges();
       expect(area()!.getAttribute('aria-pressed')).toBe('false');
+      expect(el.querySelector('iqra-reader-header .chip')).toBeNull();
       area()!.click();
       fixture.detectChanges();
       area()!.click();
@@ -549,13 +551,17 @@ describe('ReaderPage', () => {
       await vi.waitFor(async () => expect((await stored()).filter((r) => !r.deleted && r.type === 'bookmark')).toHaveLength(1));
     });
 
-    it('a fast double tap on the bookmark button makes one bookmark', async () => {
+    it('a fast double tap on the bookmark button is add then remove: one record, none left live', async () => {
       await create();
       bookmarkBtn().click();
       bookmarkBtn().click();
-      await vi.waitFor(async () => expect((await stored()).filter((r) => r.type === 'bookmark')).toHaveLength(1));
-      await new Promise((r) => setTimeout(r, 100));
-      expect((await stored()).filter((r) => r.type === 'bookmark' && !r.deleted)).toHaveLength(1);
+      await vi.waitFor(async () => {
+        const rows = (await stored()).filter((r) => r.type === 'bookmark');
+        expect(rows).toHaveLength(1);
+        expect(rows[0].deleted).toBe(true);
+      });
+      fixture.detectChanges();
+      expect(bookmarkBtn().getAttribute('aria-pressed')).toBe('false');
     });
 
     async function openContents() {
@@ -618,7 +624,7 @@ describe('ReaderPage', () => {
         source: 'page',
       });
       fakeSelection.clear.mockClear();
-      TestBed.overrideComponent(ReaderPage, { set: { providers: [{ provide: SelectionService, useValue: fakeSelection }, ReaderActions] } });
+      TestBed.overrideComponent(ReaderPage, { set: { providers: [{ provide: SelectionService, useValue: fakeSelection }, UndoStack, ReaderActions] } });
     });
 
     const stored = () => db.annotations.toArray();
@@ -1062,6 +1068,479 @@ describe('ReaderPage', () => {
         expect(tool('mark')!.getAttribute('aria-disabled')).toBe('true');
       });
       expect(TestBed.inject(ToastService).current()?.message).toBe(CHROME_COPY.nowLast);
+    });
+  });
+
+  describe('undo and redo', () => {
+    const fakeSelection = {
+      pending: signal<PendingSelection | null>(null),
+      active: signal(false),
+      attach: vi.fn(),
+      clear: vi.fn(),
+    };
+    const live = async () => (await db.annotations.toArray()).filter((r) => !r.deleted);
+    const undoBtn = () => tool('undo')!;
+    const redoBtn = () => tool('redo')!;
+    const toast = () => TestBed.inject(ToastService);
+
+    beforeEach(() => {
+      fakeSelection.pending.set({
+        page: 7,
+        start: { item: 0, offset: 0 },
+        end: { item: 0, offset: 5 },
+        quote: 'Hello',
+        rect: { left: 50, top: 100, right: 100, bottom: 120, width: 50, height: 20, x: 50, y: 100, toJSON: () => ({}) } as DOMRect,
+        source: 'page',
+      });
+      TestBed.overrideComponent(ReaderPage, { set: { providers: [{ provide: SelectionService, useValue: fakeSelection }, UndoStack, ReaderActions] } });
+    });
+
+    async function highlightGreen(): Promise<void> {
+      fixture.detectChanges();
+      el.querySelector<HTMLButtonElement>(`iqra-selection-toolbar button[aria-label="${COPY.annotations.colors.green}"]`)!.click();
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+      fakeSelection.pending.set(null);
+      fixture.detectChanges();
+    }
+
+    it('Undo and Redo start disabled and the keys keep their browser meaning', async () => {
+      await create();
+      expect(undoBtn().disabled).toBe(true);
+      expect(redoBtn().disabled).toBe(true);
+      expect(key('z', { ctrlKey: true }).defaultPrevented).toBe(true);
+      expect(await live()).toHaveLength(0);
+    });
+
+    it('Ctrl+Z removes a just-created highlight, Ctrl+Shift+Z brings it back, with Undid and Redo toasts', async () => {
+      await create();
+      await highlightGreen();
+      expect(undoBtn().disabled).toBe(false);
+      key('z', { ctrlKey: true });
+      await vi.waitFor(async () => expect(await live()).toHaveLength(0));
+      expect(toast().current()?.message).toBe(CHROME_COPY.undid(CHROME_COPY.actions.highlight));
+      expect(toast().current()?.actionLabel).toBe(CHROME_COPY.redo);
+      fixture.detectChanges();
+      expect(redoBtn().disabled).toBe(false);
+      key('z', { ctrlKey: true, shiftKey: true });
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+      expect((await live())[0]).toMatchObject({ type: 'highlight', color: 'green' });
+      expect(toast().current()?.message).toBe(CHROME_COPY.redid(CHROME_COPY.actions.highlight));
+    });
+
+    it('Ctrl+Y redoes too, and the toolbar buttons do the same as the keys', async () => {
+      await create();
+      await highlightGreen();
+      undoBtn().click();
+      await vi.waitFor(async () => expect(await live()).toHaveLength(0));
+      key('y', { ctrlKey: true });
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+      key('z', { ctrlKey: true });
+      await vi.waitFor(async () => expect(await live()).toHaveLength(0));
+      fixture.detectChanges();
+      redoBtn().click();
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+    });
+
+    it("the toast's Redo button redoes", async () => {
+      await create();
+      await highlightGreen();
+      key('z', { ctrlKey: true });
+      await vi.waitFor(async () => expect(await live()).toHaveLength(0));
+      toast().undo();
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+    });
+
+    it('the highlight toast Undo goes through the stack: pressing Ctrl+Z afterwards undoes nothing twice', async () => {
+      await create();
+      await highlightGreen();
+      toast().undo();
+      await vi.waitFor(async () => expect(await live()).toHaveLength(0));
+      fixture.detectChanges();
+      expect(undoBtn().disabled).toBe(true);
+      key('z', { ctrlKey: true });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(await live()).toHaveLength(0);
+      expect(toast().current()?.message).not.toBe(CHROME_COPY.undid(CHROME_COPY.actions.highlight));
+    });
+
+    it('Ctrl+Z first, then the old toast Undo, does nothing more', async () => {
+      await create();
+      await highlightGreen();
+      const stale = toast().current()!;
+      key('z', { ctrlKey: true });
+      await vi.waitFor(async () => expect(await live()).toHaveLength(0));
+      stale.undo!();
+      await new Promise((r) => setTimeout(r, 50));
+      expect(await live()).toHaveLength(0);
+      expect((await db.annotations.toArray()).length).toBe(1);
+    });
+
+    it('undoing a highlight that merged two restores the originals; redo merges again', async () => {
+      await create();
+      const svc = TestBed.inject(AnnotationService);
+      const text = (a: number, b: number) => ({ page: 7, start: { item: 0, offset: a }, end: { item: 0, offset: b }, rects: [], quote: 'x'.repeat(b - a) });
+      const first = await svc.create({ bookId: 'book-1', type: 'highlight', page: 7, color: 'pink', tags: [], text: text(0, 3) });
+      fixture.detectChanges();
+      await highlightGreen();
+      const merged = await live();
+      expect(merged).toHaveLength(1);
+      expect(merged[0].id).not.toBe(first.id);
+      key('z', { ctrlKey: true });
+      await vi.waitFor(async () => expect((await live()).map((r) => r.id)).toEqual([first.id]));
+      key('z', { ctrlKey: true, shiftKey: true });
+      await vi.waitFor(async () => expect((await live()).map((r) => r.id)).toEqual([merged[0].id]));
+    });
+
+    it('a new action clears what could be redone', async () => {
+      await create();
+      await highlightGreen();
+      key('z', { ctrlKey: true });
+      await vi.waitFor(async () => expect(await live()).toHaveLength(0));
+      fixture.detectChanges();
+      expect(redoBtn().disabled).toBe(false);
+      key('b');
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+      fixture.detectChanges();
+      expect(redoBtn().disabled).toBe(true);
+    });
+
+    it('toggling the bookmark twice leaves none, and Ctrl+Z puts it back', async () => {
+      await create();
+      key('b');
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+      fixture.detectChanges();
+      key('b');
+      await vi.waitFor(async () => expect(await live()).toHaveLength(0));
+      fixture.detectChanges();
+      expect(tool('bookmark')!.getAttribute('aria-pressed')).toBe('false');
+      key('z', { ctrlKey: true });
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+      fixture.detectChanges();
+      expect(tool('bookmark')!.getAttribute('aria-pressed')).toBe('true');
+      key('z', { ctrlKey: true });
+      await vi.waitFor(async () => expect(await live()).toHaveLength(0));
+      fixture.detectChanges();
+      expect(tool('bookmark')!.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('a drawn area is undoable', async () => {
+      await create();
+      fakeSelection.pending.set(null);
+      pager().areaDrawn.emit({ page: 7, rect: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 } });
+      fixture.detectChanges();
+      el.querySelector<HTMLButtonElement>(`iqra-selection-toolbar button[aria-label="${COPY.annotations.colors.blue}"]`)!.click();
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+      key('z', { ctrlKey: true });
+      await vi.waitFor(async () => expect(await live()).toHaveLength(0));
+      expect(toast().current()?.message).toBe(CHROME_COPY.undid(CHROME_COPY.actions.area));
+    });
+
+    it('marking a page read is undoable', async () => {
+      await db.books.put(makeBook({ progressMode: 'marked' }));
+      await create();
+      key('m');
+      await vi.waitFor(async () => expect((await db.readMarks.get('book-1:7'))?.read).toBe(true));
+      key('z', { ctrlKey: true });
+      await vi.waitFor(async () => expect((await db.readMarks.get('book-1:7'))?.read).toBe(false));
+      key('y', { ctrlKey: true });
+      await vi.waitFor(async () => expect((await db.readMarks.get('book-1:7'))?.read).toBe(true));
+    });
+
+    it('a colour change in the note sheet is one undoable step', async () => {
+      await create();
+      fakeSelection.pending.set(null);
+      const rec = await TestBed.inject(AnnotationService).create({
+        bookId: 'book-1', type: 'highlight', page: 7, color: 'pink', tags: [],
+        text: { page: 7, start: { item: 0, offset: 0 }, end: { item: 0, offset: 5 }, rects: [], quote: 'Hello' },
+      });
+      pager().annotationTap.emit(rec);
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-note-sheet .panel.open')).not.toBeNull();
+      });
+      el.querySelector<HTMLButtonElement>(`iqra-note-sheet button[aria-label="${COPY.annotations.colors.blue}"]`)!.click();
+      await vi.waitFor(async () => expect((await db.annotations.get(rec.id))!.color).toBe('blue'));
+      el.querySelector<HTMLButtonElement>('iqra-note-sheet button.close')!.click();
+      fixture.detectChanges();
+      key('z', { ctrlKey: true });
+      await vi.waitFor(async () => expect((await db.annotations.get(rec.id))!.color).toBe('pink'));
+      key('z', { ctrlKey: true, shiftKey: true });
+      await vi.waitFor(async () => expect((await db.annotations.get(rec.id))!.color).toBe('blue'));
+    });
+
+    it('deleting a note from its sheet is undoable with Ctrl+Z', async () => {
+      await create();
+      fakeSelection.pending.set(null);
+      const rec = await TestBed.inject(AnnotationService).create({
+        bookId: 'book-1', type: 'highlight', page: 7, color: 'pink', tags: [],
+        text: { page: 7, start: { item: 0, offset: 0 }, end: { item: 0, offset: 5 }, rects: [], quote: 'Hello' },
+      });
+      pager().annotationTap.emit(rec);
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-note-sheet .panel.open')).not.toBeNull();
+      });
+      el.querySelector<HTMLButtonElement>('iqra-note-sheet button.del')!.click();
+      await vi.waitFor(async () => expect(await live()).toHaveLength(0));
+      fixture.detectChanges();
+      key('z', { ctrlKey: true });
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+    });
+
+    it('a note closed empty leaves nothing to undo', async () => {
+      await create();
+      fixture.detectChanges();
+      el.querySelector<HTMLButtonElement>('iqra-selection-toolbar button.note')!.click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-note-sheet .panel.open')).not.toBeNull();
+      });
+      el.querySelector<HTMLButtonElement>('iqra-note-sheet button.close')!.click();
+      await vi.waitFor(async () => expect(await live()).toHaveLength(0));
+      fixture.detectChanges();
+      expect(undoBtn().disabled).toBe(true);
+    });
+
+    it('the history belongs to one reader session', async () => {
+      await create();
+      await highlightGreen();
+      fixture.destroy();
+      await create();
+      expect(undoBtn().disabled).toBe(true);
+    });
+  });
+
+  describe('page actions menu', () => {
+    const fakeSelection = {
+      pending: signal<PendingSelection | null>(null),
+      active: signal(false),
+      attach: vi.fn(),
+      clear: vi.fn(),
+    };
+    const live = async () => (await db.annotations.toArray()).filter((r) => !r.deleted);
+    const menu = () => el.querySelector<HTMLElement>('iqra-context-menu [role=menu]');
+    const items = () => Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-context-menu [role=menuitem]'));
+    const item = (action: string) => el.querySelector<HTMLButtonElement>(`iqra-context-menu [data-action="${action}"]`)!;
+    const rightClick = (target: Element = el.querySelector('.stage')!, x = 200, y = 150) => {
+      const e = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y });
+      target.dispatchEvent(e);
+      fixture.detectChanges();
+      return e;
+    };
+    const opened = () =>
+      vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(menu()).not.toBeNull();
+      });
+
+    beforeEach(() => {
+      fakeSelection.pending.set(null);
+      TestBed.overrideComponent(ReaderPage, { set: { providers: [{ provide: SelectionService, useValue: fakeSelection }, UndoStack, ReaderActions] } });
+    });
+
+    it('right-click in the page area opens the menu at the pointer and stops the browser menu', async () => {
+      await create();
+      const e = rightClick();
+      expect(e.defaultPrevented).toBe(true);
+      await opened();
+      expect(items().map((b) => b.dataset['action'])).toEqual(['sideNote', 'bookmark', 'mark', 'area', 'summary', 'goto', 'copyPage']);
+      expect(item('sideNote').textContent).toContain('Add side note on p. 7');
+      expect(el.querySelector('iqra-context-menu .dot')).toBeNull();
+      expect(menu()!.style.left).toBe('200px');
+    });
+
+    it('right-click on the header or the toolbar keeps the browser menu', async () => {
+      await create();
+      expect(rightClick(el.querySelector('iqra-reader-header')!).defaultPrevented).toBe(false);
+      expect(rightClick(el.querySelector('iqra-reader-toolbar')!).defaultPrevented).toBe(false);
+      expect(menu()).toBeNull();
+    });
+
+    it('with a selection the menu adds the four colours, Note and Copy', async () => {
+      fakeSelection.pending.set({
+        page: 7, start: { item: 0, offset: 0 }, end: { item: 0, offset: 5 }, quote: 'Hello',
+        rect: { left: 50, top: 100, right: 100, bottom: 120, width: 50, height: 20, x: 50, y: 100, toJSON: () => ({}) } as DOMRect,
+        source: 'page',
+      });
+      await create();
+      rightClick();
+      await opened();
+      expect(el.querySelectorAll('iqra-context-menu .dot')).toHaveLength(4);
+      expect(items().map((b) => b.dataset['action']).filter(Boolean).slice(0, 2)).toEqual(['note', 'copySelection']);
+      // The floating selection toolbar steps aside while the menu is open.
+      expect(el.querySelector('iqra-selection-toolbar [role=toolbar]')).toBeNull();
+      el.querySelector<HTMLButtonElement>(`iqra-context-menu button[aria-label="${COPY.annotations.colors.pink}"]`)!.click();
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+      expect((await live())[0]).toMatchObject({ type: 'highlight', color: 'pink' });
+      fixture.detectChanges();
+      expect(menu()).toBeNull();
+    });
+
+    it('Esc closes it and focus goes back where it was', async () => {
+      await create();
+      const opener = tool('search')!;
+      opener.focus();
+      rightClick();
+      await opened();
+      await vi.waitFor(() => expect(document.activeElement).toBe(menu()));
+      menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      fixture.detectChanges();
+      expect(menu()).toBeNull();
+      expect(document.activeElement).toBe(opener);
+    });
+
+    it('a press elsewhere closes it', async () => {
+      await create();
+      rightClick();
+      await opened();
+      document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      fixture.detectChanges();
+      expect(menu()).toBeNull();
+    });
+
+    it('Shift+F10 and the Menu key open it, arrows move, Enter activates', async () => {
+      await create();
+      key('F10', { shiftKey: true });
+      await opened();
+      await vi.waitFor(() => expect(document.activeElement).toBe(items()[0]));
+      items()[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+      expect(document.activeElement).toBe(items()[1]);
+      items()[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
+      items()[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }));
+      expect(document.activeElement).toBe(items().at(-1));
+      items()[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      fixture.detectChanges();
+      expect(menu()).toBeNull();
+      key('ContextMenu');
+      await opened();
+      item('bookmark').click();
+      await vi.waitFor(async () => expect((await live()).filter((r) => r.type === 'bookmark')).toHaveLength(1));
+      fixture.detectChanges();
+      expect(menu()).toBeNull();
+    });
+
+    it('while the menu is open the reader shortcuts do not fire behind it', async () => {
+      await create();
+      rightClick();
+      await opened();
+      await vi.waitFor(() => expect(document.activeElement).toBe(menu()));
+      menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', bubbles: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 30));
+      expect(await live()).toHaveLength(0);
+    });
+
+    it('Add side note creates a side note on this page and opens its editor', async () => {
+      await create();
+      rightClick();
+      await opened();
+      item('sideNote').click();
+      await vi.waitFor(async () => expect((await live()).filter((r) => r.type === 'side-note' && r.page === 7)).toHaveLength(1));
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-text-editor-sheet .panel.open')).not.toBeNull();
+      });
+    });
+
+    it('Bookmark flips to Remove bookmark and Mark page is explained in last-page mode', async () => {
+      await create();
+      rightClick();
+      await opened();
+      expect(item('mark').getAttribute('aria-disabled')).toBe('true');
+      item('mark').click();
+      expect(TestBed.inject(ToastService).current()?.message).toBe(CHROME_COPY.markDisabled);
+      key('b');
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+      fixture.detectChanges();
+      rightClick();
+      await opened();
+      expect(item('bookmark').textContent).toContain(COPY.annotations.removeBookmark);
+    });
+
+    it('Area highlight, Go to page and Page-range summary run their actions', async () => {
+      await create();
+      rightClick();
+      await opened();
+      item('area').click();
+      fixture.detectChanges();
+      expect(tool('area')!.getAttribute('aria-pressed')).toBe('true');
+      key('Escape');
+      rightClick();
+      await opened();
+      item('goto').click();
+      fixture.detectChanges();
+      expect(el.querySelector('iqra-reader-header input[type=number]')).not.toBeNull();
+      el.querySelector<HTMLInputElement>('iqra-reader-header input[type=number]')!.blur();
+      fixture.detectChanges();
+      rightClick();
+      await opened();
+      item('summary').click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-text-editor-sheet .panel.open')).not.toBeNull();
+      });
+    });
+
+    it('Copy page text copies the page text and says so; a page without text says that', async () => {
+      await create();
+      const write = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText: write }, configurable: true });
+      session.pageText = async () => 'page words';
+      rightClick();
+      await opened();
+      item('copyPage').click();
+      await vi.waitFor(() => expect(write).toHaveBeenCalledWith('page words'));
+      expect(TestBed.inject(ToastService).current()?.message).toBe(CHROME_COPY.pageTextCopied);
+      session.pageText = async () => '  ';
+      fixture.detectChanges();
+      rightClick();
+      await opened();
+      item('copyPage').click();
+      await vi.waitFor(() => expect(TestBed.inject(ToastService).current()?.message).toBe(CHROME_COPY.noPageText));
+    });
+
+    it('the Area tool cancels on right-click without opening the menu, on a second press and on Esc', async () => {
+      await create();
+      key('a');
+      expect(tool('area')!.getAttribute('aria-pressed')).toBe('true');
+      const e = rightClick();
+      expect(e.defaultPrevented).toBe(true);
+      expect(tool('area')!.getAttribute('aria-pressed')).toBe('false');
+      expect(menu()).toBeNull();
+      key('a');
+      key('a');
+      expect(tool('area')!.getAttribute('aria-pressed')).toBe('false');
+      key('a');
+      key('Escape');
+      expect(tool('area')!.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('a touch long-press on blank page area opens the menu; moving first cancels it', async () => {
+      vi.useFakeTimers();
+      try {
+        await create();
+      } finally {
+        vi.useRealTimers();
+      }
+      vi.useFakeTimers();
+      try {
+        const stage = el.querySelector('.stage')!;
+        const pt = (type: string, x: number, y: number) => {
+          const e = new MouseEvent(type, { bubbles: true, clientX: x, clientY: y });
+          Object.defineProperties(e, { pointerType: { value: 'touch' }, pointerId: { value: 3 }, isPrimary: { value: true } });
+          stage.dispatchEvent(e);
+        };
+        pt('pointerdown', 100, 100);
+        pt('pointermove', 140, 100);
+        vi.advanceTimersByTime(700);
+        fixture.detectChanges();
+        expect(menu()).toBeNull();
+        pt('pointerdown', 100, 100);
+        vi.advanceTimersByTime(700);
+        fixture.detectChanges();
+        expect(menu()).not.toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

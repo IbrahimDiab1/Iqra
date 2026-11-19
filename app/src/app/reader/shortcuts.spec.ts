@@ -46,9 +46,16 @@ describe('shortcutFor', () => {
     expect(press('z', { ctrlKey: true, repeat: true })).toBe('undo');
   });
 
+  it('opens the context menu with the Menu key or Shift+F10', () => {
+    expect(press('ContextMenu')).toBe('menu');
+    expect(press('F10', { shiftKey: true })).toBe('menu');
+    expect(press('F10')).toBeNull();
+    expect(press('F10', { shiftKey: true, ctrlKey: true })).toBeNull();
+  });
+
   it('lists every action the reader answers to', () => {
     const listed = new Set(SHORTCUT_LIST.map((r) => r.action));
-    for (const a of ['bookmark', 'mark', 'area', 'mode', 'search', 'contents', 'notes', 'fullscreen', 'undo', 'redo', 'goto', 'help']) {
+    for (const a of ['bookmark', 'mark', 'area', 'mode', 'search', 'contents', 'notes', 'fullscreen', 'undo', 'redo', 'goto', 'help', 'menu']) {
       expect(listed.has(a as never)).toBe(true);
     }
   });

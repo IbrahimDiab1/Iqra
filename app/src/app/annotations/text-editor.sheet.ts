@@ -4,6 +4,9 @@ import { COPY } from '../ui/copy';
 import { SheetComponent } from '../ui/sheet.component';
 import { ToastService } from '../ui/toast.service';
 import { AnnotationService } from './annotation.service';
+import { CHROME_COPY } from '../reader/chrome-copy';
+import { UndoStack, recordCommand } from '../reader/undo-stack';
+import { FieldEdits, removalCommand } from './edit-undo';
 import { TagInputComponent } from './tag-input.component';
 
 const SAVE_DEBOUNCE_MS = 400;
@@ -89,6 +92,9 @@ export class TextEditorSheet {
 
   private readonly service = inject(AnnotationService);
   private readonly toast = inject(ToastService);
+  /** The reader's undo history; absent where the sheet is used outside a reader. */
+  private readonly undoStack = inject(UndoStack, { optional: true });
+  private readonly edits = new FieldEdits();
   private readonly openId = computed(() => this.annotation()?.id ?? null);
   private savedBody = '';
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -135,6 +141,7 @@ export class TextEditorSheet {
     this.flush();
     this.done = true;
     if (this.startedEmpty && this.isEmpty() && !this.draft()) {
+      this.undoStack?.discardSubject(a.id);
       void this.service.remove(a.id).catch((err) => this.failed(err));
     }
   }
@@ -164,14 +171,16 @@ export class TextEditorSheet {
     this.timer = undefined;
     const a = this.annotation();
     if (!a || this.done || this.body() === this.savedBody) return;
+    const before = this.savedBody;
     this.savedBody = this.body();
-    this.save(a, { body: this.body() });
+    this.save(a, { body: this.body() }, { body: before }, CHROME_COPY.actions.editText);
   }
 
   protected onTags(next: string[]): void {
+    const before = this.tags();
     this.tags.set(next);
     const a = this.annotation();
-    if (a) this.save(a, { tags: next });
+    if (a) this.save(a, { tags: next }, { tags: before }, CHROME_COPY.actions.editTags);
   }
 
   /** Clamps both pages to 1..pageCount with toPage >= fromPage, writes the corrected values back to the fields, and saves. */
@@ -188,13 +197,15 @@ export class TextEditorSheet {
     fromEl.value = String(fromPage);
     toEl.value = String(toPage);
     const scope: SummaryScope = { kind: 'pages', fromPage, toPage };
+    const before = this.scope();
     this.scope.set(scope);
-    this.save(a, { scope });
+    this.save(a, { scope }, before ? { scope: before } : undefined, CHROME_COPY.actions.editText);
   }
 
   /** Writes a change. A draft is created on the first change once its text is non-empty; before that nothing is stored. */
-  private save(a: Annotation, patch: Partial<Pick<Annotation, 'body' | 'tags' | 'scope'>>): void {
+  private save(a: Annotation, patch: Partial<Pick<Annotation, 'body' | 'tags' | 'scope'>>, before?: Partial<Pick<Annotation, 'body' | 'tags' | 'scope'>>, label = ''): void {
     if (!this.draft() && this.storedId === null) {
+      if (before) this.edits.record(this.undoStack, this.service, a.id, label, before, patch);
       void this.service.update(a.id, patch).catch((err) => this.failed(err));
       return;
     }
@@ -202,6 +213,7 @@ export class TextEditorSheet {
     this.creating = this.creating.then(async () => {
       try {
         if (this.storedId !== null) {
+          if (before) this.edits.record(this.undoStack, this.service, this.storedId, label, before, patch);
           await this.service.update(this.storedId, patch);
         } else if (this.body().trim() !== '') {
           const rec = await this.service.create({
@@ -213,6 +225,12 @@ export class TextEditorSheet {
             tags: this.tags(),
           });
           this.storedId = rec.id;
+          this.undoStack?.push({
+            label: CHROME_COPY.actions.summary,
+            subject: rec.id,
+            undo: async () => void (await this.service.remove(rec.id)),
+            redo: () => this.service.restore(rec),
+          });
         }
       } catch (err) {
         this.failed(err);
@@ -240,7 +258,7 @@ export class TextEditorSheet {
         return;
       }
       const rec = await this.service.remove(id);
-      if (rec) this.toast.show(this.copy.deleted, { undo: () => void this.service.restore(rec) });
+      if (rec) this.toast.show(this.copy.deleted, { undo: recordCommand(this.undoStack, removalCommand(this.service, rec)) });
       this.closed.emit({ empty: false });
     } catch (err) {
       this.done = false;

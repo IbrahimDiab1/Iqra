@@ -8,7 +8,8 @@ import type { Annotation, Book, OutlineNode, SummaryScope } from '../core/models
 import { CHROME_COPY } from './chrome-copy';
 import type { Place } from './jump-history';
 import { PROGRESS_COPY } from './progress-copy';
-import { TocTreeComponent, ancestorKeys, defaultExpanded, loadExpanded, tocEntries, visibleEntries } from './toc-tree.component';
+import { TocTreeComponent, ancestorKeys, defaultExpanded, loadExpanded, runsOf, tocEntries, visibleEntries } from './toc-tree.component';
+import { UndoStack } from './undo-stack';
 
 const node = (key: string, title: string, page: number, children: OutlineNode[] = []): OutlineNode => ({ key, title, page, children });
 const OUTLINE: OutlineNode[] = [
@@ -42,6 +43,11 @@ describe('toc helpers', () => {
     expect(keys(visibleEntries(entries, new Set()))).toEqual(['a', 'b', 'c']);
     expect(keys(visibleEntries(entries, new Set(['a1'])))).toEqual(['a', 'b', 'c']);
     expect(keys(visibleEntries(entries, new Set(['a', 'a1'])))).toEqual(['a', 'a1', 'a1a', 'a2', 'b', 'c']);
+  });
+
+  it('runsOf groups consecutive pages', () => {
+    expect(runsOf([])).toEqual([]);
+    expect(runsOf([3, 4, 5, 9, 11, 12])).toEqual([[3, 5], [9, 9], [11, 12]]);
   });
 
   it('ancestorKeys lists the chain from the top', () => {
@@ -360,6 +366,25 @@ describe('TocTreeComponent', () => {
       ring('a1').click();
       await vi.waitFor(async () => expect((await db.readMarks.toArray()).filter((m) => m.read)).toEqual([]));
       expect(host.jumps).toEqual([]);
+    });
+
+    it('marking a chapter is undoable and puts back exactly the pages it changed', async () => {
+      const stack = new UndoStack();
+      TestBed.configureTestingModule({ providers: [{ provide: UndoStack, useValue: stack }] });
+      create((h) => {
+        h.book.set(makeBook({ progressMode: 'marked' }));
+        h.marked.set(new Set([6]));
+      });
+      await db.readMarks.put({ id: 'b1:6', bookId: 'b1', page: 6, read: true, updatedAt: 1, deviceId: 'd' });
+      ring('a2').click();
+      await vi.waitFor(() => expect(stack.canUndo()).toBe(true));
+      expect(stack.nextUndoLabel()).toBe(CHROME_COPY.actions.markRange);
+      const readPages = async () => (await db.readMarks.toArray()).filter((m) => m.read).map((m) => m.page).sort((a, b) => a - b);
+      expect(await readPages()).toEqual([6, 7, 8, 9]);
+      await stack.undo();
+      expect(await readPages()).toEqual([6]);
+      await stack.redo();
+      expect(await readPages()).toEqual([6, 7, 8, 9]);
     });
 
     it('marking a chapter that is partly marked completes it', async () => {

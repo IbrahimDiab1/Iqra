@@ -54,6 +54,16 @@ describe('AreaToolDirective', () => {
     expect(r.h).toBeCloseTo(0.15);
   });
 
+  it('a right-button press does not start a drag (right-click cancels the tool instead)', () => {
+    const down = ptr('pointerdown', 50, 40);
+    Object.defineProperty(down, 'button', { value: 2 });
+    box.dispatchEvent(down);
+    box.dispatchEvent(ptr('pointermove', 150, 100));
+    box.dispatchEvent(ptr('pointerup', 150, 100));
+    expect(host.drawn).toHaveLength(0);
+    expect(box.querySelector('.area-preview')).toBeNull();
+  });
+
   it('works when dragging up and to the left', () => {
     drag([150, 100], [50, 40]);
     expect(host.drawn[0].rect.x).toBeCloseTo(0.25);

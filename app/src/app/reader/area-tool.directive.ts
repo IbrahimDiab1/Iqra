@@ -28,7 +28,7 @@ export class AreaToolDirective implements OnDestroy {
 
   @HostListener('pointerdown', ['$event'])
   protected down(e: PointerEvent): void {
-    if (!this.enabled() || this.drag || e.isPrimary === false) return;
+    if (!this.enabled() || this.drag || e.isPrimary === false || (e.pointerType !== 'touch' && e.button > 0)) return;
     const box = this.host.nativeElement.getBoundingClientRect();
     if (e.clientX < box.left || e.clientX > box.right || e.clientY < box.top || e.clientY > box.bottom) return;
     this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY };

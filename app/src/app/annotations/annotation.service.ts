@@ -157,6 +157,14 @@ export class AnnotationService {
     });
   }
 
+  /** Reapplies an undone addHighlight: the absorbed highlights go away again and the merged one comes back. */
+  redoAddHighlight(result: HighlightResult): Promise<void> {
+    return this.db.transaction('rw', this.db.annotations, async () => {
+      for (const rec of result.mergedAway) await this.remove(rec.id);
+      await this.restore(result.created);
+    });
+  }
+
   private insert(rec: Omit<Annotation, 'id' | 'updatedAt' | 'deviceId'> & { id?: ID }): Promise<Annotation> {
     return this.repo.put<Annotation>('annotations', { ...rec, id: rec.id ?? newId() });
   }

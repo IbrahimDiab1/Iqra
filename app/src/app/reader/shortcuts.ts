@@ -12,6 +12,7 @@ export type ShortcutAction =
   | 'redo'
   | 'goto'
   | 'help'
+  | 'menu'
   | 'historyBack'
   | 'historyForward';
 
@@ -30,6 +31,7 @@ export const SHORTCUT_LIST: readonly { action: ShortcutAction | 'turn'; keys: st
   { action: 'undo', keys: 'Ctrl+Z', label: 'Undo' },
   { action: 'redo', keys: 'Ctrl+Shift+Z / Ctrl+Y', label: 'Redo' },
   { action: 'historyBack', keys: 'Alt+← / Alt+→', label: 'Back / forward through jumps' },
+  { action: 'menu', keys: 'Shift+F10 / Menu key', label: 'Page actions menu' },
   { action: 'help', keys: '?', label: 'This list' },
 ];
 
@@ -40,6 +42,8 @@ export const SHORTCUT_LIST: readonly { action: ShortcutAction | 'turn'; keys: st
  */
 export function shortcutFor(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey' | 'repeat'>): ShortcutAction | null {
   const key = e.key.toLowerCase();
+  if (e.key === 'ContextMenu' && !e.ctrlKey && !e.metaKey && !e.altKey) return 'menu';
+  if (e.key === 'F10' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) return 'menu';
   const mod = e.ctrlKey || e.metaKey;
   if (mod && !e.altKey) {
     if (key === 'f' && !e.shiftKey) return 'search';

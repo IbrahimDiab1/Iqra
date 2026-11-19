@@ -4,14 +4,15 @@ import { AnnotationService, type HighlightColor } from '../annotations/annotatio
 import { findSummary } from '../annotations/summary-scope';
 import { newId } from '../core/ids';
 import type { Annotation, Book, Rect, SummaryScope } from '../core/models';
+import { ReadMarkService } from '../progress/read-mark.service';
 import { COPY } from '../ui/copy';
 import { ToastService } from '../ui/toast.service';
+import { CHROME_COPY } from './chrome-copy';
 import type { ReaderSession } from './reader.page';
 import type { ReaderState } from './reader.state';
 import { SelectionService, type PendingSelection } from './selection.service';
 import type { PendingArea } from './selection-toolbar.component';
-
-const AREA_HINT_MS = 4000;
+import { UndoStack, recordCommand, type UndoCommand } from './undo-stack';
 
 /** What the actions read from the reader page. */
 export interface ReaderActionsContext {
@@ -19,6 +20,10 @@ export interface ReaderActionsContext {
   book: Signal<Book | null>;
   session: Signal<ReaderSession | null>;
   annotations: Signal<Annotation[]>;
+  /** The pages marked read (marked mode). */
+  marked: Signal<ReadonlySet<number>>;
+  /** The page's text, for Copy page text. */
+  pageText(page: number): Promise<string>;
   /** The on-screen box of a page's text layer, for placing the toolbar over a drawn area. */
   pageBox(page: number): DOMRect | undefined;
 }
@@ -32,6 +37,8 @@ export class ReaderActions {
   private readonly annotationService = inject(AnnotationService);
   private readonly toast = inject(ToastService);
   private readonly selection = inject(SelectionService);
+  private readonly readMarks = inject(ReadMarkService);
+  readonly undoStack = inject(UndoStack);
 
   private ctx!: ReaderActionsContext;
 
@@ -48,15 +55,18 @@ export class ReaderActions {
   readonly pendingArea = signal<PendingArea | null>(null);
   readonly toolbarTarget = computed(() => this.pendingArea() ?? this.selection.pending());
 
-  /** The live bookmark on the current page, if any. */
-  readonly bookmark = computed(() => {
-    const page = this.ctx.state()?.page();
-    return this.ctx.annotations().find((a) => a.type === 'bookmark' && a.page === page);
-  });
+  /** What this page itself just added or removed, which the live query may not show yet. */
+  private readonly optimistic = signal<{ added: ReadonlyMap<number, string>; removed: ReadonlySet<string> }>({ added: new Map(), removed: new Set() });
+  private bookmarkQueue: Promise<void> = Promise.resolve();
 
-  private bookmarkBusy = false;
-  private readonly addedBookmarks = new Map<number, string>();
-  private readonly removedBookmarks = new Set<string>();
+  /** The id of the live bookmark on the current page, if any. */
+  readonly bookmarkId = computed(() => {
+    const page = this.ctx.state()?.page();
+    const { added, removed } = this.optimistic();
+    const live = this.ctx.annotations().find((a) => a.type === 'bookmark' && a.page === page && !removed.has(a.id));
+    return live?.id ?? (page === undefined ? undefined : added.get(page));
+  });
+  readonly bookmarked = computed(() => this.bookmarkId() !== undefined);
 
   attach(ctx: ReaderActionsContext): void {
     this.ctx = ctx;
@@ -67,39 +77,73 @@ export class ReaderActions {
     this.noteTarget.set(a);
   }
 
-  async toggleBookmark(): Promise<void> {
+  /** Adds or removes the bookmark on the current page. Presses are served one after the other, so a double press is add then remove. */
+  toggleBookmark(): Promise<void> {
+    this.bookmarkQueue = this.bookmarkQueue.then(() => this.doToggleBookmark());
+    return this.bookmarkQueue;
+  }
+
+  private markBookmark(page: number, id: string, present: boolean): void {
+    this.optimistic.update(({ added, removed }) => {
+      const a = new Map(added);
+      const r = new Set(removed);
+      if (present) {
+        a.set(page, id);
+        r.delete(id);
+      } else {
+        if (a.get(page) === id) a.delete(page);
+        r.add(id);
+      }
+      return { added: a, removed: r };
+    });
+  }
+
+  private async doToggleBookmark(): Promise<void> {
     const s = this.ctx.state();
     const book = this.ctx.book();
-    if (!s || !book || this.bookmarkBusy) return;
+    if (!s || !book) return;
     const page = s.page();
-    const live = this.bookmark();
-    // The live query can lag a tap behind, so what this page itself just added or removed wins.
-    const existingId = live && !this.removedBookmarks.has(live.id) ? live.id : this.addedBookmarks.get(page);
-    this.bookmarkBusy = true;
+    const existingId = this.bookmarkId();
     try {
       if (existingId) {
-        this.removedBookmarks.add(existingId);
-        this.addedBookmarks.delete(page);
+        this.markBookmark(page, existingId, false);
         const rec = await this.annotationService.remove(existingId);
         if (rec) {
-          this.toast.show(COPY.annotations.deleted, {
-            undo: () => {
-              this.removedBookmarks.delete(rec.id);
-              this.addedBookmarks.set(page, rec.id);
-              void this.annotationService.restore(rec);
+          const cmd: UndoCommand = {
+            label: CHROME_COPY.actions.removeBookmark,
+            subject: rec.id,
+            undo: async () => {
+              this.markBookmark(page, rec.id, true);
+              await this.annotationService.restore(rec);
             },
-          });
+            redo: async () => {
+              this.markBookmark(page, rec.id, false);
+              await this.annotationService.remove(rec.id);
+            },
+          };
+          this.toast.show(COPY.annotations.deleted, { undo: recordCommand(this.undoStack, cmd) });
         }
       } else {
         const created = await this.annotationService.create({ bookId: book.id, type: 'bookmark', page });
-        this.addedBookmarks.set(page, created.id);
+        this.markBookmark(page, created.id, true);
+        const cmd: UndoCommand = {
+          label: CHROME_COPY.actions.addBookmark,
+          subject: created.id,
+          undo: async () => {
+            this.markBookmark(page, created.id, false);
+            await this.annotationService.remove(created.id);
+          },
+          redo: async () => {
+            this.markBookmark(page, created.id, true);
+            await this.annotationService.restore(created);
+          },
+        };
+        this.undoStack.push(cmd);
         this.toast.show(COPY.annotations.bookmarkAdded);
       }
     } catch (err) {
       console.warn('Could not change the bookmark', err);
       this.toast.show(COPY.annotations.saveFailed);
-    } finally {
-      this.bookmarkBusy = false;
     }
   }
 
@@ -120,6 +164,7 @@ export class ReaderActions {
   }
 
   startSideNote(a: Annotation): void {
+    this.undoStack.push(this.creation(a, CHROME_COPY.actions.sideNote));
     this.newSideNoteId.set(a.id);
     this.editText(a);
   }
@@ -131,6 +176,7 @@ export class ReaderActions {
     if (!target || target.id !== this.newSideNoteId()) return;
     this.newSideNoteId.set(null);
     if (empty) {
+      this.undoStack.discardSubject(target.id);
       void this.annotationService.remove(target.id).catch((err) => console.warn('Could not drop the empty side note', err));
     }
   }
@@ -145,7 +191,15 @@ export class ReaderActions {
     this.selection.clear();
     this.pendingArea.set(null);
     s.tool.set('area');
-    this.toast.show(COPY.annotations.areaHint, { durationMs: AREA_HINT_MS });
+  }
+
+  /** Esc or a right-click while drawing: turns the tool off and drops a drawn area. False when there was nothing to cancel. */
+  cancelArea(): boolean {
+    const s = this.ctx.state();
+    if (!s || (s.tool() === 'none' && !this.pendingArea())) return false;
+    s.tool.set('none');
+    this.pendingArea.set(null);
+    return true;
   }
 
   /** A finished drag: the tool turns itself off and the toolbar offers a color or a note. */
@@ -166,10 +220,12 @@ export class ReaderActions {
     try {
       const created = await this.annotationService.create({ bookId: book.id, type: 'area', page: area.page, rect: area.rect, color });
       this.pendingArea.set(null);
+      const cmd = this.creation(created, CHROME_COPY.actions.area);
       if (openNote) {
+        this.undoStack.push(cmd);
         this.noteTarget.set(created);
       } else {
-        this.toast.show(COPY.annotations.highlightSaved, { undo: () => void this.annotationService.remove(created.id) });
+        this.toast.show(COPY.annotations.highlightSaved, { undo: recordCommand(this.undoStack, cmd) });
       }
     } catch (err) {
       console.warn('Could not save the area', err);
@@ -193,9 +249,13 @@ export class ReaderActions {
       const { anchor, geometry } = await this.anchorOf(sel);
       const result = await this.annotationService.addHighlight(book.id, anchor, color, geometry);
       this.selection.clear();
-      this.toast.show(COPY.annotations.highlightSaved, {
-        undo: () => void this.annotationService.undoAddHighlight(result),
-      });
+      const cmd: UndoCommand = {
+        label: CHROME_COPY.actions.highlight,
+        subject: result.created.id,
+        undo: () => this.annotationService.undoAddHighlight(result),
+        redo: () => this.annotationService.redoAddHighlight(result),
+      };
+      this.toast.show(COPY.annotations.highlightSaved, { undo: recordCommand(this.undoStack, cmd) });
     } catch (err) {
       console.warn('Could not save the highlight', err);
       this.toast.show(COPY.annotations.saveFailed);
@@ -212,6 +272,7 @@ export class ReaderActions {
       const { anchor } = await this.anchorOf(sel);
       const note = await this.annotationService.create({ bookId: book.id, type: 'note', page: anchor.page, text: anchor });
       this.selection.clear();
+      this.undoStack.push(this.creation(note, CHROME_COPY.actions.note));
       this.newNoteId.set(note.id);
       this.noteTarget.set(note);
     } catch (err) {
@@ -231,5 +292,91 @@ export class ReaderActions {
       this.toast.show(COPY.annotations.copyFailed);
     }
   }
-}
 
+  /** The command for a record that was just created: undo removes it, redo puts it back as it was created. */
+  private creation(rec: Annotation, label: string): UndoCommand {
+    return {
+      label,
+      subject: rec.id,
+      undo: async () => void (await this.annotationService.remove(rec.id)),
+      redo: () => this.annotationService.restore(rec),
+    };
+  }
+
+  /** The Mark page read toggle for the current page. */
+  async toggleMark(): Promise<void> {
+    const s = this.ctx.state();
+    const b = this.ctx.book();
+    if (!s || !b) return;
+    const page = s.page();
+    const was = this.ctx.marked().has(page);
+    try {
+      await this.readMarks.toggle(b.id, page);
+      this.undoStack.push({
+        label: CHROME_COPY.actions.markRead,
+        undo: () => this.readMarks.setRange(b.id, page, page, was),
+        redo: () => this.readMarks.setRange(b.id, page, page, !was),
+      });
+    } catch (err) {
+      console.warn('Could not change the read mark', err);
+      this.toast.show(COPY.annotations.saveFailed);
+    }
+  }
+
+  /** Opens the editor for a new side note on this page (the Notes tab's own button does the same from the drawer). */
+  async addSideNote(): Promise<void> {
+    const s = this.ctx.state();
+    const book = this.ctx.book();
+    if (!s || !book) return;
+    try {
+      const rec = await this.annotationService.create({ bookId: book.id, type: 'side-note', page: s.page() });
+      this.startSideNote(rec);
+    } catch (err) {
+      console.warn('Could not add the side note', err);
+      this.toast.show(COPY.annotations.saveFailed);
+    }
+  }
+
+  addRangeSummary(): void {
+    const page = this.ctx.state()?.page();
+    if (page !== undefined) this.editSummary({ kind: 'pages', fromPage: page, toPage: page });
+  }
+
+  async copyPageText(): Promise<void> {
+    const page = this.ctx.state()?.page();
+    if (page === undefined) return;
+    try {
+      const text = (await this.ctx.pageText(page)).trim();
+      if (text === '') {
+        this.toast.show(CHROME_COPY.noPageText);
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      this.toast.show(CHROME_COPY.pageTextCopied);
+    } catch (err) {
+      console.warn('Could not copy the page text', err);
+      this.toast.show(COPY.annotations.copyFailed);
+    }
+  }
+
+  /** Undo (toolbar, Ctrl+Z): reverses the newest action and says so, with a Redo button. */
+  async undo(): Promise<void> {
+    try {
+      const cmd = await this.undoStack.undo();
+      if (cmd) this.toast.show(CHROME_COPY.undid(cmd.label), { actionLabel: CHROME_COPY.redo, undo: () => void this.redo() });
+    } catch (err) {
+      console.warn('Could not undo', err);
+      this.toast.show(COPY.annotations.saveFailed);
+    }
+  }
+
+  async redo(): Promise<void> {
+    try {
+      const cmd = await this.undoStack.redo();
+      if (cmd) this.toast.show(CHROME_COPY.redid(cmd.label), { actionLabel: CHROME_COPY.undo, undo: () => void this.undo() });
+    } catch (err) {
+      console.warn('Could not redo', err);
+      this.toast.show(COPY.annotations.saveFailed);
+    }
+  }
+}

@@ -68,7 +68,6 @@ export const COPY = {
     colors: { yellow: 'Yellow', green: 'Green', blue: 'Blue', pink: 'Pink' },
     highlightSaved: 'Highlight saved',
     area: 'Highlight an area',
-    areaHint: 'Drag over the part of the page you want to highlight.',
     sideNote: 'Side note',
     sideNoteOn: (p: number) => `+ Side note on p. ${p}`,
     summary: 'Summary',

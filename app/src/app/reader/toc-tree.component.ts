@@ -3,6 +3,7 @@ import { DomSanitizer } from '@angular/platform-browser';
 import { findSummary } from '../annotations/summary-scope';
 import type { Annotation, Book, OutlineNode, SummaryScope } from '../core/models';
 import { chapterProgress, chaptersDone } from '../progress/progress';
+import { UndoStack } from './undo-stack';
 import { ReadMarkService } from '../progress/read-mark.service';
 import { COPY } from '../ui/copy';
 import { icon } from '../ui/icons';
@@ -84,6 +85,17 @@ export function saveExpanded(bookId: string, open: ReadonlySet<string>): void {
 }
 
 /** The collapsible Contents list: progress rings, summary badges and per-chapter marking. */
+/** Consecutive page numbers (ascending) grouped into `[from, to]` runs. */
+export function runsOf(pages: readonly number[]): [number, number][] {
+  const runs: [number, number][] = [];
+  for (const p of pages) {
+    const last = runs.at(-1);
+    if (last && p === last[1] + 1) last[1] = p;
+    else runs.push([p, p]);
+  }
+  return runs;
+}
+
 @Component({
   selector: 'iqra-toc-tree',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -223,6 +235,7 @@ export class TocTreeComponent {
   protected readonly notePlus = this.sanitizer.bypassSecurityTrustHtml(icon('notePlus', 20));
   private readonly readMarks = inject(ReadMarkService);
   private readonly toast = inject(ToastService);
+  private readonly undoStack = inject(UndoStack, { optional: true });
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
@@ -333,9 +346,29 @@ export class TocTreeComponent {
   protected markChapter(e: { scope: SummaryScope; done: boolean }): void {
     if (e.scope.kind !== 'outline') return;
     const { fromPage, toPage } = e.scope;
-    this.readMarks.setRange(this.book().id, fromPage, toPage, !e.done).catch((err) => {
-      console.warn('Could not change the read marks', err);
-      this.toast.show(COPY.annotations.saveFailed);
-    });
+    const bookId = this.book().id;
+    const read = !e.done;
+    // The pages whose state this changes, so Undo puts back exactly those (some of a chapter may already have been marked).
+    const marked = this.marked();
+    const changed: number[] = [];
+    for (let p = fromPage; p <= toPage; p++) if (marked.has(p) !== read) changed.push(p);
+    this.readMarks
+      .setRange(bookId, fromPage, toPage, read)
+      .then(() => {
+        if (changed.length === 0) return;
+        this.undoStack?.push({
+          label: CHROME_COPY.actions.markRange,
+          undo: async () => {
+            for (const [a, b] of runsOf(changed)) await this.readMarks.setRange(bookId, a, b, !read);
+          },
+          redo: async () => {
+            for (const [a, b] of runsOf(changed)) await this.readMarks.setRange(bookId, a, b, read);
+          },
+        });
+      })
+      .catch((err) => {
+        console.warn('Could not change the read marks', err);
+        this.toast.show(COPY.annotations.saveFailed);
+      });
   }
 }
