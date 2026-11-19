@@ -1381,6 +1381,51 @@ describe('ReaderPage', () => {
       expect((await db.annotations.get(rec.id))!.deleted).toBeUndefined();
     });
 
+    it('a bookmark removed in the Bookmarks tab goes through the undo stack: Ctrl+Z brings it back', async () => {
+      await create();
+      fakeSelection.pending.set(null);
+      key('b');
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+      fixture.detectChanges();
+      tool('contents')!.click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-drawer .panel.open')).not.toBeNull();
+      });
+      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-drawer [role=tab]')).find((t) => t.textContent!.includes(COPY.reader.bookmarks))!.click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-bookmarks-tab button.tool')).not.toBeNull();
+      });
+      el.querySelector<HTMLButtonElement>('iqra-bookmarks-tab button.tool')!.click();
+      await vi.waitFor(async () => expect(await live()).toHaveLength(0));
+      fixture.detectChanges();
+      expect(undoBtn().disabled).toBe(false);
+      key('Escape');
+      key('z', { ctrlKey: true });
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+      expect(toast().current()?.message).toBe(CHROME_COPY.undid(CHROME_COPY.actions.delete));
+    });
+
+    it('a bookmark that is gone from the live data (deleted elsewhere) does not keep the toolbar stuck: one press adds it again', async () => {
+      await create();
+      fakeSelection.pending.set(null);
+      key('b');
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(tool('bookmark')!.getAttribute('aria-pressed')).toBe('true');
+      });
+      const [bm] = await live();
+      await TestBed.inject(AnnotationService).remove(bm.id);
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(tool('bookmark')!.getAttribute('aria-pressed')).toBe('false');
+      });
+      key('b');
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+    });
+
     it('the history belongs to one reader session', async () => {
       await create();
       await highlightGreen();

@@ -55,16 +55,23 @@ export class ReaderActions {
   readonly pendingArea = signal<PendingArea | null>(null);
   readonly toolbarTarget = computed(() => this.pendingArea() ?? this.selection.pending());
 
-  /** What this page itself just added or removed, which the live query may not show yet. */
-  private readonly optimistic = signal<{ added: ReadonlyMap<number, string>; removed: ReadonlySet<string> }>({ added: new Map(), removed: new Set() });
+  /**
+   * What this page itself just added or removed, which the live query may not show yet. Each entry is only trusted while
+   * the live list is still the one that was current when the entry was made; once the query has caught up (or moved on,
+   * e.g. a removal in the Bookmarks tab or from another device) the live data alone decides.
+   */
+  private readonly optimistic = signal<{ added: ReadonlyMap<number, { id: string; at: unknown }>; removed: ReadonlyMap<string, unknown> }>({ added: new Map(), removed: new Map() });
   private bookmarkQueue: Promise<void> = Promise.resolve();
 
   /** The id of the live bookmark on the current page, if any. */
   readonly bookmarkId = computed(() => {
     const page = this.ctx.state()?.page();
     const { added, removed } = this.optimistic();
-    const live = this.ctx.annotations().find((a) => a.type === 'bookmark' && a.page === page && !removed.has(a.id));
-    return live?.id ?? (page === undefined ? undefined : added.get(page));
+    const list = this.ctx.annotations();
+    const live = list.find((a) => a.type === 'bookmark' && a.page === page && removed.get(a.id) !== list);
+    if (live) return live.id;
+    const pending = page === undefined ? undefined : added.get(page);
+    return pending && pending.at === list ? pending.id : undefined;
   });
   readonly bookmarked = computed(() => this.bookmarkId() !== undefined);
 
@@ -89,15 +96,16 @@ export class ReaderActions {
   }
 
   private markBookmark(page: number, id: string, present: boolean): void {
+    const at = this.ctx.annotations();
     this.optimistic.update(({ added, removed }) => {
       const a = new Map(added);
-      const r = new Set(removed);
+      const r = new Map(removed);
       if (present) {
-        a.set(page, id);
+        a.set(page, { id, at });
         r.delete(id);
       } else {
-        if (a.get(page) === id) a.delete(page);
-        r.add(id);
+        if (a.get(page)?.id === id) a.delete(page);
+        r.set(id, at);
       }
       return { added: a, removed: r };
     });

@@ -1,3 +1,5 @@
+import { removalCommand } from '../annotations/edit-undo';
+import { UndoStack, recordCommand } from './undo-stack';
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { AnnotationService } from '../annotations/annotation.service';
@@ -53,6 +55,7 @@ export class BookmarksTabComponent {
   protected readonly icons = { trash: this.sanitizer.bypassSecurityTrustHtml(icon('trash', 18)) };
   private readonly service = inject(AnnotationService);
   private readonly toast = inject(ToastService);
+  private readonly undoStack = inject(UndoStack, { optional: true });
 
   protected readonly bookmarks = computed(() =>
     this.annotations()
@@ -69,7 +72,7 @@ export class BookmarksTabComponent {
   protected async removeBookmark(a: Annotation): Promise<void> {
     try {
       const rec = await this.service.remove(a.id);
-      if (rec) this.toast.show(this.ann.deleted, { undo: () => void this.service.restore(rec) });
+      if (rec) this.toast.show(this.ann.deleted, { undo: recordCommand(this.undoStack, removalCommand(this.service, rec)) });
     } catch (err) {
       console.warn('Could not remove the bookmark', err);
       this.toast.show(this.ann.saveFailed);
