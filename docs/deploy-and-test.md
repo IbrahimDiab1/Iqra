@@ -39,7 +39,7 @@ The CI workflow (`.github/workflows/deploy.yml`) runs unit tests and builds the 
 
 Real-device and real-file checks that the automated tests cannot cover.
 
-- **Normal PDF, phone and PC:** open a book on each. Page view shows one page. Swipe left and right on the phone to turn pages; use the arrow keys or the on-screen arrows on the PC. On Android, pinch to zoom; on the PC, hold Ctrl and use the mouse wheel. Double-tap (or double-click) zooms in and out. Tap the page to hide and show the bars.
+- **Normal PDF, phone and PC:** open a book on each. Page view shows one page. Swipe left and right on the phone to turn pages; use the arrow keys or the on-screen arrows on the PC. On Android, pinch to zoom; on the PC, hold Ctrl and use the mouse wheel. Double-tap (or double-click) zooms in and out. The header and the right-hand toolbar are always visible (see section 12).
 - **Arabic PDF:** open a book in Arabic. Check that text is selectable, that reading mode keeps the correct order and joined letters, and that a search finds a word both with and without harakat. Swiping right should go to the next page.
 - **Scanned or low-quality PDF:** open a scan with no text layer. Reading mode should say the page has no selectable text and offer "Show page".
 - **Large PDF (about 600 pages, 40 MB):** after downloading, the first page should appear in under 2 seconds. Scrolling in continuous mode should stay smooth.
@@ -51,7 +51,7 @@ Real-device and real-file checks that the automated tests cannot cover.
 Real-device checks for annotations that the automated tests cannot cover.
 
 - **Selection on Android:** long-press a word, drag the handles to extend it, and check the toolbar follows the selection.
-- **Word tap:** a single tap on a word in page view selects that word. A tap on empty space still hides and shows the bars.
+- **Word tap:** a single tap on a word in page view selects that word. A tap on empty space does nothing; the header and toolbar stay visible.
 - **Colors save instantly:** tapping a color dot saves the highlight at once, with an Undo toast.
 - **Swipe and selection:** while a selection exists, swiping must not turn the page.
 - **Pinch with highlights:** pinch-zoom still works with highlights on the page, and the highlights stay aligned with the text at every zoom.
@@ -117,7 +117,7 @@ The real Calendar adapter (`reminders/google-calendar.ts`) has never talked to G
 - **Export notes:** the zip opens on the phone and on a computer; there is one Markdown file per book with notes, Arabic shows correctly, and a title with `/ : ? "` still gives a valid file name.
 - **Backup and restore:** take a backup, then on a second device (or after clearing the first) restore it. Books and notes come back, and nothing newer on the device is overwritten. Restoring a random file shows an error and changes nothing.
 
-## 10. Sign-in and sync checks (a two-hour session)
+## 11. Sign-in and sync checks (a two-hour session)
 
 Real-account checks that need real time; the unit tests cover the logic with a fake clock.
 
@@ -127,3 +127,20 @@ Real-account checks that need real time; the unit tests cover the logic with a f
 - **Sync timing:** change a setting, wait about 5 seconds, and see it on another device. Leave a book: its position reaches the other device without waiting for the 2-minute poll. Open the Library after more than a minute away: it syncs on arrival.
 - **Back button:** Library → open a book → browser Back returns to the Library; Library → book → header back arrow → Settings → browser Back returns to the Library, not to the book.
 - **Calendar errors:** with the Google Calendar API disabled in the Cloud project, turning reminders on shows "Google Calendar API isn't enabled for this project…" with `403 accessNotConfigured` under it. Enable the API and try again.
+
+## 12. Plan 6 checks
+
+Real-device checks for the reader and library overhaul. Use an Android phone (Chrome, installed PWA) and a Windows PC. Record the device, the browser and the exact message for anything that fails.
+
+- **Reader chrome:** the header (back, title, chapter › section, page indicator) and the right-hand toolbar are always visible, in light, dark and sepia, in portrait and landscape, and in full screen (F). The page indicator opens "Go to page"; Enter jumps and the header's jump-back button returns. Hover (PC) or long-press (phone) each toolbar icon and read its label.
+- **Side drawer:** the Contents button opens the drawer on the right, beside the toolbar and never as a centred pop-up. On the phone it covers most of the screen with a dimmed page; on a wide PC it docks without a dim. Esc or the close button closes it and focus returns to the toolbar button.
+- **Two-hour session without re-login:** sign in, keep Iqra open for 2 hours reading and changing things. No Reconnect bar and no popup; changes reach Drive. Then follow section 11 for the background-tab and offline cases.
+- **Arabic search and selection:** in an Arabic book, search a word with and without harakat, with Arabic-Indic digits, and one written in presentation forms. Hits jump to the page and the word is highlighted. Select a word, a line and a few lines by dragging; the selection box sits on the text, "Copy" gives the right letters in the right order, and a highlight lands on the selected words. Try a page where each word is its own text run.
+- **Back button:** Library → book → browser Back (and the Android system Back) returns to the Library. Library → book → header back arrow → Settings → Back returns to the Library, not to the book.
+- **Calendar error message:** with the Google Calendar API disabled in the Cloud project, turning reminders on shows "Google Calendar API isn't enabled for this project" with the `403 accessNotConfigured` detail. Enable the Calendar API in the Cloud console (APIs & Services → Library → Google Calendar API → Enable), wait a minute and try again: reminders turn on. If the message is wrong or missing, send the status line from the Network tab.
+- **Keyboard shortcuts (PC):** press `?` for the cheat-sheet and try each: arrows, PgUp/PgDn, Space, C, N, `/` and Ctrl+F (opens the book search, not the browser's), G, B, M, A, R, F, Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y, Alt+← and Alt+→, Shift+F10 or the Menu key. With an Arabic keyboard layout Ctrl+Z, Ctrl+Y and Ctrl+F must still work. Shortcuts must do nothing while typing in a field (search box, note, Go to page). Holding Ctrl+Z must not undo the whole history.
+- **Undo and redo:** highlight, add a note, bookmark, mark a page, delete a highlight, then undo and redo each from the toolbar and with the keys. Each shows "Undid …" or "Redid …". A change made on another device in the meantime says "Changed on another device" instead of overwriting it.
+- **Context menu and long-press:** on the PC right-click a page and with text selected. The menu opens at the pointer, stays inside the window, arrows move through it and Esc closes it. On the phone long-press empty page space: the menu opens once, without the system text-selection bubble fighting it; long-press a word still selects it. Page actions (bookmark, mark read, area highlight, side note, summary, go to, copy page text) all work from it.
+- **Category bar and multi-select:** in the Library tap a category to show only its books; tap All to clear. Long-press a second category on the phone (or Ctrl/Shift-click on the PC) to add it: books of either category show. The selected chips look selected, and nothing is repeated under the bar. Rename, move and delete a category from its menu (right-click, long-press, or the chip's "…" button); delete shows Undo. Scroll the bar sideways with many categories and with the Arabic names.
+- **Heat map on the phone:** Stats → Month and Year. Each day is coloured by its busiest category in four shades and the legend chips filter it. In Year the blocks are small: tap one, then use the large previous-day and next-day buttons beside "Read on …" to walk through days; the list of books for that day is shown and tapping a book opens its details. The weekday labels stay visible while the year scrolls. Check it in portrait on a small phone (about 360 px wide) and with the system font size on "Large". With Android's reduced-motion setting on, nothing animates.
+- **Sepia and dark text contrast:** the chapter line under the title and the page indicator are readable in sepia and night themes in daylight.
