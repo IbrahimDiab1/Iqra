@@ -14,11 +14,12 @@ const SUMMARY: Annotation = {
 
 @Component({
   imports: [TextEditorSheet],
-  template: `<iqra-text-editor-sheet [annotation]="annotation()" [draft]="draft()" [tagSuggestions]="[]" [pageCount]="50" (closed)="closed = closed + 1" />`,
+  template: `<iqra-text-editor-sheet [annotation]="annotation()" [draft]="draft()" [isNew]="isNew()" [tagSuggestions]="[]" [pageCount]="50" (closed)="closed = closed + 1" />`,
 })
 class HostComponent {
   readonly annotation = signal<Annotation | null>(null);
   readonly draft = signal(false);
+  readonly isNew = signal(false);
   closed = 0;
 }
 
@@ -159,5 +160,52 @@ describe('TextEditorSheet', () => {
       expect(svc.remove).not.toHaveBeenCalled();
       expect(host.closed).toBe(1);
     });
+  });
+
+  it('destroying without close saves typed text of an existing summary', () => {
+    open(SUMMARY);
+    const ta = el.querySelector<HTMLTextAreaElement>('textarea')!;
+    ta.value = 'typed then Back';
+    ta.dispatchEvent(new Event('input'));
+    fixture.destroy();
+    expect(svc.update).toHaveBeenCalledWith('s1', { body: 'typed then Back' });
+  });
+
+  it('destroying without close creates a draft summary that has text', async () => {
+    host.draft.set(true);
+    open({ ...SUMMARY, id: 'draft', body: undefined, scope: { kind: 'book' } });
+    const ta = el.querySelector<HTMLTextAreaElement>('textarea')!;
+    ta.value = 'whole book in a line';
+    ta.dispatchEvent(new Event('input'));
+    fixture.destroy();
+    await vi.waitFor(() => expect(svc.create).toHaveBeenCalledWith(expect.objectContaining({ type: 'summary', body: 'whole book in a line' })));
+  });
+
+  it('destroying an empty draft stores nothing', async () => {
+    host.draft.set(true);
+    open({ ...SUMMARY, id: 'draft', body: undefined, scope: { kind: 'book' } });
+    fixture.destroy();
+    expect(svc.create).not.toHaveBeenCalled();
+  });
+
+  it('destroying a new, still empty side note removes it', () => {
+    host.isNew.set(true);
+    open({ ...SUMMARY, id: 'n1', type: 'side-note', page: 4, scope: undefined, body: undefined });
+    fixture.destroy();
+    expect(svc.remove).toHaveBeenCalledWith('n1');
+  });
+
+  it('hiding the page saves pending text', () => {
+    const hidden = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    try {
+      open(SUMMARY);
+      const ta = el.querySelector<HTMLTextAreaElement>('textarea')!;
+      ta.value = 'switching apps';
+      ta.dispatchEvent(new Event('input'));
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(svc.update).toHaveBeenCalledWith('s1', { body: 'switching apps' });
+    } finally {
+      hidden.mockRestore();
+    }
   });
 });

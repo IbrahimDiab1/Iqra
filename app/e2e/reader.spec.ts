@@ -402,6 +402,32 @@ test.describe('annotations', () => {
     await expectPage(page, 2);
     await expect(page.locator('iqra-highlight-layer .flash').first()).toBeVisible();
   });
+
+  test('notes hub: after opening at an annotation, a reload or Back keeps the reader\'s own page', async () => {
+    await readTo(page, 1, 2);
+    await selectFirstSpan(page);
+    await selectionToolbar(page).getByRole('button', { name: 'Note', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('textbox', { name: 'Note' }).fill('keep my place');
+    await expect(page.locator('iqra-highlight-layer .dot')).toHaveCount(1);
+    await dialog.getByRole('button', { name: 'Close' }).click();
+
+    await page.goto('/notes');
+    await page.getByRole('searchbox').fill('keep my place');
+    await page.locator('.nrow').filter({ hasText: 'keep my place' }).click();
+    await expectPage(page, 2);
+    // The open-at-annotation parameters are consumed and removed from the address.
+    await expect(page).not.toHaveURL(/[?&](page|a)=/);
+
+    // Read on, leave (which saves the place), and come back through history and through a reload.
+    await readTo(page, 2, 4);
+    await page.getByRole('link', { name: 'Back to library' }).click();
+    await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
+    await page.goBack();
+    await expectPage(page, 4);
+    await page.reload();
+    await expectPage(page, 4);
+  });
 });
 
 async function useScrolling(page: Page): Promise<void> {

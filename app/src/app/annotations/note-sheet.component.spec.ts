@@ -151,4 +151,42 @@ describe('NoteSheetComponent', () => {
     expect(el.querySelector('.colors')).not.toBeNull();
     expect(el.querySelector('.quote')).toBeNull();
   });
+
+  it('destroying the sheet while typing saves the body without a close', async () => {
+    open(REC);
+    typeBody('typed then Back');
+    fixture.destroy();
+    expect(svc.update).toHaveBeenCalledWith('a1', { body: 'typed then Back' });
+  });
+
+  it('destroying a new, still empty note removes it', async () => {
+    open({ ...REC, id: 'n9', type: 'note', text: undefined });
+    fixture.destroy();
+    expect(svc.remove).toHaveBeenCalledWith('n9');
+  });
+
+  it('destroying a new note with text keeps it', async () => {
+    open({ ...REC, id: 'n9', type: 'note', text: undefined });
+    typeBody('keep me');
+    fixture.destroy();
+    expect(svc.update).toHaveBeenCalledWith('n9', { body: 'keep me' });
+    expect(svc.remove).not.toHaveBeenCalled();
+  });
+
+  it('hiding the page saves pending text and closes a new empty note', async () => {
+    const hidden = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    try {
+      open(REC);
+      typeBody('half done');
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(svc.update).toHaveBeenCalledWith('a1', { body: 'half done' });
+      expect(host.closed).toBe(0);
+      open({ ...REC, id: 'n8', type: 'note', text: undefined });
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(svc.remove).toHaveBeenCalledWith('n8');
+      expect(host.closed).toBe(1);
+    } finally {
+      hidden.mockRestore();
+    }
+  });
 });

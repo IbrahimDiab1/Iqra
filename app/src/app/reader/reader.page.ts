@@ -14,7 +14,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { buildAnchor } from '../annotations/anchor';
 import { AnnotationService, type HighlightColor } from '../annotations/annotation.service';
 import { NoteSheetComponent } from '../annotations/note-sheet.component';
@@ -249,6 +249,7 @@ const ANNOTATION_JUMP_MARGIN = 0.05;
           <iqra-text-editor-sheet
             [annotation]="textTarget()"
             [draft]="textIsDraft()"
+            [isNew]="textTarget()?.id === newSideNoteId()"
             [pageCount]="r.numPages"
             [tagSuggestions]="tagSuggestions()"
             (closed)="closeText($event.empty)"
@@ -329,6 +330,7 @@ export class ReaderPage implements OnDestroy {
   protected readonly zoomOut = zoomOut;
 
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly db = inject(DB);
   private readonly drive = inject(DRIVE_ADAPTER);
   private readonly positions = inject(PositionService);
@@ -377,7 +379,7 @@ export class ReaderPage implements OnDestroy {
     return this.annotations().filter((a) => a.type !== 'bookmark' && a.page === page).length;
   });
   /** The side note the panel just created in this open session; closed empty, it is removed. */
-  private newSideNoteId: string | null = null;
+  protected readonly newSideNoteId = signal<string | null>(null);
   private bookmarkBusy = false;
   private readonly addedBookmarks = new Map<number, string>();
   private readonly removedBookmarks = new Set<string>();
@@ -461,7 +463,10 @@ export class ReaderPage implements OnDestroy {
       const state = new ReaderState(book, this.positions);
       state.init(restored);
       const target = await this.openTarget(book.id, book.pageCount);
-      if (target) state.jumpTo(target.place);
+      if (target) {
+        state.jumpTo(target.place);
+        this.consumeTarget();
+      }
       this.session()?.destroy();
       this.book.set(book);
       this.annotationSource.set(this.annotationService.forBook(book.id));
@@ -491,6 +496,14 @@ export class ReaderPage implements OnDestroy {
    * Where `?page=` (and `?a=` for the annotation to flash) ask to open: a little above the
    * annotation when it still exists. Invalid values are ignored.
    */
+  /** The jump has been made: drop `page` and `a` so a reload, Retry or restored tab keeps the reader's own place. */
+  private consumeTarget(): void {
+    const url = this.router.parseUrl(this.router.url);
+    delete url.queryParams['page'];
+    delete url.queryParams['a'];
+    this.router.navigateByUrl(url, { replaceUrl: true }).catch((err) => console.warn('Could not clear the open target', err));
+  }
+
   private async openTarget(bookId: string, pageCount: number): Promise<{ place: Place; flashId?: string } | null> {
     const params = this.route.snapshot.queryParamMap;
     const raw = params.get('page');
@@ -606,7 +619,7 @@ export class ReaderPage implements OnDestroy {
   }
 
   protected startSideNote(a: Annotation): void {
-    this.newSideNoteId = a.id;
+    this.newSideNoteId.set(a.id);
     this.editText(a);
   }
 
@@ -614,8 +627,8 @@ export class ReaderPage implements OnDestroy {
   protected closeText(empty: boolean): void {
     const target = this.textTarget();
     this.textTarget.set(null);
-    if (!target || target.id !== this.newSideNoteId) return;
-    this.newSideNoteId = null;
+    if (!target || target.id !== this.newSideNoteId()) return;
+    this.newSideNoteId.set(null);
     if (empty) {
       void this.annotationService.remove(target.id).catch((err) => console.warn('Could not drop the empty side note', err));
     }

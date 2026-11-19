@@ -58,6 +58,8 @@ export class TextEditorSheet {
   readonly annotation = input<Annotation | null>(null);
   /** True when `annotation` is not stored yet: it is created on the first save of non-empty text. */
   readonly draft = input(false);
+  /** A side note made just now: closing it still empty removes it. */
+  readonly isNew = input(false);
   readonly tagSuggestions = input<string[]>([]);
   /** Upper bound for the page-range inputs. */
   readonly pageCount = input(1);
@@ -91,6 +93,7 @@ export class TextEditorSheet {
   private savedBody = '';
   private timer: ReturnType<typeof setTimeout> | undefined;
   private done = false;
+  private startedEmpty = false;
   /** Set once a draft has been stored; later saves update this record. */
   private storedId: string | null = null;
   private creating: Promise<void> = Promise.resolve();
@@ -100,7 +103,40 @@ export class TextEditorSheet {
       const id = this.openId();
       untracked(() => this.begin(id));
     });
-    inject(DestroyRef).onDestroy(() => clearTimeout(this.timer));
+    // Navigation (Android Back, the back link) tears the sheet down without close(); save and tidy up as close() would.
+    const hide = () => this.onHide();
+    document.addEventListener('visibilitychange', hide);
+    window.addEventListener('pagehide', hide);
+    inject(DestroyRef).onDestroy(() => {
+      document.removeEventListener('visibilitychange', hide);
+      window.removeEventListener('pagehide', hide);
+      this.settle();
+    });
+  }
+
+  /** The page is going away or into the background: save now (a draft with text is created), close a new empty note. */
+  private onHide(): void {
+    if (document.visibilityState !== 'hidden') return;
+    if (this.startedEmpty && this.isEmpty()) this.close();
+    else this.flush();
+  }
+
+  private isEmpty(): boolean {
+    return this.body().trim() === '' && this.tags().length === 0;
+  }
+
+  /** Flushes the body and removes a side note that started empty and still is. Does not emit. */
+  private settle(): void {
+    const a = this.annotation();
+    if (!a || this.done) {
+      clearTimeout(this.timer);
+      return;
+    }
+    this.flush();
+    this.done = true;
+    if (this.startedEmpty && this.isEmpty() && !this.draft()) {
+      void this.service.remove(a.id).catch((err) => this.failed(err));
+    }
   }
 
   private begin(id: string | null): void {
@@ -114,6 +150,7 @@ export class TextEditorSheet {
     this.savedBody = a.body ?? '';
     this.tags.set([...a.tags]);
     this.scope.set(a.scope);
+    this.startedEmpty = a.type === 'side-note' && this.isNew() && this.savedBody.trim() === '' && a.tags.length === 0;
   }
 
   protected onInput(value: string): void {
@@ -187,7 +224,7 @@ export class TextEditorSheet {
     if (!this.annotation() || this.done) return;
     this.flush();
     this.done = true;
-    this.closed.emit({ empty: this.body().trim() === '' && this.tags().length === 0 });
+    this.closed.emit({ empty: this.isEmpty() });
   }
 
   protected async remove(): Promise<void> {

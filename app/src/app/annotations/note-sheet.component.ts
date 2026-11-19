@@ -127,7 +127,36 @@ export class NoteSheetComponent {
       const id = this.openId();
       untracked(() => this.begin(id));
     });
-    inject(DestroyRef).onDestroy(() => clearTimeout(this.timer));
+    // Navigation (Android Back, the back link) tears the sheet down without close(); save and tidy up as close() would.
+    const hide = () => this.onHide();
+    document.addEventListener('visibilitychange', hide);
+    window.addEventListener('pagehide', hide);
+    inject(DestroyRef).onDestroy(() => {
+      document.removeEventListener('visibilitychange', hide);
+      window.removeEventListener('pagehide', hide);
+      this.settle();
+    });
+  }
+
+  /** The page is going away or into the background: save now, and drop a new note that is still empty. */
+  private onHide(): void {
+    if (document.visibilityState !== 'hidden') return;
+    if (this.startedEmpty && this.body().trim() === '' && this.tags().length === 0) this.close();
+    else this.flush();
+  }
+
+  /** Flushes the body and removes a note that started empty and still is. Does not emit. */
+  private settle(): void {
+    const a = this.annotation();
+    if (!a || this.done) {
+      clearTimeout(this.timer);
+      return;
+    }
+    this.flush();
+    this.done = true;
+    if (this.startedEmpty && this.body().trim() === '' && this.tags().length === 0) {
+      void this.service.remove(a.id).catch((err) => this.failed(err));
+    }
   }
 
   private begin(id: string | null): void {
@@ -174,13 +203,8 @@ export class NoteSheetComponent {
   }
 
   protected close(): void {
-    const a = this.annotation();
-    if (!a || this.done) return;
-    this.flush();
-    this.done = true;
-    if (this.startedEmpty && this.body().trim() === '' && this.tags().length === 0) {
-      void this.service.remove(a.id).catch((err) => this.failed(err));
-    }
+    if (!this.annotation() || this.done) return;
+    this.settle();
     this.closed.emit();
   }
 

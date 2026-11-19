@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute, provideRouter } from '@angular/router';
+import { ActivatedRoute, Router, provideRouter, type UrlTree } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CLOCK } from '../core/clock';
 import { DB, IqraDb } from '../core/db';
@@ -743,6 +743,26 @@ describe('ReaderPage', () => {
       expect(label()).toContain(COPY.reader.pageOf(7, 50));
       expect(stateOf().flash()).toBe('ann-1');
       expect(btn(COPY.reader.jumpBack)!.disabled).toBe(false);
+    });
+
+    it('drops page and a from the URL once consumed, so a reload keeps the reader\'s own place', async () => {
+      const router = TestBed.inject(Router);
+      const go = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+      vi.spyOn(router, 'url', 'get').mockReturnValue('/read/book-1?source=drive&page=7&a=ann-1');
+      query.set('page', '7');
+      query.set('a', 'ann-1');
+      await seedHighlight();
+      await create();
+      expect(go).toHaveBeenCalledTimes(1);
+      const [tree, extras] = go.mock.calls[0];
+      expect(router.serializeUrl(tree as UrlTree)).toBe('/read/book-1?source=drive');
+      expect(extras).toEqual({ replaceUrl: true });
+    });
+
+    it('does not touch the URL when there is no open target', async () => {
+      const go = vi.spyOn(TestBed.inject(Router), 'navigateByUrl');
+      await create();
+      expect(go).not.toHaveBeenCalled();
     });
 
     it('is not overwritten by the other-device position toast', async () => {

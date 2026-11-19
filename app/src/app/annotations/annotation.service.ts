@@ -79,9 +79,12 @@ export class AnnotationService {
   }
 
   async update(id: ID, patch: Patch): Promise<Annotation | undefined> {
-    const existing = await this.db.annotations.get(id);
-    if (!existing || existing.deleted) return undefined;
-    return this.repo.put<Annotation>('annotations', { ...existing, ...patch });
+    // One transaction, so two patches close together cannot overwrite each other's fields.
+    return this.db.transaction('rw', this.db.annotations, async () => {
+      const existing = await this.db.annotations.get(id);
+      if (!existing || existing.deleted) return undefined;
+      return this.repo.put<Annotation>('annotations', { ...existing, ...patch });
+    });
   }
 
   /** Soft-deletes the record. Returns it as it was before the delete. */
