@@ -49,7 +49,6 @@ interface NoteRow {
   preview: string;
   tags: string[];
   where: string;
-  jumps: boolean;
   editable: boolean;
 }
 
@@ -130,7 +129,7 @@ const MIN_QUERY = 2;
                         </span>
                       }
                     </span>
-                    <span class="num">{{ r.where }}</span>
+                    <span class="num" dir="auto">{{ r.where }}</span>
                   </button>
                   @if (r.editable) {
                     <button type="button" class="tool" [attr.aria-label]="ann.edit" (click)="editNote(r.a)" [innerHTML]="icons.edit"></button>
@@ -191,7 +190,6 @@ const MIN_QUERY = 2;
         }
       }
     </f-sheet>
-
   `,
   styles: `
     .tabs { display: flex; gap: 4px; padding: 3px; margin-bottom: 10px; border-radius: var(--radius-control); background: var(--surface-2); }
@@ -213,7 +211,7 @@ const MIN_QUERY = 2;
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
     .act { min-height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--accent); font: 600 13px var(--ui); cursor: pointer; }
     .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-    .chip { min-height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg); font: 13px var(--ui); cursor: pointer; }
+    .chip { min-height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg); font: 13px var(--ui); cursor: pointer; }
     .chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); }
     .group { margin: 14px 2px 4px; font: 600 12px var(--ui); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
     .nrow { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; min-height: 44px; padding: 8px 4px; border: 0; background: none; color: var(--fg); font: 15px var(--ui); text-align: start; cursor: pointer; }
@@ -380,7 +378,6 @@ export class BookPanelSheetComponent implements OnDestroy {
       preview,
       tags: a.tags,
       where: a.type === 'summary' ? (a.scope ? scopeLabel(a.scope) : '') : this.ann.pageShort(a.page ?? 0),
-      jumps: a.type === 'highlight' || a.type === 'note' || a.type === 'area',
       editable: a.type === 'highlight' || a.type === 'note' || a.type === 'area',
     };
   }

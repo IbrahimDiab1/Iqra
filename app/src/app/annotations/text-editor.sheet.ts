@@ -61,7 +61,8 @@ export class TextEditorSheet {
   readonly tagSuggestions = input<string[]>([]);
   /** Upper bound for the page-range inputs. */
   readonly pageCount = input(1);
-  readonly closed = output<void>();
+  /** `empty` is the sheet's own latest state: no text and no tags (not yet visible in any live query). */
+  readonly closed = output<{ empty: boolean }>();
 
   protected readonly copy = COPY.annotations;
   protected readonly body = signal('');
@@ -186,7 +187,7 @@ export class TextEditorSheet {
     if (!this.annotation() || this.done) return;
     this.flush();
     this.done = true;
-    this.closed.emit();
+    this.closed.emit({ empty: this.body().trim() === '' && this.tags().length === 0 });
   }
 
   protected async remove(): Promise<void> {
@@ -198,12 +199,12 @@ export class TextEditorSheet {
       await this.creating;
       const id = this.storedId ?? (this.draft() ? null : a.id);
       if (id === null) {
-        this.closed.emit();
+        this.closed.emit({ empty: false });
         return;
       }
       const rec = await this.service.remove(id);
       if (rec) this.toast.show(this.copy.deleted, { undo: () => void this.service.restore(rec) });
-      this.closed.emit();
+      this.closed.emit({ empty: false });
     } catch (err) {
       this.done = false;
       this.failed(err);

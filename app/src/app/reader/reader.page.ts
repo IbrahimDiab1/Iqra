@@ -249,7 +249,7 @@ const AREA_HINT_MS = 4000;
             [draft]="textIsDraft()"
             [pageCount]="r.numPages"
             [tagSuggestions]="tagSuggestions()"
-            (closed)="closeText()"
+            (closed)="closeText($event.empty)"
           />
           <iqra-note-sheet
             [annotation]="noteTarget()"
@@ -376,6 +376,9 @@ export class ReaderPage implements OnDestroy {
   });
   /** The side note the panel just created in this open session; closed empty, it is removed. */
   private newSideNoteId: string | null = null;
+  private bookmarkBusy = false;
+  private readonly addedBookmarks = new Map<number, string>();
+  private readonly removedBookmarks = new Set<string>();
   private readonly allAnnotations = this.annotationService.all();
   protected readonly tagSuggestions = computed(() => tagSuggestionsFrom(this.allAnnotations()));
   /** A rectangle just drawn with the area tool, waiting for a color or a note. */
@@ -531,19 +534,36 @@ export class ReaderPage implements OnDestroy {
   protected async toggleBookmark(): Promise<void> {
     const s = this.state();
     const book = this.book();
-    if (!s || !book) return;
-    const existing = this.bookmark();
+    if (!s || !book || this.bookmarkBusy) return;
+    const page = s.page();
+    const live = this.bookmark();
+    // The live query can lag a tap behind, so what this page itself just added or removed wins.
+    const existingId = live && !this.removedBookmarks.has(live.id) ? live.id : this.addedBookmarks.get(page);
+    this.bookmarkBusy = true;
     try {
-      if (existing) {
-        const rec = await this.annotationService.remove(existing.id);
-        if (rec) this.toast.show(COPY.annotations.deleted, { undo: () => void this.annotationService.restore(rec) });
+      if (existingId) {
+        this.removedBookmarks.add(existingId);
+        this.addedBookmarks.delete(page);
+        const rec = await this.annotationService.remove(existingId);
+        if (rec) {
+          this.toast.show(COPY.annotations.deleted, {
+            undo: () => {
+              this.removedBookmarks.delete(rec.id);
+              this.addedBookmarks.set(page, rec.id);
+              void this.annotationService.restore(rec);
+            },
+          });
+        }
       } else {
-        await this.annotationService.create({ bookId: book.id, type: 'bookmark', page: s.page() });
+        const created = await this.annotationService.create({ bookId: book.id, type: 'bookmark', page });
+        this.addedBookmarks.set(page, created.id);
         this.toast.show(COPY.annotations.bookmarkAdded);
       }
     } catch (err) {
       console.warn('Could not change the bookmark', err);
       this.toast.show(COPY.annotations.saveFailed);
+    } finally {
+      this.bookmarkBusy = false;
     }
   }
 
@@ -569,14 +589,13 @@ export class ReaderPage implements OnDestroy {
   }
 
   /** Closing the text editor drops a side note made just now and left empty. */
-  protected closeText(): void {
+  protected closeText(empty: boolean): void {
     const target = this.textTarget();
     this.textTarget.set(null);
     if (!target || target.id !== this.newSideNoteId) return;
     this.newSideNoteId = null;
-    const live = this.annotations().find((a) => a.id === target.id);
-    if (live && (live.body ?? '').trim() === '' && live.tags.length === 0) {
-      void this.annotationService.remove(live.id).catch((err) => console.warn('Could not drop the empty side note', err));
+    if (empty) {
+      void this.annotationService.remove(target.id).catch((err) => console.warn('Could not drop the empty side note', err));
     }
   }
 

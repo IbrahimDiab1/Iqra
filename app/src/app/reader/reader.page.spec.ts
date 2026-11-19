@@ -464,7 +464,28 @@ describe('ReaderPage', () => {
       fixture.detectChanges();
       expect(label()).toContain(COPY.reader.pageOf(30, 50));
       expect(btn(COPY.reader.jumpBack)!.disabled).toBe(false);
-      expect(rec.id).toBeTruthy();
+      expect((fixture.componentInstance as unknown as { state(): { flash(): string | null } }).state().flash()).toBe(rec.id);
+    });
+
+    it('typing into a panel-made side note and closing at once keeps the note with its text', async () => {
+      await create();
+      el.querySelector<HTMLButtonElement>('button.pill')!.click();
+      fixture.detectChanges();
+      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-sheet [role=tab]')).find((t) => t.textContent!.trim() === COPY.reader.notes)!.click();
+      fixture.detectChanges();
+      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-sheet .act')).find((b) => b.textContent!.includes('Side note'))!.click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-text-editor-sheet .panel.open')).not.toBeNull();
+      });
+      const ta = el.querySelector<HTMLTextAreaElement>('iqra-text-editor-sheet textarea')!;
+      ta.value = 'keep me';
+      ta.dispatchEvent(new Event('input'));
+      el.querySelector<HTMLButtonElement>('iqra-text-editor-sheet button.close')!.click();
+      await new Promise((r) => setTimeout(r, 200));
+      const live = (await db.annotations.toArray()).filter((r) => r.type === 'side-note' && !r.deleted);
+      expect(live).toHaveLength(1);
+      expect(live[0].body).toBe('keep me');
     });
 
     it('a side note made from the panel opens the editor; closing it empty removes it', async () => {
@@ -505,6 +526,15 @@ describe('ReaderPage', () => {
       expect(toast.current()?.message).toBe(COPY.annotations.deleted);
       toast.undo();
       await vi.waitFor(async () => expect((await stored()).filter((r) => !r.deleted && r.type === 'bookmark')).toHaveLength(1));
+    });
+
+    it('a fast double tap on the bookmark button makes one bookmark', async () => {
+      await create();
+      bookmarkBtn().click();
+      bookmarkBtn().click();
+      await vi.waitFor(async () => expect((await stored()).filter((r) => r.type === 'bookmark')).toHaveLength(1));
+      await new Promise((r) => setTimeout(r, 100));
+      expect((await stored()).filter((r) => r.type === 'bookmark' && !r.deleted)).toHaveLength(1);
     });
 
     async function openContents() {
