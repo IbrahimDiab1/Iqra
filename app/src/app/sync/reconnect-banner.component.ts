@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter, map } from 'rxjs';
@@ -53,7 +53,19 @@ export class ReconnectBannerComponent {
     ),
     { initialValue: this.router.url },
   );
-  protected readonly visible = computed(() => this.auth.state() === 'expired' && !QUIET_ROUTE.test(this.url()));
+  private readonly online = signal(navigator.onLine);
+  /** Only when the session really lapsed (a silent renewal failed online), never offline, never on quiet routes. */
+  protected readonly visible = computed(() => this.auth.lapsed() && this.online() && !QUIET_ROUTE.test(this.url()));
+
+  constructor() {
+    const sync = (): void => this.online.set(navigator.onLine);
+    window.addEventListener('online', sync);
+    window.addEventListener('offline', sync);
+    inject(DestroyRef).onDestroy(() => {
+      window.removeEventListener('online', sync);
+      window.removeEventListener('offline', sync);
+    });
+  }
 
   protected async reconnect(): Promise<void> {
     if (this.busy()) return;

@@ -31,6 +31,12 @@ export abstract class AuthApi {
   /** Counts every new token (sign-in, reconnect, silent renewal), so work that was waiting for one can retry. */
   abstract tokenVersion: Signal<number>;
   /**
+   * True only when the session really lapsed: a silent renewal failed while online (or Google rejected the token and
+   * renewal failed). A page that starts with a stored profile is `expired` but not yet `lapsed`, and offline it never is:
+   * the Reconnect bar follows this, not `state`.
+   */
+  abstract lapsed: Signal<boolean>;
+  /**
    * Incremental grant for one extra scope (Calendar reminders), separate from the sign-in token.
    * Call from a user gesture, or with `silent` for a no-popup attempt. Rejects AuthCancelledError
    * when the popup is closed and another Error when Google denies the scope.
@@ -153,6 +159,8 @@ export class GisAuthService extends AuthApi implements OnDestroy {
   private readonly stateSignal = signal<AuthState>('signed-out');
   private readonly profileSignal = signal<Profile | null>(null);
   private readonly versionSignal = signal(0);
+  private readonly lapsedSignal = signal(false);
+  readonly lapsed = this.lapsedSignal.asReadonly();
   readonly state = this.stateSignal.asReadonly();
   readonly profile = this.profileSignal.asReadonly();
   readonly tokenVersion = this.versionSignal.asReadonly();
@@ -253,6 +261,8 @@ export class GisAuthService extends AuthApi implements OnDestroy {
   /** A renewal failed: expired only when the token is really gone, otherwise try again soon. */
   private silentFailed(): void {
     if (this.stateSignal() === 'signed-out') return;
+    // Failing because the connection dropped says nothing about the session.
+    if (!navigator.onLine) return;
     if (this.hasValidToken()) {
       this.scheduleRenewal(RENEW_RETRY_MS);
       return;
@@ -290,6 +300,7 @@ export class GisAuthService extends AuthApi implements OnDestroy {
     this.expiresAt = 0;
     this.profileSignal.set(null);
     writeStoredProfile(null);
+    this.lapsedSignal.set(false);
     this.stateSignal.set('signed-out');
   }
 
@@ -306,13 +317,17 @@ export class GisAuthService extends AuthApi implements OnDestroy {
     clearTimeout(this.renewTimer);
     this.accessToken = null;
     this.expiresAt = 0;
-    if (this.profileSignal()) this.stateSignal.set('expired');
+    if (this.profileSignal()) {
+      this.stateSignal.set('expired');
+      this.lapsedSignal.set(true);
+    }
   }
 
   private commit(grant: Grant): void {
     this.accessToken = grant.token;
     this.expiresAt = grant.expiresAt;
     this.stateSignal.set('signed-in');
+    this.lapsedSignal.set(false);
     this.versionSignal.update((v) => v + 1);
     this.scheduleRenewal(grant.expiresAt - RENEW_LEAD_MS - this.clock.now());
   }

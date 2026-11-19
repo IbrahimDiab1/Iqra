@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -97,5 +97,56 @@ describe('ReconnectBannerComponent', () => {
     expect(reconnect).toHaveBeenCalledTimes(1);
     expect(button()!.disabled).toBe(true);
     finish();
+  });
+});
+
+describe('ReconnectBannerComponent timing', () => {
+  const state = signal<'signed-in' | 'expired'>('expired');
+  const lapsed = signal(false);
+  let fixture: ComponentFixture<ReconnectBannerComponent>;
+  const banner = () => (fixture.nativeElement as HTMLElement).querySelector('[role=status]');
+  const setOnline = (online: boolean) => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(online);
+    window.dispatchEvent(new Event(online ? 'online' : 'offline'));
+    fixture.detectChanges();
+  };
+
+  beforeEach(async () => {
+    state.set('expired');
+    lapsed.set(false);
+    TestBed.configureTestingModule({
+      providers: [provideRouter([{ path: '**', component: Blank }]), { provide: AuthApi, useValue: { state, lapsed, reconnect: async () => undefined } }],
+    });
+    await TestBed.inject(Router).navigateByUrl('/library');
+    fixture = TestBed.createComponent(ReconnectBannerComponent);
+    fixture.detectChanges();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fixture.destroy();
+  });
+
+  it('a page that starts with a stored profile is expired but shows no bar until a silent renewal has failed', () => {
+    expect(banner()).toBeNull();
+    lapsed.set(true);
+    fixture.detectChanges();
+    expect(banner()).not.toBeNull();
+  });
+
+  it('never shows offline, however lapsed, and appears when the connection returns', () => {
+    lapsed.set(true);
+    setOnline(false);
+    expect(banner()).toBeNull();
+    setOnline(true);
+    expect(banner()).not.toBeNull();
+  });
+
+  it('is already hidden when the page starts offline', () => {
+    fixture.destroy();
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    lapsed.set(true);
+    fixture = TestBed.createComponent(ReconnectBannerComponent);
+    fixture.detectChanges();
+    expect(banner()).toBeNull();
   });
 });

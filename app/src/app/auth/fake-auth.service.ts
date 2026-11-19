@@ -12,6 +12,8 @@ export class FakeAuthService extends AuthApi {
   readonly profile = this.profileSignal.asReadonly();
   private readonly versionSignal = signal(0);
   readonly tokenVersion = this.versionSignal.asReadonly();
+  private readonly lapsedSignal = signal(false);
+  readonly lapsed = this.lapsedSignal.asReadonly();
 
   token(): string | null {
     return this.stateSignal() === 'signed-in' ? 'fake-token' : null;
@@ -20,17 +22,20 @@ export class FakeAuthService extends AuthApi {
   async signIn(): Promise<void> {
     this.profileSignal.set(FAKE_PROFILE);
     this.stateSignal.set('signed-in');
+    this.lapsedSignal.set(false);
     this.versionSignal.update((v) => v + 1);
   }
 
   async reconnect(): Promise<void> {
     this.stateSignal.set('signed-in');
+    this.lapsedSignal.set(false);
     this.versionSignal.update((v) => v + 1);
   }
 
   async trySilent(): Promise<boolean> {
     if (!this.profileSignal()) return false;
     this.stateSignal.set('signed-in');
+    this.lapsedSignal.set(false);
     this.versionSignal.update((v) => v + 1);
     return true;
   }
@@ -49,12 +54,16 @@ export class FakeAuthService extends AuthApi {
   signOut(): void {
     this.scopes.clear();
     this.profileSignal.set(null);
+    this.lapsedSignal.set(false);
     this.stateSignal.set('signed-out');
   }
 
   preload(): void {}
 
   markExpired(): void {
-    if (this.profileSignal()) this.stateSignal.set('expired');
+    if (this.profileSignal()) {
+      this.stateSignal.set('expired');
+      this.lapsedSignal.set(true);
+    }
   }
 }

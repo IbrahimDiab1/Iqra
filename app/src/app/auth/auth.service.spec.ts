@@ -272,6 +272,61 @@ describe('GisAuthService', () => {
     expect(auth.state()).toBe('signed-in');
   });
 
+  describe('lapsed (the reconnect bar condition)', () => {
+    const setOnline = (online: boolean) => vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(online);
+    afterEach(() => vi.restoreAllMocks());
+
+    it('a stored profile starts expired but not lapsed: nothing has been tried yet', () => {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE));
+      const auth = createService();
+      expect(auth.state()).toBe('expired');
+      expect(auth.lapsed()).toBe(false);
+    });
+
+    it('stays not lapsed while the page starts offline, however long it waits', async () => {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE));
+      setOnline(false);
+      const auth = createService();
+      await expect(auth.trySilent()).resolves.toBe(false);
+      expect(auth.lapsed()).toBe(false);
+      expect(prompts).toEqual([]);
+    });
+
+    it('becomes lapsed only after a silent renewal failed while online, and clears on the next token', async () => {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE));
+      const auth = createService();
+      gis.failWith = 'popup_failed_to_open';
+      await auth.trySilent();
+      expect(auth.lapsed()).toBe(true);
+      gis.failWith = null;
+      await auth.reconnect();
+      expect(auth.lapsed()).toBe(false);
+      expect(auth.state()).toBe('signed-in');
+    });
+
+    it('a silent request that failed because the device went offline does not lapse', async () => {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE));
+      const auth = createService();
+      gis.failWith = 'popup_failed_to_open';
+      const original = configs.length;
+      const attempt = auth.trySilent();
+      setOnline(false);
+      await attempt;
+      expect(configs.length).toBeGreaterThan(original);
+      expect(auth.lapsed()).toBe(false);
+    });
+
+    it('a rejected token that cannot be renewed lapses; sign-out clears it', async () => {
+      const auth = createService();
+      await auth.signIn();
+      gis.failWith = 'popup_failed_to_open';
+      auth.markExpired();
+      await vi.waitFor(() => expect(auth.lapsed()).toBe(true));
+      auth.signOut();
+      expect(auth.lapsed()).toBe(false);
+    });
+  });
+
   describe('silent renewal', () => {
     const RENEW_AT_MS = (3541 - 300 - 1) * 1000; // 5 minutes before the token reads as gone
     /** Moves the app clock and the timers together. */
