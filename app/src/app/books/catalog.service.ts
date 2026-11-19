@@ -17,6 +17,8 @@ export class CatalogService {
   );
   /** Live categories that are not deleted, by order. */
   readonly categories: Signal<Category[]> = computed(() => this.categoriesRec() ?? []);
+  /** False until the first categories read has finished. */
+  readonly categoriesLoaded: Signal<boolean> = computed(() => this.categoriesRec() !== undefined);
 
   private readonly upNextRec = this.repo.live(() => this.db.upNext.get(UPNEXT_ID));
   /** The ranked Up next book ids. Empty when there is no record. */

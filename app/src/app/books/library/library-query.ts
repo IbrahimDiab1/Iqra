@@ -18,7 +18,12 @@ export interface LibraryState {
   query: string;
 }
 
+/** A `categoryIds` filter value for books that have no live category. */
+export const UNCATEGORIZED = '__uncategorized__';
+
 export interface LibraryCtx {
+  /** Ids of the live categories. Without it, a book is uncategorized when its `categoryIds` is empty. */
+  liveCategories?: ReadonlySet<ID>;
   downloaded: Set<ID>;
   upNext: ID[];
   markedCounts: Map<ID, number>;
@@ -103,13 +108,41 @@ export function activeFilterCount(s: LibraryState): number {
 
 function matchesFilters(b: Book, s: LibraryState, ctx: LibraryCtx): boolean {
   if (b.deleted) return false;
-  if (s.categoryIds.length > 0 && !b.categoryIds.some(id => s.categoryIds.includes(id))) return false;
+  if (s.categoryIds.length > 0 && !matchesCategories(b, s.categoryIds, ctx)) return false;
   if (!s.tags.every(tag => b.tags.includes(tag))) return false;
   if (s.minRating !== null && (b.rating === undefined || b.rating < s.minRating)) return false;
   if (s.downloadedOnly && !ctx.downloaded.has(b.id)) return false;
   const q = foldText(s.query.trim());
   if (q && !foldText(b.title).includes(q) && !foldText(b.author).includes(q)) return false;
   return true;
+}
+
+function hasLiveCategory(b: Book, live: ReadonlySet<ID> | undefined): boolean {
+  return live ? b.categoryIds.some(id => live.has(id)) : b.categoryIds.length > 0;
+}
+
+/** OR across the wanted categories. `UNCATEGORIZED` matches a book with no live category. */
+function matchesCategories(b: Book, wanted: readonly ID[], ctx: LibraryCtx): boolean {
+  if (wanted.includes(UNCATEGORIZED) && !hasLiveCategory(b, ctx.liveCategories)) return true;
+  return b.categoryIds.some(id => wanted.includes(id));
+}
+
+/** How many live books each category chip stands for. Books with only deleted categories count as uncategorized. */
+export function categoryCounts(
+  books: readonly Book[],
+  liveCategoryIds: readonly ID[],
+): { all: number; uncategorized: number; byId: Map<ID, number> } {
+  const live = new Set(liveCategoryIds);
+  const byId = new Map<ID, number>(liveCategoryIds.map(id => [id, 0]));
+  let all = 0;
+  let uncategorized = 0;
+  for (const b of books) {
+    if (b.deleted) continue;
+    all += 1;
+    if (!hasLiveCategory(b, live)) uncategorized += 1;
+    for (const id of new Set(b.categoryIds)) if (live.has(id)) byId.set(id, (byId.get(id) ?? 0) + 1);
+  }
+  return { all, uncategorized, byId };
 }
 
 /** Lowercases and strips Latin combining marks, Arabic harakat (U+064B-U+065F, U+0670) and tatweel (U+0640). */

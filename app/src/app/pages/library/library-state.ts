@@ -4,8 +4,8 @@ const STORAGE_KEY = 'iqra.library';
 const TABS: readonly LibraryTab[] = ['reading', 'to-read', 'finished', 'all'];
 export const SORTS: readonly SortKey[] = ['recent-read', 'recent-added', 'progress', 'priority', 'rating', 'title'];
 
-/** The filters the Filter sheet edits. */
-export type FilterValue = Pick<LibraryState, 'categoryIds' | 'tags' | 'minRating' | 'downloadedOnly'>;
+/** The filters the Filter sheet edits. Categories are chosen on the category bar instead. */
+export type FilterValue = Pick<LibraryState, 'tags' | 'minRating' | 'downloadedOnly'>;
 
 /** Direction a sort key starts in when it is picked from the Sort menu. */
 export const DEFAULT_DIR: Record<SortKey, LibraryState['dir']> = {

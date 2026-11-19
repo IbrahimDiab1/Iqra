@@ -2,8 +2,12 @@ import {
   Component,
   ElementRef,
   HostListener,
+  DestroyRef,
+  Injector,
+  ViewContainerRef,
   afterEveryRender,
   computed,
+  effect,
   inject,
   signal,
   viewChild,
@@ -16,9 +20,11 @@ import { ImportService } from '../../books/import/import.service';
 import {
   activeFilterCount,
   bookProgress,
+  categoryCounts,
   continueBook,
   queryLibrary,
   tabCounts,
+  UNCATEGORIZED,
   type LibraryCtx,
   type LibraryState,
   type LibraryTab,
@@ -31,6 +37,7 @@ import { Repo } from '../../core/repo';
 import { SyncStatusComponent } from '../../sync/sync-status.component';
 import { COPY } from '../../ui/copy';
 import { icon, type IconName } from '../../ui/icons';
+import type { CategoryBarComponent } from '../../books/library/category-bar.component';
 import { BookCardComponent, type BookView } from './book-card.component';
 import { ContinueCardComponent } from './continue-card.component';
 import { FilterSheetComponent } from './filter-sheet.component';
@@ -129,6 +136,11 @@ function isPdf(file: File): boolean {
         }
       </div>
 
+      @if (showCategoryBar()) {
+        <!-- The bar's code loads on demand (see mountBar), so it stays out of the initial bundle. -->
+        <div class="bar-slot"><ng-container #barHost /></div>
+      }
+
       <div class="toolbar">
         @if (chips().length > 0) {
           <div class="chips">
@@ -149,8 +161,8 @@ function isPdf(file: File): boolean {
         <div class="tools">
           <button type="button" class="pill" aria-haspopup="dialog" (click)="filterOpen.set(true)">
             <span [innerHTML]="filterIcon"></span>{{ copy.filter }}
-            @if (activeCount() > 0) {
-              <span class="badge">{{ activeCount() }}</span>
+            @if (sheetFilterCount() > 0) {
+              <span class="badge">{{ sheetFilterCount() }}</span>
             }
           </button>
           <button type="button" class="pill" aria-haspopup="dialog" (click)="sortOpen.set(true)">
@@ -221,7 +233,6 @@ function isPdf(file: File): boolean {
     <iqra-filter-sheet
       [open]="filterOpen()"
       [value]="filterValue()"
-      [categories]="categories()"
       [tags]="allTags()"
       (apply)="applyFilters($event)"
       (closed)="filterOpen.set(false)"
@@ -335,6 +346,8 @@ function isPdf(file: File): boolean {
       font-variant-numeric: tabular-nums;
     }
 
+    /* Holds the row's height while the bar's code loads. */
+    .bar-slot { min-height: 52px; }
     .toolbar {
       display: flex;
       flex-wrap: wrap;
@@ -490,6 +503,9 @@ export class LibraryPage {
 
   private readonly fileInput = viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
+  private readonly barHost = viewChild('barHost', { read: ViewContainerRef });
+  private readonly injector = inject(Injector);
+  private gone = false;
 
   private readonly booksRec = this.repo.live(() => this.db.books.filter((b) => !b.deleted).toArray());
   private readonly readMarksRec = this.repo.live(() =>
@@ -508,6 +524,7 @@ export class LibraryPage {
     return counts;
   });
   private readonly ctx = computed<LibraryCtx>(() => ({
+    liveCategories: new Set(this.categories().map((c) => c.id)),
     downloaded: this.files.downloaded(),
     upNext: this.catalog.upNext(),
     markedCounts: this.markedCounts(),
@@ -516,13 +533,21 @@ export class LibraryPage {
   /** Saved state, as the user last left it. */
   protected readonly state = signal<LibraryState>(loadLibraryState());
   /** The state with category ids that no longer exist removed, so no hidden filter can empty the list. */
-  private readonly effective = computed<LibraryState>(() => {
+  protected readonly effective = computed<LibraryState>(() => {
     const s = this.state();
     const known = new Set(this.categories().map((c) => c.id));
-    return { ...s, categoryIds: s.categoryIds.filter((id) => known.has(id)) };
+    return { ...s, categoryIds: s.categoryIds.filter((id) => id === UNCATEGORIZED || known.has(id)) };
   });
 
   protected readonly counts = computed(() => tabCounts(this.books()));
+  protected readonly catCounts = computed(() =>
+    categoryCounts(
+      this.books(),
+      this.categories().map((c) => c.id),
+    ),
+  );
+  /** The bar is for managing categories too, so it stays once any exist; with nothing at all there is nothing to filter. */
+  protected readonly showCategoryBar = computed(() => this.books().length > 0 || this.categories().length > 0);
   private readonly result = computed(() => queryLibrary(this.books(), this.effective(), this.ctx()));
   protected readonly continueView = computed<BookView | null>(() => {
     const book = continueBook(this.books(), this.effective(), this.ctx());
@@ -535,8 +560,10 @@ export class LibraryPage {
   protected readonly hasActiveFilters = computed(() => this.activeCount() > 0 || this.effective().query.trim() !== '');
   protected readonly filterValue = computed<FilterValue>(() => {
     const s = this.effective();
-    return { categoryIds: s.categoryIds, tags: s.tags, minRating: s.minRating, downloadedOnly: s.downloadedOnly };
+    return { tags: s.tags, minRating: s.minRating, downloadedOnly: s.downloadedOnly };
   });
+  /** What the Filter sheet edits. Categories live on the bar, so they are not counted on the Filter button. */
+  protected readonly sheetFilterCount = computed(() => activeFilterCount({ ...this.effective(), categoryIds: [] }));
   protected readonly sortLabel = computed(() => COPY.sort[this.state().sort]);
   protected readonly noBooks = computed(() => this.loaded() && this.books().length === 0);
   protected readonly noMatches = computed(
@@ -553,7 +580,7 @@ export class LibraryPage {
     for (const id of s.categoryIds) {
       chips.push({
         key: `category-${id}`,
-        label: names.get(id) ?? '',
+        label: id === UNCATEGORIZED ? COPY.categoryBar.uncategorized : (names.get(id) ?? ''),
         remove: () => this.setState({ categoryIds: this.state().categoryIds.filter((x) => x !== id) }),
       });
     }
@@ -587,12 +614,38 @@ export class LibraryPage {
   protected readonly upNextViews = computed<BookView[]>(() => this.result().upNext.map((b) => this.viewOf(b)));
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => (this.gone = true));
+    effect(() => {
+      const host = this.barHost();
+      if (host && host.length === 0) void this.mountBar(host);
+    });
     // Focuses the search field once it has rendered.
     afterEveryRender(() => {
       if (this.focusSearch) {
         this.focusSearch = false;
         this.searchInput()?.nativeElement.focus();
       }
+    });
+  }
+
+  /** Loads the category bar's code on first need and keeps its inputs in step with the page. */
+  private async mountBar(host: ViewContainerRef): Promise<void> {
+    const { CategoryBarComponent } = await import('../../books/library/category-bar.component');
+    // The page or the slot may have gone, or another load may have filled it, while the code was loading.
+    if (this.gone || host.length > 0 || this.barHost() !== host) return;
+    const ref = host.createComponent(CategoryBarComponent);
+    const sub = ref.instance.selectedChange.subscribe((ids) => this.setCategories(ids));
+    const inputs = effect(
+      () => {
+        ref.setInput('categories', this.categories());
+        ref.setInput('counts', this.catCounts());
+        ref.setInput('selected', this.effective().categoryIds);
+      },
+      { injector: this.injector },
+    );
+    ref.onDestroy(() => {
+      sub.unsubscribe();
+      inputs.destroy();
     });
   }
 
@@ -674,6 +727,10 @@ export class LibraryPage {
 
   protected removeLabel(name: string): string {
     return COPY.library.removeFilter(name);
+  }
+
+  protected setCategories(categoryIds: ID[]): void {
+    this.setState({ categoryIds });
   }
 
   protected applyFilters(value: FilterValue): void {

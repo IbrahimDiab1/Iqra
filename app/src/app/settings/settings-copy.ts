@@ -40,7 +40,6 @@ export const SETTINGS_COPY = {
     drag: (name: string) => `Drag to reorder ${name}`,
     duplicate: 'A category with that name already exists.',
     empty: 'Enter a name.',
-    deleted: (name: string) => `Deleted ${name}`,
   },
   defaults: {
     hint: 'Applies to books you open for the first time. Books you have already read keep their own settings.',

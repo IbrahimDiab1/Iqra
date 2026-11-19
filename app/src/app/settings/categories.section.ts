@@ -1,12 +1,9 @@
-import { ChangeDetectionStrategy, Component, ElementRef, Injector, afterNextRender, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, Injector, afterNextRender, inject, signal } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
-import { DB } from '../core/db';
-import { newId } from '../core/ids';
-import type { Book, Category, ID } from '../core/models';
-import { Repo } from '../core/repo';
+import { CategoryService, type CategoryNameError } from '../books/category.service';
+import type { Category, ID } from '../core/models';
 import { icon } from '../ui/icons';
-import { ToastService } from '../ui/toast.service';
-import { dropIndex, moveCategory, nextOrder, normalizeName } from './category-order';
+import { dropIndex } from './category-order';
 import { SETTINGS_COPY } from './settings-copy';
 
 /** Where a pointer drag started, and which row it would drop on. */
@@ -18,8 +15,6 @@ interface Drag {
   dy: number;
   rows: { top: number; height: number }[];
 }
-
-const UNDO_MS = 6000;
 
 /** Rename, add, delete and reorder categories. Deleting removes the category from every book and can be undone. */
 @Component({
@@ -120,19 +115,14 @@ const UNDO_MS = 6000;
   `,
 })
 export class CategoriesSection {
-  private readonly db = inject(DB);
-  private readonly repo = inject(Repo);
-  private readonly toast = inject(ToastService);
+  private readonly categories = inject(CategoryService);
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly sanitizer = inject(DomSanitizer);
 
   protected readonly c = SETTINGS_COPY.categories;
-  private readonly all = this.repo.live(() => this.db.categories.toArray());
-  protected readonly ready = computed(() => this.all() !== undefined);
-  protected readonly list = computed(() =>
-    (this.all() ?? []).filter((x) => !x.deleted).sort((a, b) => a.order - b.order),
-  );
+  protected readonly ready = this.categories.ready;
+  protected readonly list = this.categories.list;
 
   protected readonly renamingId = signal<ID | null>(null);
   protected readonly error = signal<string | null>(null);
@@ -151,16 +141,11 @@ export class CategoriesSection {
   }
 
   protected async move(from: number, to: number): Promise<void> {
-    await this.saveOrder(moveCategory(this.list(), from, to));
+    await this.categories.move(from, to);
   }
 
-  private async saveOrder(patch: Category[]): Promise<void> {
-    for (const cat of patch) await this.repo.put<Category>('categories', cat);
-  }
-
-  private taken(name: string, exceptId?: ID): boolean {
-    const lower = name.toLowerCase();
-    return this.list().some((x) => x.id !== exceptId && x.name.toLowerCase() === lower);
+  private message(error: CategoryNameError): string {
+    return error === 'empty' ? this.c.empty : this.c.duplicate;
   }
 
   protected startRename(cat: Category): void {
@@ -175,51 +160,29 @@ export class CategoriesSection {
   }
 
   protected async saveRename(cat: Category, raw: string): Promise<void> {
-    const name = normalizeName(raw);
-    if (name === '') {
-      this.error.set(this.c.empty);
-      return;
-    }
-    if (this.taken(name, cat.id)) {
-      this.error.set(this.c.duplicate);
+    const failed = await this.categories.rename(cat, raw);
+    if (failed) {
+      this.error.set(this.message(failed));
       return;
     }
     this.renamingId.set(null);
     this.error.set(null);
-    if (name !== cat.name) await this.repo.put<Category>('categories', { ...cat, name });
   }
 
   protected async add(input: HTMLInputElement): Promise<void> {
-    const name = normalizeName(input.value);
-    if (name === '') return;
-    if (this.taken(name)) {
-      this.error.set(this.c.duplicate);
+    if (input.value.trim() === '') return;
+    const failed = await this.categories.add(input.value);
+    if (failed) {
+      this.error.set(this.message(failed));
       return;
     }
     this.error.set(null);
     input.value = '';
-    await this.repo.put<Category>('categories', { id: newId(), name, order: nextOrder(this.list()) });
   }
 
-  /**
-   * Soft-deletes the category and takes it off every book. Goals that point at it are left alone
-   * (Stats labels them "category removed"). Undo brings back the category and those book links.
-   */
+  /** Deletes the category; the toast offers Undo. */
   protected async remove(cat: Category): Promise<void> {
-    const books = await this.db.books.filter((b) => !b.deleted && b.categoryIds.includes(cat.id)).toArray();
-    const bookIds = books.map((b) => b.id);
-    await this.repo.softDelete('categories', cat.id);
-    for (const id of bookIds) {
-      await this.repo.update<Book>('books', id, (b) => ({ categoryIds: b.categoryIds.filter((x) => x !== cat.id) }));
-    }
-    this.toast.show(this.c.deleted(cat.name), { durationMs: UNDO_MS, undo: () => void this.restore(cat, bookIds) });
-  }
-
-  private async restore(cat: Category, bookIds: ID[]): Promise<void> {
-    await this.repo.put<Category>('categories', { ...cat, deleted: false });
-    for (const id of bookIds) {
-      await this.repo.update<Book>('books', id, (b) => (b.categoryIds.includes(cat.id) ? null : { categoryIds: [...b.categoryIds, cat.id] }));
-    }
+    await this.categories.remove(cat);
   }
 
   protected dragStart(event: PointerEvent, cat: Category, from: number): void {

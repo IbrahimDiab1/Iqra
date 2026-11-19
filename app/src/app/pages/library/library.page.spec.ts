@@ -12,6 +12,7 @@ import type { Book, Category } from '../../core/models';
 import { DRIVE_ADAPTER } from '../../sync/drive-adapter';
 import { FakeDrive } from '../../sync/fake-drive';
 import { COPY } from '../../ui/copy';
+import { ToastService } from '../../ui/toast.service';
 import { LibraryPage } from './library.page';
 
 function makeBook(overrides: Partial<Book> & Pick<Book, 'id' | 'title' | 'status'>): Book {
@@ -115,25 +116,101 @@ describe('LibraryPage', () => {
     expect(tab('Reading').textContent).toContain('Reading 2');
   });
 
-  it('filters by category through the sheet, and removing the chip restores the list', async () => {
-    await seed([reading, paused, toRead], [{ id: 'cat-1', name: 'Fiqh', order: 0, updatedAt: 1000, deviceId: 'device-a' }]);
+  const twoCats: Category[] = [
+    { id: 'cat-1', name: 'Fiqh', order: 0, updatedAt: 1000, deviceId: 'device-a' },
+    { id: 'cat-2', name: 'History', order: 1, updatedAt: 1000, deviceId: 'device-a' },
+  ];
+  const loose = makeBook({ id: 'l', title: 'Loose Book', status: 'reading', lastPageReached: 5 });
+  const history = makeBook({ id: 'h', title: 'History Book', status: 'reading', lastPageReached: 5, categoryIds: ['cat-2'] });
+  const inFiqh = { ...reading, categoryIds: ['cat-1'] };
+  const barChip = (key: string) => el.querySelector<HTMLButtonElement>(`iqra-category-bar [data-chip="${key}"]`)!;
+  const titles = () => mainCards().map((c) => c.textContent ?? '');
+
+  it('shows a category bar with counts and the filter sheet no longer lists categories', async () => {
+    await seed([inFiqh, paused, { ...toRead, categoryIds: ['cat-1'] }, loose, history], twoCats);
     await create();
-    tab('All').click();
+    await waitFor(() => barChip('cat-1') !== null && barChip('cat-1').textContent!.includes('2'));
+    expect(barChip('all').textContent).toContain('5');
+    expect(barChip('uncategorized').textContent).toContain('2');
+    expect(barChip('cat-2').textContent).toContain('1');
+    expect(el.querySelector('iqra-filter-sheet')!.textContent).not.toContain('Categories');
+    expect(el.querySelector('iqra-filter-sheet [aria-pressed]')?.textContent).not.toContain('Fiqh');
+  });
+
+  it('filters by one category, many categories, Uncategorized and All from the bar', async () => {
+    await seed([inFiqh, loose, history], twoCats);
+    await create();
+    await waitFor(() => titles().length === 3 && barChip('cat-2') !== null);
+
+    barChip('cat-1').click();
+    await waitFor(() => titles().length === 1);
+    expect(titles()[0]).toContain('Reading Book');
+
+    barChip('cat-2').dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    await waitFor(() => titles().length === 2);
+    expect(barChip('cat-1').getAttribute('aria-pressed')).toBe('true');
+    expect(barChip('cat-2').getAttribute('aria-pressed')).toBe('true');
+
+    barChip('uncategorized').click();
+    await waitFor(() => titles().length === 1);
+    expect(titles()[0]).toContain('Loose Book');
+
+    barChip('all').click();
+    await waitFor(() => titles().length === 3);
+    expect(barChip('all').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('mirrors the selection in the active-filter chips, and removing one clears it', async () => {
+    await seed([reading, loose, history], twoCats);
+    await create();
+    await waitFor(() => barChip('cat-2') !== null);
+    barChip('cat-2').click();
+    await waitFor(() => el.querySelector('[aria-label="Remove filter History"]') !== null);
+    barChip('uncategorized').dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    await waitFor(() => el.querySelector(`[aria-label="Remove filter ${COPY.categoryBar.uncategorized}"]`) !== null);
+    expect(JSON.parse(localStorage.getItem('iqra.library')!).categoryIds).toEqual(['cat-2', '__uncategorized__']);
+
+    el.querySelector<HTMLButtonElement>('[aria-label="Remove filter History"]')!.click();
+    await waitFor(() => el.querySelector('[aria-label="Remove filter History"]') === null);
+    expect(barChip('cat-2').getAttribute('aria-pressed')).toBe('false');
+    expect(barChip('uncategorized').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('does not count categories in the Filter button badge', async () => {
+    await seed([reading, loose, history], twoCats);
+    await create();
+    await waitFor(() => barChip('cat-2') !== null);
+    barChip('cat-2').click();
+    await waitFor(() => titles().length === 1);
+    expect(el.querySelector('.tools .badge')).toBeNull();
+  });
+
+  it('deletes a category from the bar, and a deleted one drops out of the filter until Undo', async () => {
+    await seed([reading, loose, history], twoCats);
+    await create();
+    await waitFor(() => barChip('cat-2') !== null);
+    barChip('cat-2').click();
+    await waitFor(() => titles().length === 1);
+
+    barChip('cat-2').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
     fixture.detectChanges();
-    await waitFor(() => mainCards().length === 3);
+    el.querySelector<HTMLButtonElement>('[data-testid="menu-delete"]')!.click();
+    // The filter must not stay hidden on a category that is gone.
+    await waitFor(() => barChip('cat-2') === null && titles().length === 3);
+    expect(barChip('all').getAttribute('aria-pressed')).toBe('true');
+    expect((await db.books.get('h'))!.categoryIds).toEqual([]);
+    TestBed.inject(ToastService).undo();
+    await waitFor(() => barChip('cat-2') !== null);
+    expect((await db.books.get('h'))!.categoryIds).toEqual(['cat-2']);
+  });
 
-    const sheetChip = [...el.querySelectorAll<HTMLButtonElement>('iqra-filter-sheet .chip')].find(
-      (c) => c.textContent?.trim() === 'Fiqh',
-    )!;
-    sheetChip.click();
-    button(COPY.filter.apply).click();
-    await waitFor(() => mainCards().length === 1);
-
-    const remove = el.querySelector<HTMLButtonElement>('[aria-label="Remove filter Fiqh"]');
-    expect(remove).not.toBeNull();
-    remove!.click();
-    await waitFor(() => mainCards().length === 3);
-    expect(el.querySelector('[aria-label="Remove filter Fiqh"]')).toBeNull();
+  it('keeps the bar inside the page width with many long category names', async () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ id: `m${i}`, name: `A rather long category name ${i}`, order: i, updatedAt: 1, deviceId: 'device-a' }));
+    await seed([reading], many);
+    await create();
+    await waitFor(() => barChip('m11') !== null);
+    const bar = el.querySelector<HTMLElement>('iqra-category-bar')!;
+    expect(getComputedStyle(bar.querySelector('.strip')!).overflowX).toBe('auto');
   });
 
   it('shows the first-run empty state and its button opens the file picker', async () => {

@@ -1,5 +1,4 @@
 import { Component, effect, input, output, signal, untracked } from '@angular/core';
-import type { Category } from '../../core/models';
 import { COPY } from '../../ui/copy';
 import { SheetComponent } from '../../ui/sheet.component';
 import type { FilterValue } from './library-state';
@@ -7,7 +6,7 @@ import type { FilterValue } from './library-state';
 const RATING_STEPS: readonly (number | null)[] = [null, 5, 6, 7, 8, 9];
 
 function copyOf(value: FilterValue): FilterValue {
-  return { categoryIds: [...value.categoryIds], tags: [...value.tags], minRating: value.minRating, downloadedOnly: value.downloadedOnly };
+  return { tags: [...value.tags], minRating: value.minRating, downloadedOnly: value.downloadedOnly };
 }
 
 function toggled<T>(list: readonly T[], item: T): T[] {
@@ -23,21 +22,6 @@ function toggled<T>(list: readonly T[], item: T): T[] {
   imports: [SheetComponent],
   template: `
     <f-sheet [open]="open()" [title]="filterCopy.title" (closed)="closed.emit()">
-      @if (categories().length > 0) {
-        <h4 class="label">{{ filterCopy.categories }}</h4>
-        <div class="chips">
-          @for (category of categories(); track category.id) {
-            <button
-              type="button"
-              class="chip"
-              dir="auto"
-              [attr.aria-pressed]="draft().categoryIds.includes(category.id)"
-              (click)="toggleCategory(category.id)"
-            >{{ category.name }}</button>
-          }
-        </div>
-      }
-
       @if (tags().length > 0) {
         <h4 class="label">{{ filterCopy.tags }}</h4>
         <div class="chips">
@@ -164,7 +148,6 @@ function toggled<T>(list: readonly T[], item: T): T[] {
 export class FilterSheetComponent {
   readonly open = input(false);
   readonly value = input.required<FilterValue>();
-  readonly categories = input<Category[]>([]);
   readonly tags = input<string[]>([]);
   readonly apply = output<FilterValue>();
   readonly closed = output<void>();
@@ -172,7 +155,7 @@ export class FilterSheetComponent {
   protected readonly copy = COPY.library;
   protected readonly filterCopy = COPY.filter;
   protected readonly ratingSteps = RATING_STEPS;
-  protected readonly draft = signal<FilterValue>({ categoryIds: [], tags: [], minRating: null, downloadedOnly: false });
+  protected readonly draft = signal<FilterValue>({ tags: [], minRating: null, downloadedOnly: false });
 
   constructor() {
     // Each opening starts from the applied filters, so an abandoned draft leaves no trace.
@@ -181,10 +164,6 @@ export class FilterSheetComponent {
       if (!this.open()) return;
       untracked(() => this.draft.set(copyOf(this.value())));
     });
-  }
-
-  protected toggleCategory(id: string): void {
-    this.draft.update((d) => ({ ...d, categoryIds: toggled(d.categoryIds, id) }));
   }
 
   protected toggleTag(tag: string): void {
@@ -200,7 +179,7 @@ export class FilterSheetComponent {
   }
 
   protected reset(): void {
-    this.draft.set({ categoryIds: [], tags: [], minRating: null, downloadedOnly: false });
+    this.draft.set({ tags: [], minRating: null, downloadedOnly: false });
   }
 
   protected commit(): void {

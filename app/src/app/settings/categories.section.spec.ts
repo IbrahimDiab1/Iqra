@@ -116,8 +116,7 @@ describe('CategoriesSection', () => {
     const input = q<HTMLInputElement>('[data-testid="rename-input"]');
     type(input, 'fIqH');
     key(input, 'Enter');
-    fixture.detectChanges();
-    expect(q('[data-testid="error"]').textContent).toContain('already exists');
+    await settle(() => expect(q('[data-testid="error"]').textContent).toContain('already exists'));
     expect((await db.categories.get('c2'))!.name).toBe('History');
   });
 
@@ -146,8 +145,7 @@ describe('CategoriesSection', () => {
   it('rejects adding a duplicate name', async () => {
     type(q<HTMLInputElement>('[data-testid="add-input"]'), 'tafsir');
     q<HTMLButtonElement>('[data-testid="add"]').click();
-    fixture.detectChanges();
-    expect(q('[data-testid="error"]').textContent).toContain('already exists');
+    await settle(() => expect(q('[data-testid="error"]').textContent).toContain('already exists'));
     expect(await db.categories.count()).toBe(3);
   });
 

@@ -3,6 +3,7 @@ import type { Book, ID } from '../../core/models';
 import {
   activeFilterCount,
   bookProgress,
+  categoryCounts,
   continueBook,
   DEFAULT_LIBRARY_STATE,
   queryLibrary,
@@ -10,6 +11,7 @@ import {
   tabCounts,
   type LibraryCtx,
   type LibraryState,
+  UNCATEGORIZED,
 } from './library-query';
 
 function book(over: Partial<Book> & { id: ID }): Book {
@@ -107,6 +109,48 @@ describe('library query', () => {
     const r = queryLibrary(books, state({ categoryIds: ['tech', 'general'] }), ctx);
     // AND would leave only b4, which has both.
     expect(ids(r.main).sort()).toEqual(['b1', 'b2', 'b3', 'b4', 'b5']);
+  });
+
+  it('shows only books with no live category for the Uncategorized value', () => {
+    const more = [
+      ...books,
+      book({ id: 'b7', title: 'Loose', categoryIds: [] }),
+      book({ id: 'b8', title: 'Orphan', categoryIds: ['gone'] }),
+    ];
+    const live = new Set(['tech', 'fiction', 'general']);
+    const r = queryLibrary(more, state({ categoryIds: [UNCATEGORIZED] }), { ...ctx, liveCategories: live });
+    // b8 only has a deleted category, so it counts as uncategorized.
+    expect(ids(r.main).sort()).toEqual(['b7', 'b8']);
+  });
+
+  it('ORs Uncategorized with real categories', () => {
+    const more = [...books, book({ id: 'b7', title: 'Loose', categoryIds: [] })];
+    const live = new Set(['tech', 'fiction', 'general']);
+    const r = queryLibrary(more, state({ categoryIds: [UNCATEGORIZED, 'fiction'] }), { ...ctx, liveCategories: live });
+    expect(ids(r.main).sort()).toEqual(['b2', 'b7']);
+  });
+
+  it('treats a book with no categories as uncategorized when live categories are not given', () => {
+    const more = [...books, book({ id: 'b7', title: 'Loose', categoryIds: [] })];
+    expect(ids(queryLibrary(more, state({ categoryIds: [UNCATEGORIZED] }), ctx).main)).toEqual(['b7']);
+  });
+
+  it('counts books per category, for All and for Uncategorized, leaving out deleted books', () => {
+    const more = [
+      ...books,
+      book({ id: 'b7', title: 'Loose', categoryIds: [] }),
+      book({ id: 'b8', title: 'Orphan', categoryIds: ['gone'] }),
+    ];
+    const counts = categoryCounts(more, ['tech', 'fiction', 'general']);
+    expect(counts.all).toBe(7);
+    expect(counts.uncategorized).toBe(2);
+    expect(counts.byId.get('tech')).toBe(3);
+    expect(counts.byId.get('fiction')).toBe(1);
+    expect(counts.byId.get('general')).toBe(3);
+  });
+
+  it('counts the Uncategorized value as one filter', () => {
+    expect(activeFilterCount(state({ categoryIds: [UNCATEGORIZED, 'tech'] }))).toBe(1);
   });
 
   it('matches tags with AND', () => {

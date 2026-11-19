@@ -46,6 +46,8 @@ const ICON = {
   historyFwd: '<path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/><path d="M12 8v4l3 2"/>',
   fullscreen: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
   noteFill: '<path d="M5 4h10l4 4v12H5z" fill="currentColor"/><path d="M9 12h6M9 16h4" stroke="var(--surface, #fff)"/>',
+  more: '<path d="M5 12h.01M12 12h.01M19 12h.01"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
   notePlus: '<path d="M5 4h10l4 4v12H5z"/><path d="M12 10v6M9 13h6"/>',
 } as const;
 
