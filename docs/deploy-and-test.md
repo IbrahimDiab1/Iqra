@@ -45,3 +45,20 @@ Real-device and real-file checks that the automated tests cannot cover.
 - **Large PDF (about 600 pages, 40 MB):** after downloading, the first page should appear in under 2 seconds. Scrolling in continuous mode should stay smooth.
 - **Stream from Drive on mobile data:** turn off Wi-Fi and open a book that is not downloaded with "Read from Google Drive". Pages should load as you read.
 - **Two devices:** read to a page on one device, wait a few seconds, and open the same book on the other. It should open on the newest page and offer "Back to p. N" for the page it was on before.
+
+## 8. Highlights and notes checks
+
+Real-device checks for annotations that the automated tests cannot cover.
+
+- **Selection on Android:** long-press a word, drag the handles to extend it, and check the toolbar follows the selection.
+- **Word tap:** a single tap on a word in page view selects that word. A tap on empty space still hides and shows the bars.
+- **Colors save instantly:** tapping a color dot saves the highlight at once, with an Undo toast.
+- **Swipe and selection:** while a selection exists, swiping must not turn the page.
+- **Pinch with highlights:** pinch-zoom still works with highlights on the page, and the highlights stay aligned with the text at every zoom.
+- **Arabic:** select Arabic text and highlight it. The colored rectangles must line up with the letters (right-to-left, joined forms), in page view and in reading mode.
+- **Themes:** highlights are readable in paper, sepia and night.
+- **Note dot:** a highlight with a note or tags shows its dot. Tapping the highlight opens the note.
+- **Area highlight on touch:** turn on "Highlight an area", drag a rectangle with a finger, and pick a color. Swiping and pinching are off while the tool is on.
+- **Notes hub:** search in the Notes tab, including Arabic words. Tapping a result opens the book at that page and pulses the highlight.
+- **Sync:** highlight a passage on one device. It should show on the other device within about a minute.
+- **Scanned PDF:** a page with no text layer cannot be selected, but the area highlight and bookmarks still work.

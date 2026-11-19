@@ -144,6 +144,44 @@ describe('SyncEngine', () => {
     expect((await b.db.books.get('b1'))?.title).toBe('From B');
   });
 
+  it('annotations converge: both devices keep both, the newer edit wins, a soft-delete stays deleted', async () => {
+    a.clock.t = 1;
+    await a.repo.put<Book>('books', bookDraft('b1'));
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+
+    const note = (id: string, body: string): Omit<Annotation, 'updatedAt' | 'deviceId'> => ({
+      id, bookId: 'b1', type: 'note', page: 1, body, tags: [], createdAt: 5,
+    });
+    const live = async (device: Device) =>
+      (await device.db.annotations.where('bookId').equals('b1').toArray()).filter((n) => !n.deleted);
+
+    // Each device adds a different annotation to the same book while the other is not looking.
+    a.clock.t = 10;
+    await a.repo.put<Annotation>('annotations', note('an-a', 'from A'));
+    b.clock.t = 11;
+    await b.repo.put<Annotation>('annotations', note('an-b', 'from B'));
+    await syncRounds(2);
+    for (const device of [a, b]) expect((await live(device)).map((n) => n.id).sort()).toEqual(['an-a', 'an-b']);
+
+    // Both edit an-a; the edit with the newer updatedAt wins on both, whichever device syncs first.
+    a.clock.t = 1000;
+    await a.repo.put<Annotation>('annotations', { ...(await a.db.annotations.get('an-a'))!, body: 'A edit (older)' });
+    b.clock.t = 2000;
+    await b.repo.put<Annotation>('annotations', { ...(await b.db.annotations.get('an-a'))!, body: 'B edit (newer)' });
+    await syncRounds(2);
+    for (const device of [a, b]) expect((await device.db.annotations.get('an-a'))?.body).toBe('B edit (newer)');
+
+    // A soft-deleted annotation stays deleted on both, and never reappears from the other device's old copy.
+    a.clock.t = 3000;
+    await a.repo.softDelete('annotations', 'an-b');
+    await syncRounds(3);
+    for (const device of [a, b]) {
+      expect((await live(device)).map((n) => n.id)).toEqual(['an-a']);
+      expect((await device.db.annotations.get('an-b'))?.deleted).toBe(true);
+    }
+  });
+
   it('pauses on a DriveAuthError during push, keeps dirty, and pushes after reconnecting', async () => {
     await a.repo.put<Book>('books', bookDraft('b1'));
     const markExpired = vi.spyOn(a.auth, 'markExpired');

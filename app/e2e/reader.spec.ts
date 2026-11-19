@@ -252,6 +252,158 @@ test.describe('reader', () => {
   });
 });
 
+/** Selects the whole text of the first span of the current page's text layer, as a long-press or drag would. */
+async function selectFirstSpan(page: Page): Promise<void> {
+  const span = page.locator('[data-slot="cur"] .text-layer span[data-item]').first();
+  await expect(span).toBeVisible();
+  await span.evaluate((el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+  });
+}
+
+function selectionToolbar(page: Page): Locator {
+  return page.getByRole('toolbar', { name: 'Highlight' });
+}
+
+/** Selects the first span and saves it with the given highlight color. */
+async function highlightFirstSpan(page: Page, color: 'Yellow' | 'Green' | 'Blue' | 'Pink'): Promise<void> {
+  await selectFirstSpan(page);
+  await selectionToolbar(page).getByRole('button', { name: color }).click();
+  await expect(highlightMarks(page)).not.toHaveCount(0);
+}
+
+/** The rects the highlight layer draws, one element per rect. */
+function highlightMarks(page: Page): Locator {
+  return page.locator('iqra-highlight-layer [data-id]');
+}
+
+test.describe('annotations', () => {
+  let context: BrowserContext;
+  let page: Page;
+
+  test.beforeEach(async ({ browser }) => {
+    context = await browser.newContext();
+    page = await openDevice(context);
+    await openBook(page);
+  });
+
+  test.afterEach(async () => {
+    await context.close();
+  });
+
+  test('text layer: selecting text shows the toolbar', async () => {
+    await selectFirstSpan(page);
+    const bar = selectionToolbar(page);
+    await expect(bar).toBeVisible();
+    for (const name of ['Yellow', 'Green', 'Blue', 'Pink', 'Note', 'Copy']) {
+      await expect(bar.getByRole('button', { name, exact: true })).toBeVisible();
+    }
+  });
+
+  test('text layer: dragging the mouse across text selects it', async () => {
+    const box = (await page.locator('[data-slot="cur"] .text-layer span[data-item]').first().boundingBox())!;
+    await page.mouse.move(box.x + 1, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await expect(selectionToolbar(page)).toBeVisible();
+  });
+
+  test('highlight: picking green saves, survives reload, and is drawn', async () => {
+    await highlightFirstSpan(page, 'Green');
+    await expect(highlightMarks(page).first()).toHaveAttribute('style', /--hl-green/);
+
+    await page.reload();
+    await expectPage(page, 1);
+    await expect(highlightMarks(page).first()).toHaveAttribute('style', /--hl-green/);
+  });
+
+  test('highlight: Undo from the toast removes it', async () => {
+    await highlightFirstSpan(page, 'Yellow');
+    await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
+    await expect(highlightMarks(page)).toHaveCount(0);
+  });
+
+  test('note: tapping a highlight opens the note sheet; typing a note adds the dot and survives reload', async () => {
+    await highlightFirstSpan(page, 'Blue');
+    await expect(page.locator('iqra-highlight-layer .dot')).toHaveCount(0);
+
+    const box = (await highlightMarks(page).first().boundingBox())!;
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('textbox', { name: 'Note' }).fill('remember the opening');
+    // The body saves 400 ms after typing stops; the dot appears once it has.
+    await expect(page.locator('iqra-highlight-layer .dot')).toHaveCount(1);
+
+    await page.reload();
+    await expectPage(page, 1);
+    await expect(page.locator('iqra-highlight-layer .dot')).toHaveCount(1);
+  });
+
+  test('area: drag a rectangle, pick a color, it is drawn; Esc cancels the tool', async () => {
+    const tool = page.getByRole('button', { name: 'Highlight an area' });
+    await tool.click();
+    await expect(tool).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Escape');
+    await expect(tool).toHaveAttribute('aria-pressed', 'false');
+
+    await tool.click();
+    const canvas = (await page.locator('[data-slot="cur"] canvas').boundingBox())!;
+    await page.mouse.move(canvas.x + canvas.width * 0.2, canvas.y + canvas.height * 0.3);
+    await page.mouse.down();
+    await page.mouse.move(canvas.x + canvas.width * 0.6, canvas.y + canvas.height * 0.5, { steps: 6 });
+    await page.mouse.up();
+    await selectionToolbar(page).getByRole('button', { name: 'Pink' }).click();
+    await expect(highlightMarks(page)).toHaveCount(1);
+    await expect(highlightMarks(page).first()).toHaveAttribute('style', /--hl-pink/);
+  });
+
+  test('bookmark: toggling lists it in the Bookmarks tab and tapping it jumps', async () => {
+    await page.getByRole('button', { name: 'Bookmark this page' }).click();
+    await expect(page.getByRole('button', { name: 'Remove bookmark' })).toBeVisible();
+    await readTo(page, 1, 3);
+
+    await openPanel(page, 'Contents');
+    await page.getByRole('tab', { name: 'Bookmarks' }).click();
+    const row = page.locator('.row.bm');
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText('p. 1');
+    await row.click();
+    await expectPage(page, 1);
+  });
+
+  test('reading mode: the saved highlight shows as a mark', async () => {
+    await highlightFirstSpan(page, 'Green');
+    await page.getByRole('button', { name: 'Reading mode' }).click();
+    await expect(page.locator('iqra-reflow-view mark.hl-green')).toHaveCount(1);
+  });
+
+  test('notes hub: search finds the note and tapping it opens the book at the page with the flash', async () => {
+    await readTo(page, 1, 2);
+    await selectFirstSpan(page);
+    await selectionToolbar(page).getByRole('button', { name: 'Note', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('textbox', { name: 'Note' }).fill('zebra crossing');
+    await expect(page.locator('iqra-highlight-layer .dot')).toHaveCount(1);
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await expect(dialog).toBeHidden();
+
+    await page.goto('/notes');
+    await page.getByRole('searchbox').fill('zebra');
+    const row = page.locator('.nrow').filter({ hasText: 'zebra crossing' });
+    await expect(row).toHaveCount(1);
+    await row.click();
+    await expectPage(page, 2);
+    await expect(page.locator('iqra-highlight-layer .flash').first()).toBeVisible();
+  });
+});
+
 async function useScrolling(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Reading settings' }).click();
   await page.getByRole('radio', { name: 'Scrolling' }).click();
