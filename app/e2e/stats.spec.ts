@@ -186,3 +186,129 @@ test.describe('progress and stats', () => {
     await expect(page.locator('.tile[data-total="pages"] .v')).toHaveText('1');
   });
 });
+
+/** Writes records straight into IndexedDB. The page is reloaded afterwards so its live queries read them. */
+async function putRaw(page: Page, store: string, records: object[]): Promise<void> {
+  await page.evaluate(
+    ([name, recs]) =>
+      new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open('iqra');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const db = open.result;
+          const tx = db.transaction(name as string, 'readwrite');
+          for (const rec of recs as object[]) tx.objectStore(name as string).put(rec);
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+    [store, records] as const,
+  );
+}
+
+test.describe('stats heat map', () => {
+  let context: BrowserContext;
+  let page: Page;
+  let today: string;
+
+  test.beforeEach(async ({ browser }) => {
+    context = await browser.newContext();
+    page = await openDevice(context);
+    await addBook(page);
+    // A category, the book in it, and a reading session today (local time, so the day cell is deterministic).
+    const [book] = await table<{ id: string }>(page, 'books');
+    const seeded = await page.evaluate((bookId) => {
+      const t = new Date();
+      const started = new Date(t.getFullYear(), t.getMonth(), t.getDate(), 6, 0).getTime();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return {
+        day: `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`,
+        category: { id: 'cat-e2e', name: 'Fiqh', order: 0, deviceId: 'e2e', updatedAt: Date.now() },
+        session: { id: 'sess-e2e', deviceId: 'e2e', updatedAt: Date.now(), bookId, startedAt: started, endedAt: started + 600_000, activeMs: 600_000, pagesRead: [1, 2, 3] },
+      };
+    }, book.id);
+    today = seeded.day;
+    await putRaw(page, 'categories', [seeded.category]);
+    await putRaw(page, 'sessions', [seeded.session]);
+    const [rec] = await table<Record<string, unknown>>(page, 'books');
+    await putRaw(page, 'books', [{ ...rec, categoryIds: ['cat-e2e'], status: 'reading' }]);
+    await page.reload();
+    await page.getByRole('link', { name: 'Stats' }).click();
+    await expect(page.locator('[data-ready]')).toBeVisible();
+  });
+
+  test.afterEach(async () => {
+    await context.close();
+  });
+
+  test('month and year show day blocks coloured by category, with a day list on click', async () => {
+    await page.getByRole('button', { name: 'Month', exact: true }).click();
+    const todayCell = page.locator(`iqra-heatmap button[data-day="${today}"]`);
+    await expect(todayCell).toHaveAttribute('data-level', '4');
+    await expect(todayCell).toHaveAttribute('aria-label', /3 pages · 10 min · Fiqh$/);
+    expect(await todayCell.evaluate((el) => (el as HTMLElement).style.getPropertyValue('--cell'))).toBe('var(--cat-1)');
+
+    await todayCell.click();
+    await expect(page.getByTestId('day-detail')).toContainText('Outline Book');
+    await expect(page.getByTestId('day-detail')).toContainText('3 pages · 10 min');
+
+    await page.getByRole('button', { name: 'Year', exact: true }).click();
+    const year = Number(today.slice(0, 4));
+    const days = (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / 86_400_000;
+    await expect(page.locator('iqra-heatmap button[data-day]')).toHaveCount(days);
+    await expect(page.locator(`iqra-heatmap button[data-day="${today}"]`)).toHaveAttribute('data-level', '4');
+
+    // Filter by the category through the legend, then by a category that has no reading.
+    await page.locator('.legend').getByRole('button', { name: 'Uncategorized' }).click();
+    await expect(page.locator('.tile[data-total="pages"] .v')).toHaveText('0');
+    await expect(page.getByText('Nothing read this year yet.')).toBeVisible();
+    await page.locator('.legend').getByRole('button', { name: 'Fiqh' }).click();
+    await expect(page.locator('.tile[data-total="pages"] .v')).toHaveText('3');
+  });
+
+  test('previous and next step through periods and Today comes back', async () => {
+    const label = page.getByTestId('period-label');
+    await expect(label).toContainText('This week');
+    await expect(page.getByRole('button', { name: 'Next week' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Previous week' }).click();
+    await expect(label).not.toContainText('This week');
+    await expect(page.getByRole('button', { name: 'Next week' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Today', exact: true }).click();
+    await expect(label).toContainText('This week');
+  });
+
+  test('a year stays inside the page at 320 px and scrolls within its own box', async () => {
+    await page.setViewportSize({ width: 320, height: 700 });
+    await page.getByRole('button', { name: 'Year', exact: true }).click();
+    await expect(page.locator(`iqra-heatmap button[data-day="${today}"]`)).toBeVisible();
+    const box = await page.evaluate(() => {
+      const scroll = document.querySelector('iqra-heatmap .scroll') as HTMLElement;
+      return {
+        page: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        scrolls: scroll.scrollWidth > scroll.clientWidth,
+      };
+    });
+    expect(box.page).toBeLessThanOrEqual(0);
+    expect(box.scrolls).toBe(true);
+    // A current year opens at its latest weeks: today's block is on screen.
+    const rect = await page.locator(`iqra-heatmap button[data-day="${today}"]`).boundingBox();
+    expect(rect!.x + rect!.width).toBeLessThanOrEqual(320);
+    expect(rect!.x).toBeGreaterThanOrEqual(0);
+  });
+
+  test('keyboard: arrows move across blocks and Enter picks a day', async () => {
+    await page.getByRole('button', { name: 'Month', exact: true }).click();
+    const todayCell = page.locator(`iqra-heatmap button[data-day="${today}"]`);
+    await todayCell.focus();
+    await page.keyboard.press('Home');
+    // Home goes to the first day of the month, which is not the first block in reading order of the DOM rows.
+    await expect(page.locator(`iqra-heatmap button[data-day="${today.slice(0, 8)}01"]`)).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.locator(`iqra-heatmap button[data-day="${today.slice(0, 8)}02"]`)).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('day-detail')).toBeVisible();
+  });
+});

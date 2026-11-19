@@ -146,7 +146,7 @@ export function categoryCounts(
 }
 
 /** Lowercases and strips Latin combining marks, Arabic harakat (U+064B-U+065F, U+0670) and tatweel (U+0640). */
-function foldText(text: string): string {
+export function foldText(text: string): string {
   return text.normalize('NFD').replace(/[\u0300-\u036F\u064B-\u065F\u0670\u0640]/g, '').toLowerCase();
 }
 

@@ -45,6 +45,21 @@ export function dayStats(sessions: ReadingSession[], range?: Range): DayStat[] {
     .map(([day, { ms, keys }]) => ({ day, pages: keys.size, ms }));
 }
 
+/** The books read on one local day: unique pages and active time, longest time first. Time goes to the day a session started. */
+export function booksOnDay(sessions: ReadingSession[], day: string): { bookId: ID; pages: number; ms: number }[] {
+  const books = new Map<ID, { ms: number; pages: Set<number> }>();
+  for (const s of countable(sessions)) {
+    if (dayKey(s.startedAt) !== day) continue;
+    let entry = books.get(s.bookId);
+    if (!entry) books.set(s.bookId, (entry = { ms: 0, pages: new Set() }));
+    entry.ms += s.activeMs;
+    for (const page of s.pagesRead) entry.pages.add(page);
+  }
+  return [...books.entries()]
+    .map(([bookId, { ms, pages }]) => ({ bookId, pages: pages.size, ms }))
+    .sort((a, b) => b.ms - a.ms || (a.bookId < b.bookId ? -1 : 1));
+}
+
 /** Totals over all countable sessions. Pages are unique (book, page, day); average is total time over pages. */
 export function totals(sessions: ReadingSession[]): {
   ms: number;

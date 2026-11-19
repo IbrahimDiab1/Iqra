@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Book, Goal, ID, ReadingSession } from '../core/models';
-import { dayStats, goalProgress, perBook, totals } from './aggregate';
+import { booksOnDay, dayStats, goalProgress, perBook, totals } from './aggregate';
 
 const local = (y: number, month: number, d: number, h = 0, min = 0) => new Date(y, month - 1, d, h, min).getTime();
 const MIN = 60_000;
@@ -146,3 +146,21 @@ describe('goalProgress', () => {
     expect(goalProgress(goal({ target: 60 }), sessions, books, week).value).toBe(0);
   });
 });
+
+describe('booksOnDay', () => {
+  it('lists each book read that day with unique pages and time, longest first', () => {
+    const sessions = [
+      session({ id: '1', bookId: 'a', startedAt: local(2026, 11, 5, 9), pagesRead: [1, 2], activeMs: 10 * MIN }),
+      session({ id: '2', bookId: 'a', startedAt: local(2026, 11, 5, 20), pagesRead: [2, 3], activeMs: 5 * MIN }),
+      session({ id: '3', bookId: 'b', startedAt: local(2026, 11, 5, 12), pagesRead: [9], activeMs: 30 * MIN }),
+      session({ id: '4', bookId: 'a', startedAt: local(2026, 11, 6, 9), pagesRead: [4], activeMs: 5 * MIN }),
+      session({ id: '5', bookId: 'a', startedAt: local(2026, 11, 5, 21), activeMs: 5 * MIN, deleted: true }),
+    ];
+    expect(booksOnDay(sessions, '2026-11-05')).toEqual([
+      { bookId: 'b', pages: 1, ms: 30 * MIN },
+      { bookId: 'a', pages: 3, ms: 15 * MIN },
+    ]);
+    expect(booksOnDay(sessions, '2026-11-07')).toEqual([]);
+  });
+});
+

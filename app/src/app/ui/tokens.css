@@ -33,6 +33,10 @@
   --sw-pink: #E989AE;
   --sel: rgba(30, 107, 100, .24);
 
+  /* Heat map category hues, picked by category order modulo 8. Uncategorized uses --accent. */
+  --cat-1: #3A6FB0; --cat-2: #D1691F; --cat-3: #8A5BB5; --cat-4: #C2467F;
+  --cat-5: #B8890F; --cat-6: #4C9A3A; --cat-7: #2A9DB8; --cat-8: #8C6A4F;
+
   --paper-light: #FEFEFC;
   --ink-light: #1E1F1C;
   --paper-sepia: #F4EBD7;
@@ -57,6 +61,7 @@
     --hl-yellow: rgba(247, 205, 70, .32); --hl-green: rgba(118, 201, 132, .3);
     --hl-blue: rgba(116, 176, 236, .3); --hl-pink: rgba(236, 132, 168, .3);
     --sel: rgba(99, 189, 178, .3);
+    --cat-1: #6FA3E3; --cat-2: #EE9A55; --cat-3: #B995DD; --cat-4: #E57BAA; --cat-5: #E3BC4A; --cat-6: #86C36F; --cat-7: #62C5DB; --cat-8: #BF9C80;
     color-scheme: dark;
   }
 }
@@ -69,5 +74,6 @@
   --hl-yellow: rgba(247, 205, 70, .32); --hl-green: rgba(118, 201, 132, .3);
   --hl-blue: rgba(116, 176, 236, .3); --hl-pink: rgba(236, 132, 168, .3);
   --sel: rgba(99, 189, 178, .3);
+  --cat-1: #6FA3E3; --cat-2: #EE9A55; --cat-3: #B995DD; --cat-4: #E57BAA; --cat-5: #E3BC4A; --cat-6: #86C36F; --cat-7: #62C5DB; --cat-8: #BF9C80;
   color-scheme: dark;
 }
