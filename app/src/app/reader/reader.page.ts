@@ -384,6 +384,9 @@ export class ReaderPage implements OnDestroy {
   private tracking: ReaderSessionHandle | null = null;
   /** The finish prompt is offered once per open. */
   private finishOffered = false;
+  private openBookId: string | null = null;
+  /** Whether the marks were complete at the last change; unknown until the first read. */
+  private markedComplete: boolean | undefined;
   private readonly annotationSource = signal<Signal<Annotation[] | undefined> | null>(null);
   /** This book's live annotations. */
   protected readonly annotations = computed(() => this.annotationSource()?.() ?? []);
@@ -448,6 +451,11 @@ export class ReaderPage implements OnDestroy {
         this.tracking?.pageChanged(page);
         this.offerFinishAtEnd(page);
       });
+    });
+    effect(() => {
+      const b = this.book();
+      const set = this.markSource()?.();
+      untracked(() => this.checkMarkedComplete(b, set));
     });
     effect(() => {
       this.state()?.zoom();
@@ -527,6 +535,9 @@ export class ReaderPage implements OnDestroy {
       void this.tracking?.end();
       this.tracking = this.sessions.start(book, state.page());
       this.finishOffered = false;
+      this.markedComplete = undefined;
+      if (this.openBookId) this.readMarks.release(this.openBookId);
+      this.openBookId = book.id;
       this.markSource.set(this.readMarks.marked(book.id));
       this.positions.markOpened(book).catch((err) => console.warn('Could not record the open', err));
       if (target?.flashId) state.flashAnnotation(target.flashId);
@@ -837,16 +848,24 @@ export class ReaderPage implements OnDestroy {
     this.offerFinish();
   }
 
+  /**
+   * Marked mode: the marks becoming complete (by the Mark read toggle or a Contents check) offers the
+   * finish prompt. Only a change seen while open counts, so opening a fully marked book does not prompt.
+   */
+  private checkMarkedComplete(book: Book | null, marks: ReadonlySet<number> | undefined): void {
+    if (!book || book.progressMode !== 'marked' || book.pageCount <= 0 || !marks) return;
+    const complete = marks.size >= book.pageCount;
+    if (complete && this.markedComplete === false) this.offerFinish();
+    this.markedComplete = complete;
+  }
+
   protected async toggleMark(): Promise<void> {
     const s = this.state();
     const b = this.book();
     if (!s || !b) return;
     const page = s.page();
-    const set = this.marked();
-    const completes = !set.has(page) && set.size + 1 >= b.pageCount;
     try {
       await this.readMarks.toggle(b.id, page);
-      if (completes) this.offerFinish();
     } catch (err) {
       console.warn('Could not change the read mark', err);
       this.toast.show(COPY.annotations.saveFailed);
@@ -880,6 +899,7 @@ export class ReaderPage implements OnDestroy {
     this.stopListening();
     void this.tracking?.end();
     this.tracking = null;
+    if (this.openBookId) this.readMarks.release(this.openBookId);
     void this.state()?.flush();
     this.session()?.destroy();
   }

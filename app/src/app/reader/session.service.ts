@@ -46,8 +46,9 @@ class Run {
     if (snap.activeMs <= 0 && snap.pagesRead.length === 0) return;
     if (!final && snap.activeMs < FIRST_WRITE_MS) return;
     if (this.written?.activeMs === snap.activeMs && this.written.pages === snap.pagesRead.length && !final) return;
-    this.written = { activeMs: snap.activeMs, pages: snap.pagesRead.length };
     await this.repo.put<ReadingSession>('sessions', { id: this.id, bookId: this.bookId, ...snap });
+    // Only a successful put counts as written, so a failed checkpoint is retried.
+    this.written = { activeMs: snap.activeMs, pages: snap.pagesRead.length };
     if (snap.pagesRead.length > this.checkedPages) {
       this.checkedPages = snap.pagesRead.length;
       await this.markStarted(snap);

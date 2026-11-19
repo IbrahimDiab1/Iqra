@@ -1,4 +1,4 @@
-import { Injectable, Injector, Signal, inject, runInInjectionContext } from '@angular/core';
+import { EnvironmentInjector, Injectable, Signal, createEnvironmentInjector, inject, runInInjectionContext } from '@angular/core';
 import { DB } from '../core/db';
 import type { ID, ReadMark } from '../core/models';
 import { Repo } from '../core/repo';
@@ -8,22 +8,33 @@ import { Repo } from '../core/repo';
 export class ReadMarkService {
   private readonly repo = inject(Repo);
   private readonly db = inject(DB);
-  private readonly injector = inject(Injector);
-  private readonly byBook = new Map<ID, Signal<ReadonlySet<number> | undefined>>();
+  private readonly injector = inject(EnvironmentInjector);
+  /** One live query per open book; each lives in its own injector so `release` can stop it. */
+  private readonly byBook = new Map<ID, { sig: Signal<ReadonlySet<number> | undefined>; scope: EnvironmentInjector }>();
 
   /** Live set of the pages marked read in one book. */
   marked(bookId: ID): Signal<ReadonlySet<number> | undefined> {
-    let sig = this.byBook.get(bookId);
-    if (!sig) {
-      sig = runInInjectionContext(this.injector, () =>
+    let entry = this.byBook.get(bookId);
+    if (!entry) {
+      const scope = createEnvironmentInjector([], this.injector);
+      const sig = runInInjectionContext(scope, () =>
         this.repo.live(async () => {
           const marks = await this.db.readMarks.where('bookId').equals(bookId).toArray();
           return new Set(marks.filter((m) => !m.deleted && m.read).map((m) => m.page)) as ReadonlySet<number>;
         }),
       );
-      this.byBook.set(bookId, sig);
+      entry = { sig, scope };
+      this.byBook.set(bookId, entry);
     }
-    return sig;
+    return entry.sig;
+  }
+
+  /** Stops the live query for a book (called when its reader closes). */
+  release(bookId: ID): void {
+    const entry = this.byBook.get(bookId);
+    if (!entry) return;
+    this.byBook.delete(bookId);
+    entry.scope.destroy();
   }
 
   async toggle(bookId: ID, page: number): Promise<void> {

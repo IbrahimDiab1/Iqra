@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CLOCK } from '../core/clock';
 import { DB, IqraDb } from '../core/db';
 import { DEVICE_ID, newId } from '../core/ids';
@@ -51,5 +51,15 @@ describe('ReadMarkService', () => {
     await service.toggle('b', 2);
     await new Promise((r) => setTimeout(r, 50));
     expect([...(marked() ?? [])]).toEqual([1]);
+  });
+
+  it('release drops the cached live set so a reopened book starts a fresh query', async () => {
+    const first = TestBed.runInInjectionContext(() => service.marked('b'));
+    expect(service.marked('b')).toBe(first);
+    service.release('b');
+    const second = service.marked('b');
+    expect(second).not.toBe(first);
+    await service.toggle('b', 3);
+    await vi.waitFor(() => expect([...(second() ?? [])]).toEqual([3]));
   });
 });

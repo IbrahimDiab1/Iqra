@@ -50,7 +50,9 @@ export class SessionTracker {
 
   snapshot(now: number): SessionSnapshot {
     this.advance(now);
-    return { startedAt: this.startedAt, endedAt: this.last, activeMs: this.activeMs, pagesRead: [...this.read] };
+    // The session ends where activity stopped counting, not where the idle wait was noticed.
+    const endedAt = Math.min(this.last, this.lastActivity + IDLE_PAUSE_MS);
+    return { startedAt: this.startedAt, endedAt, activeMs: this.activeMs, pagesRead: [...this.read] };
   }
 
   end(now: number): SessionSnapshot {

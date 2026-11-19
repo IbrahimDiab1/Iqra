@@ -9,6 +9,7 @@ import type { Book } from '../core/models';
 import { DRIVE_ADAPTER } from '../sync/drive-adapter';
 import { FakeDrive } from '../sync/fake-drive';
 import { COPY } from '../ui/copy';
+import { ReadMarkService } from '../progress/read-mark.service';
 import { PROGRESS_COPY } from './progress-copy';
 import { ToastService } from '../ui/toast.service';
 import { signal } from '@angular/core';
@@ -877,6 +878,39 @@ describe('ReaderPage', () => {
       fixture.detectChanges();
       markButton()!.click();
       await vi.waitFor(() => expect(TestBed.inject(ToastService).current()?.message).toBe(PROGRESS_COPY.finishPrompt));
+    });
+
+    it('in marked mode, marking the last unmarked page through the Contents range write offers it once', async () => {
+      fixture?.destroy();
+      await db.books.put(makeBook({ progressMode: 'marked' }));
+      for (let p = 1; p <= 50; p++) {
+        if (p < 10 || p > 12) await db.readMarks.put({ id: `book-1:${p}`, bookId: 'book-1', page: p, read: true, updatedAt: 1, deviceId: 'dev' });
+      }
+      await create();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(markButton()).not.toBeNull();
+      });
+      const toast = TestBed.inject(ToastService);
+      expect(toast.current()).toBeNull();
+      const marks = TestBed.inject(ReadMarkService);
+      await marks.setRange('book-1', 10, 12, true);
+      await vi.waitFor(() => expect(toast.current()?.message).toBe(PROGRESS_COPY.finishPrompt));
+      toast.dismiss();
+      await marks.setRange('book-1', 10, 12, false);
+      await marks.setRange('book-1', 10, 12, true);
+      await new Promise((r) => setTimeout(r, 100));
+      expect(toast.current()).toBeNull();
+    });
+
+    it('closing the reader releases the live read-mark query', async () => {
+      fixture?.destroy();
+      await db.books.put(makeBook({ progressMode: 'marked' }));
+      await create();
+      const marks = TestBed.inject(ReadMarkService);
+      const release = vi.spyOn(marks, 'release');
+      fixture.destroy();
+      expect(release).toHaveBeenCalledWith('book-1');
     });
   });
 });

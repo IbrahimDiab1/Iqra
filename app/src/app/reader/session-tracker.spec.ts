@@ -64,4 +64,10 @@ describe('SessionTracker', () => {
     const s = t.end(9_000);
     expect(s).toEqual({ startedAt: 1_000, endedAt: 9_000, activeMs: 8_000, pagesRead: [1] });
   });
+
+  it('endedAt never runs past the last activity plus the idle pause', () => {
+    const t = new SessionTracker(0, 1);
+    t.activity(10_000);
+    expect(t.snapshot(10_000 + 30 * 60_000).endedAt).toBe(10_000 + 120_000);
+  });
 });

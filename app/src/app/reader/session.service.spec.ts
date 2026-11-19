@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CLOCK } from '../core/clock';
 import { DB, IqraDb } from '../core/db';
 import { DEVICE_ID, newId } from '../core/ids';
+import { Repo } from '../core/repo';
 import type { Book } from '../core/models';
 import { SessionService } from './session.service';
 
@@ -107,5 +108,112 @@ describe('SessionService', () => {
     const stored = (await db.books.get('b1'))!;
     expect(stored.startedAt).toBeDefined();
     expect(stored.status).toBe('paused');
+  });
+
+  it('a failed checkpoint write is retried by the next identical checkpoint', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const repo = TestBed.inject(Repo);
+    const put = vi.spyOn(repo, 'put');
+    put.mockRejectedValueOnce(new Error('disk full'));
+    const h = service.start(book(), 1);
+    clock.t += 30_000;
+    h.activity();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    expect(await db.sessions.count()).toBe(0);
+    // No time passes, so the snapshot is identical to the one that failed.
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.waitFor(async () => expect(await db.sessions.count()).toBe(1));
+    expect(put).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalled();
+    await h.end();
+    warn.mockRestore();
+  });
+
+  describe('ending a run', () => {
+    const setVisibility = (state: 'visible' | 'hidden') =>
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue(state);
+
+    it('the app going to the background ends the run and writes the session', async () => {
+      const h = service.start(book(), 1);
+      clock.t += 8_000;
+      h.activity();
+      setVisibility('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.waitFor(async () => expect(await db.sessions.count()).toBe(1));
+      const [rec] = await db.sessions.toArray();
+      expect(rec.activeMs).toBe(8_000);
+      expect(rec.pagesRead).toEqual([1]);
+      // Activity while hidden does not start a new run.
+      clock.t += 8_000;
+      h.activity();
+      await h.end();
+      expect(await db.sessions.count()).toBe(1);
+      vi.restoreAllMocks();
+    });
+
+    it('coming back to the foreground starts a second record', async () => {
+      const h = service.start(book(), 1);
+      clock.t += 8_000;
+      h.activity();
+      const vis = setVisibility('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.waitFor(async () => expect(await db.sessions.count()).toBe(1));
+      vis.mockReturnValue('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      clock.t += 8_000;
+      h.activity();
+      await h.end();
+      expect(await db.sessions.count()).toBe(2);
+      vi.restoreAllMocks();
+    });
+
+    it('pagehide ends the run', async () => {
+      const h = service.start(book(), 1);
+      clock.t += 8_000;
+      h.activity();
+      window.dispatchEvent(new Event('pagehide'));
+      await vi.waitFor(async () => expect(await db.sessions.count()).toBe(1));
+      expect((await db.sessions.toArray())[0].activeMs).toBe(8_000);
+      await h.end();
+    });
+
+    it('30 idle minutes end the run, and endedAt is the last activity plus the 2 minute active cap', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      const start = clock.t;
+      const h = service.start(book(), 1);
+      clock.t += 10_000;
+      h.activity();
+      clock.t += 31 * 60_000;
+      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.waitFor(async () => expect(await db.sessions.count()).toBe(1));
+      const [rec] = await db.sessions.toArray();
+      expect(rec.endedAt).toBe(start + 10_000 + 120_000);
+      expect(rec.activeMs).toBe(130_000);
+      // Later activity starts a fresh run.
+      h.activity();
+      clock.t += 8_000;
+      h.activity();
+      await h.end();
+      expect(await db.sessions.count()).toBe(2);
+    });
+  });
+
+  it('a clock that moves backwards never gives negative time or NaN', async () => {
+    const start = clock.t;
+    const h = service.start(book(), 1);
+    clock.t += 10_000;
+    h.activity();
+    clock.t -= 60 * 60_000;
+    h.activity();
+    h.pageChanged(2);
+    clock.t += 5_000;
+    await h.end();
+    const [rec] = await db.sessions.toArray();
+    expect(Number.isFinite(rec.activeMs)).toBe(true);
+    expect(rec.activeMs).toBeGreaterThanOrEqual(10_000);
+    expect(rec.endedAt).toBeGreaterThanOrEqual(rec.startedAt);
+    expect(rec.startedAt).toBe(start);
   });
 });
