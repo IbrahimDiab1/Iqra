@@ -27,7 +27,6 @@ const ICON = {
   sort: '<path d="M7 4v16M3.5 16.5L7 20l3.5-3.5M17 20V4M13.5 7.5L17 4l3.5 3.5"/>',
   edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
-  swap: '<path d="M7 7h12l-3.5-3.5M17 17H5l3.5 3.5"/>',
   download: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 20h14"/>',
   filter: '<path d="M4 6h16M7 12h10M10 18h4"/>',
   cloud: '<path d="M7.5 18.5a4.5 4.5 0 0 1-.4-8.98A6 6 0 0 1 18.4 10.6 3.9 3.9 0 0 1 17.5 18.5z"/>',
@@ -40,9 +39,7 @@ const ICON = {
   zoomOut: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2M8 11h6"/>',
   grip: '<path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/>',
   highlighter: '<path d="M14.5 4.5l5 5L11 18l-5 1 1-5z"/><path d="M4 21h9"/>',
-  bookmarkFilled: '<path d="M7 4h10v16l-5-3.6L7 20z" fill="currentColor"/>',
   areaSelect: '<path d="M4 4h16v16H4z" stroke-dasharray="2.5 2.5"/><path d="M8 8h8v8H8z"/>',
-  pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/>'
 } as const;
 
 export type IconName = keyof typeof ICON;

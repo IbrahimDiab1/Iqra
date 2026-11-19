@@ -97,7 +97,7 @@ describe('FilesService', () => {
     files.openBook(book);
     await settle();
 
-    expect(router.navigate).toHaveBeenCalledWith(['/read', book.id]);
+    expect(router.navigate).toHaveBeenCalledWith(['/read', book.id], { queryParams: {} });
     expect(files.openSheetBook()).toBeNull();
   });
 
@@ -130,7 +130,7 @@ describe('FilesService', () => {
     const stored = await db.pdfFiles.get(book.id);
     expect(stored).toMatchObject({ bookId: book.id, sizeBytes: 4 });
     expect(files.downloadProgress().has(book.id)).toBe(false);
-    expect(router.navigate).toHaveBeenCalledWith(['/read', book.id]);
+    expect(router.navigate).toHaveBeenCalledWith(['/read', book.id], { queryParams: {} });
   });
 
   it('stores the PDF without opening the reader when open is false', async () => {
@@ -162,6 +162,19 @@ describe('FilesService', () => {
 
     expect(router.navigate).toHaveBeenCalledWith(['/read', book.id], { queryParams: { source: 'drive' } });
     expect(await db.pdfFiles.get(book.id)).toBeUndefined();
+  });
+
+  it('carries openBook params through the open sheet to a stream or a download', async () => {
+    const book = await uploadedBook();
+    files.openBook(book, { page: 4, a: 'x' });
+    await vi.waitFor(() => expect(files.openSheetBook()).toBe(book));
+    files.stream(book);
+    expect(router.navigate).toHaveBeenCalledWith(['/read', book.id], { queryParams: { page: 4, a: 'x', source: 'drive' } });
+
+    files.openBook(book, { page: 4, a: 'x' });
+    await vi.waitFor(() => expect(files.openSheetBook()).toBe(book));
+    await files.download(book);
+    expect(router.navigate).toHaveBeenLastCalledWith(['/read', book.id], { queryParams: { page: 4, a: 'x' } });
   });
 
   it('removes only the local PDF and keeps the book', async () => {

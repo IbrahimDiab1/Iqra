@@ -1,5 +1,5 @@
 import { Injectable, Signal, computed, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, type Params } from '@angular/router';
 import { CLOCK } from '../core/clock';
 import { DB } from '../core/db';
 import { newId } from '../core/ids';
@@ -51,8 +51,15 @@ export class FilesService {
   /** The book the remove sheet is asking about, or null when it is closed. */
   readonly removeSheetBook: Signal<Book | null> = this.removeSheet.asReadonly();
 
-  /** Opens a downloaded book, or asks how to open one that is not on this device. */
-  openBook(b: Book): void {
+  /** Query params for the reader, held while the open sheet decides how to open that book. */
+  private openParams: Params | undefined;
+
+  /**
+   * Opens a downloaded book, or asks how to open one that is not on this device.
+   * `params` (for example a page and an annotation) go to the reader whichever way it opens.
+   */
+  openBook(b: Book, params?: Params): void {
+    this.openParams = params;
     void this.resolveOpen(b);
   }
 
@@ -94,7 +101,7 @@ export class FilesService {
   /** Opens a book by reading its PDF from Drive. Nothing is stored. */
   stream(b: Book): void {
     this.openSheet.set(null);
-    void this.router.navigate(['/read', b.id], { queryParams: { source: 'drive' } });
+    void this.router.navigate(['/read', b.id], { queryParams: { ...this.takeOpenParams(), source: 'drive' } });
   }
 
   /** Deletes the local PDF and keeps the book and its notes. */
@@ -174,6 +181,7 @@ export class FilesService {
 
   closeOpenSheet(): void {
     this.openSheet.set(null);
+    this.openParams = undefined;
   }
 
   closeRemoveSheet(): void {
@@ -226,6 +234,12 @@ export class FilesService {
   }
 
   private navigateToBook(id: ID): void {
-    void this.router.navigate(['/read', id]);
+    void this.router.navigate(['/read', id], { queryParams: this.takeOpenParams() });
+  }
+
+  private takeOpenParams(): Params {
+    const held = this.openParams;
+    this.openParams = undefined;
+    return held ?? {};
   }
 }

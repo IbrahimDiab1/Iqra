@@ -82,9 +82,11 @@ describe('ReaderPage', () => {
   let open: ReturnType<typeof vi.fn>;
   let positions: { restore: ReturnType<typeof vi.fn>; schedule: ReturnType<typeof vi.fn>; markOpened: ReturnType<typeof vi.fn>; flush: ReturnType<typeof vi.fn> };
   let restored: RestoredPosition;
+  let query: Map<string, string>;
 
   beforeEach(async () => {
     localStorage.clear();
+    query = new Map();
     db = new IqraDb(`iqra-test-${newId()}`);
     session = new FakeSession();
     open = vi.fn(async () => session);
@@ -105,7 +107,7 @@ describe('ReaderPage', () => {
         { provide: DRIVE_ADAPTER, useValue: new FakeDrive() },
         { provide: PositionService, useValue: positions },
         { provide: PDF_OPENER, useValue: open },
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: new Map([['bookId', 'book-1']]), queryParamMap: new Map() } } },
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: new Map([['bookId', 'book-1']]), queryParamMap: query } } },
       ],
     });
   });
@@ -718,6 +720,55 @@ describe('ReaderPage', () => {
         expect(el.querySelector('iqra-note-sheet .panel.open')).not.toBeNull();
       });
       expect(el.querySelector('iqra-note-sheet .quote')!.textContent).toContain('Hello');
+    });
+  });
+
+  describe('opening at an annotation (?page=&a=)', () => {
+    const stateOf = () => (fixture.componentInstance as unknown as { state(): { flash(): string | null } }).state();
+
+    async function seedHighlight(deleted = false): Promise<void> {
+      await db.annotations.put({
+        id: 'ann-1', bookId: 'book-1', deviceId: 'dev', updatedAt: 1, type: 'highlight', page: 7, color: 'green', tags: [], createdAt: 1,
+        ...(deleted ? { deleted: true } : {}),
+        text: { page: 7, start: { item: 0, offset: 0 }, end: { item: 0, offset: 3 }, quote: 'Hel', rects: [{ x: 0.1, y: 0.4, w: 0.2, h: 0.02 }] },
+      });
+    }
+
+    it('shows that page and flashes the annotation', async () => {
+      restored = { place: { page: 3, offset: 0 }, zoom: 1, view: 'page', fromOtherDevice: false };
+      query.set('page', '7');
+      query.set('a', 'ann-1');
+      await seedHighlight();
+      await create();
+      expect(label()).toContain(COPY.reader.pageOf(7, 50));
+      expect(stateOf().flash()).toBe('ann-1');
+      expect(btn(COPY.reader.jumpBack)!.disabled).toBe(false);
+    });
+
+    it('is not overwritten by the other-device position toast', async () => {
+      restored = { place: { page: 20, offset: 0 }, zoom: 1, view: 'page', fromOtherDevice: true, previousLocal: { page: 3, offset: 0 } };
+      query.set('page', '7');
+      await create();
+      expect(label()).toContain(COPY.reader.pageOf(7, 50));
+      expect(TestBed.inject(ToastService).current()).toBeNull();
+    });
+
+    it('ignores an invalid page', async () => {
+      query.set('page', 'abc');
+      query.set('a', 'ann-1');
+      await seedHighlight();
+      await create();
+      expect(label()).toContain(COPY.reader.pageOf(7, 50));
+      expect(stateOf().flash()).toBeNull();
+    });
+
+    it('does not flash a deleted annotation', async () => {
+      query.set('page', '9');
+      query.set('a', 'ann-1');
+      await seedHighlight(true);
+      await create();
+      expect(label()).toContain(COPY.reader.pageOf(9, 50));
+      expect(stateOf().flash()).toBeNull();
     });
   });
 });

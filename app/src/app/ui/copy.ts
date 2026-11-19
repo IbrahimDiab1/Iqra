@@ -49,7 +49,7 @@ export const COPY = {
   },
   // Added in Task 2 for the app shell and placeholder pages.
   nav: { library: 'Library', notes: 'Notes', stats: 'Stats' },
-  placeholder: { soon: 'Coming soon', notesNext: 'Highlights and notes arrive next.', statsNext: 'Stats arrive after the reader.', notesTitle: 'Notes', notesText: 'Every highlight, note and summary from all your books, searchable in one place.', statsTitle: 'Stats', statsText: 'Your reading time, pages and weekly goals.' },
+  placeholder: { soon: 'Coming soon', statsNext: 'Stats arrive after the reader.', notesTitle: 'Notes', statsTitle: 'Stats', statsText: 'Your reading time, pages and weekly goals.' },
   annotations: {
     highlight: 'Highlight',
     note: 'Note',
@@ -94,6 +94,9 @@ export const COPY = {
     showLess: 'Show less',
     colorLabel: 'Color',
     scopeBook: 'Whole book',
+    hubEmpty: 'Highlights, notes and summaries from all your books will show up here.',
+    hubNoResults: 'Nothing matches. Try fewer words or clear the filters.',
+    hubSearch: 'Search notes, tags and books',
     pageRange: (a: number, b: number) => `p. ${a}–${b}`,
   },
 } as const;

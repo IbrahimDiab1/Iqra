@@ -56,6 +56,8 @@ type Status = 'loading' | 'ready' | { error: string };
 
 const SYNC_TOAST_MS = 8000;
 const AREA_HINT_MS = 4000;
+/** A jump to an annotation lands a little above it. */
+const ANNOTATION_JUMP_MARGIN = 0.05;
 
 @Component({
   selector: 'iqra-reader-page',
@@ -458,6 +460,8 @@ export class ReaderPage implements OnDestroy {
       const restored = await this.positions.restore(book);
       const state = new ReaderState(book, this.positions);
       state.init(restored);
+      const target = await this.openTarget(book.id, book.pageCount);
+      if (target) state.jumpTo(target.place);
       this.session()?.destroy();
       this.book.set(book);
       this.annotationSource.set(this.annotationService.forBook(book.id));
@@ -466,7 +470,8 @@ export class ReaderPage implements OnDestroy {
       this.state.set(state);
       this.status.set('ready');
       this.positions.markOpened(book).catch((err) => console.warn('Could not record the open', err));
-      if (restored.fromOtherDevice && restored.previousLocal) {
+      if (target?.flashId) state.flashAnnotation(target.flashId);
+      if (!target && restored.fromOtherDevice && restored.previousLocal) {
         const back = restored.previousLocal;
         this.toast.show(COPY.reader.syncedFrom(back.page), {
           actionLabel: COPY.reader.backAction,
@@ -480,6 +485,23 @@ export class ReaderPage implements OnDestroy {
       if (this.destroyed || id !== this.loadId) return;
       this.status.set({ error: this.errorMessage(err) });
     }
+  }
+
+  /**
+   * Where `?page=` (and `?a=` for the annotation to flash) ask to open: a little above the
+   * annotation when it still exists. Invalid values are ignored.
+   */
+  private async openTarget(bookId: string, pageCount: number): Promise<{ place: Place; flashId?: string } | null> {
+    const params = this.route.snapshot.queryParamMap;
+    const raw = params.get('page');
+    if (raw === null || !/^\d+$/.test(raw)) return null;
+    const page = Number(raw);
+    if (page < 1 || page > pageCount) return null;
+    const id = params.get('a');
+    const ann = id ? await this.db.annotations.get(id) : undefined;
+    if (!ann || ann.deleted || ann.bookId !== bookId || ann.page !== page) return { place: { page, offset: 0 } };
+    const y = (ann.type === 'area' ? ann.rect?.y : ann.text?.rects[0]?.y) ?? 0;
+    return { place: { page, offset: Math.max(0, y - ANNOTATION_JUMP_MARGIN) }, flashId: ann.id };
   }
 
   private errorMessage(err: unknown): string {

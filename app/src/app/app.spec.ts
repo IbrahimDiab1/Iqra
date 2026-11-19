@@ -42,10 +42,10 @@ describe('App shell', () => {
 
   it('switches route when a tab is pressed', async () => {
     await go('/library');
-    el.querySelectorAll<HTMLElement>('nav.tabbar a.tab')[1].click();
+    el.querySelectorAll<HTMLElement>('nav.tabbar a.tab')[2].click();
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(router.url).toBe('/notes');
+    expect(router.url).toBe('/stats');
     expect(el.textContent).toContain('Coming soon');
   });
 

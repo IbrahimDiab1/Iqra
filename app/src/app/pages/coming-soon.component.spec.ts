@@ -10,15 +10,15 @@ describe('ComingSoonPage', () => {
       providers: [
         {
           provide: ActivatedRoute,
-          useValue: { snapshot: { data: { icon: 'notes', title: COPY.placeholder.notesTitle, text: COPY.placeholder.notesText, next: COPY.placeholder.notesNext } } },
+          useValue: { snapshot: { data: { icon: 'stats', title: COPY.placeholder.statsTitle, text: COPY.placeholder.statsText, next: COPY.placeholder.statsNext } } },
         },
       ],
     });
     const fixture = TestBed.createComponent(ComingSoonPage);
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('h1')!.textContent).toBe('Notes');
-    expect(el.textContent).toContain(COPY.placeholder.notesText);
+    expect(el.querySelector('h1')!.textContent).toBe(COPY.placeholder.statsTitle);
+    expect(el.textContent).toContain(COPY.placeholder.statsText);
     expect(el.querySelector('.pill')!.textContent).toBe(COPY.placeholder.soon);
   });
 });
