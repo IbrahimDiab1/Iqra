@@ -2,7 +2,7 @@
 
 A personal PDF reader that runs in the browser and installs like an app on Android and Windows. Your books live in **your own Google Drive**, so there is no server to run and nothing to pay for. Your library, reading position, highlights and notes stay in sync across devices.
 
-> **Status: early development.** Plans 1 (foundation and library), 2 (the reader), 3 (highlights, notes and the Notes hub) and 4 (reading time, progress and stats) are built. See [Roadmap](#roadmap).
+> **Status: early development.** Plans 1 (foundation and library), 2 (the reader), 3 (highlights, notes and the Notes hub) 4 (reading time, progress and stats) and 5 (settings, storage, your data and Calendar reminders) are built. The Calendar reminders have not yet been run against real Google; see `docs/deploy-and-test.md`. See [Roadmap](#roadmap).
 
 ## What works today
 
@@ -29,7 +29,7 @@ A personal PDF reader that runs in the browser and installs like an app on Andro
 | 2 (done) | The reader: page view and reading mode, swipe and scroll, zoom, back/forward, opening at your last place, search in the book |
 | 3 (done) | Highlights, notes, summaries, bookmarks, the Contents & notes panel, the Notes hub |
 | 4 (done) | Reading time, progress and chapter progress, weekly goals, stats |
-| 5 | Settings, storage, managing downloads, export, reading reminders |
+| 5 (done) | Settings, storage, managing downloads, notes export, backup and restore, Google Calendar reading reminders |
 | Later | Language notebook (translate to Arabic, flashcards), OCR, text-to-speech |
 
 ## Known issues

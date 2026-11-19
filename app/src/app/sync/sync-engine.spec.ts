@@ -6,7 +6,7 @@ import { FakeAuthService } from '../auth/fake-auth.service';
 import { CLOCK } from '../core/clock';
 import { DB, IqraDb } from '../core/db';
 import { DEVICE_ID } from '../core/ids';
-import type { Annotation, Book, Category, Goal, ID, ReadMark, ReadingSession } from '../core/models';
+import type { Annotation, Book, Category, Goal, ID, ReadMark, ReadingSession, Settings } from '../core/models';
 import { Repo } from '../core/repo';
 import { UploadQueue } from '../books/upload-queue';
 import { DRIVE_ADAPTER, DriveAuthError } from './drive-adapter';
@@ -507,6 +507,67 @@ describe('SyncEngine', () => {
     expect(a.engine.status()).toBe('synced');
     const remote = await remoteShard(drive, 'library.json');
     expect(remote.tables.categories?.map((r) => r.id)).toEqual(['c1']);
+  });
+
+  it('settings edited on two devices converge to the newer one, reminders included', async () => {
+    const base: Omit<Settings, 'updatedAt' | 'deviceId'> = {
+      id: 'settings',
+      defaultProgressMode: 'last-page',
+      defaultPageMode: 'swipe',
+      defaultView: 'page',
+      readerTheme: 'paper',
+      weekStartsOn: 6,
+      reminders: { enabled: true, time: '21:00', days: [1, 3] },
+      cardDirection: 'mixed',
+    };
+    a.clock.t = 2000;
+    await a.repo.put<Settings>('settings', base);
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    expect((await b.db.settings.get('settings'))?.reminders.time).toBe('21:00');
+
+    // B edits later, A edits earlier than B but without having seen B's edit.
+    b.clock.t = 4000;
+    await b.repo.put<Settings>('settings', { ...base, reminders: { enabled: true, time: '06:15', days: [0], calendarId: 'cal-1' }, weekStartsOn: 1 });
+    a.clock.t = 3000;
+    await a.repo.put<Settings>('settings', { ...base, reminders: { enabled: false } });
+
+    await b.engine.syncNow();
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+
+    for (const device of [a, b]) {
+      const s = await device.db.settings.get('settings');
+      expect(s?.reminders).toEqual({ enabled: true, time: '06:15', days: [0], calendarId: 'cal-1' });
+      expect(s?.weekStartsOn).toBe(1);
+    }
+  });
+
+  it('a restored older settings record never replaces a newer synced one', async () => {
+    const base: Omit<Settings, 'updatedAt' | 'deviceId'> = {
+      id: 'settings',
+      defaultProgressMode: 'last-page',
+      defaultPageMode: 'swipe',
+      defaultView: 'page',
+      readerTheme: 'paper',
+      weekStartsOn: 6,
+      reminders: { enabled: true, time: '21:00' },
+      cardDirection: 'mixed',
+    };
+    a.clock.t = 5000;
+    await a.repo.put<Settings>('settings', base);
+    await a.engine.syncNow();
+
+    // An old record that reaches device B as-is (a stale backup would) and is marked dirty, so B pushes it.
+    await b.engine.syncNow();
+    const stale: Settings = { ...base, reminders: { enabled: false }, updatedAt: 100, deviceId: 'device-b' };
+    await b.db.settings.put(stale);
+    await b.db.syncState.put({ shard: 'library.json', dirty: true });
+    await b.engine.syncNow();
+    await a.engine.syncNow();
+
+    expect((await a.db.settings.get('settings'))?.reminders).toEqual({ enabled: true, time: '21:00' });
+    expect((await b.db.settings.get('settings'))?.reminders).toEqual({ enabled: true, time: '21:00' });
   });
 
   it('uses the catalog and import transactions without losing the dirty flag', async () => {

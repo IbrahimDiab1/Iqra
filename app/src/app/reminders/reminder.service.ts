@@ -9,6 +9,7 @@ import { SettingsService } from '../core/settings.service';
 import { SyncEngine } from '../sync/sync-engine';
 import { BUILTIN_QUOTES } from './builtin-quotes';
 import { CALENDAR_API, CALENDAR_SCOPE, CalendarAuthError, type CalendarApi, type CalendarEvent } from './calendar-api';
+import { exposeE2eHandles } from '../e2e-hooks';
 import { FakeCalendar } from './fake-calendar';
 import { GoogleCalendar } from './google-calendar';
 import { pickQuote } from './quotes';
@@ -21,6 +22,12 @@ const OUR_EVENT_ID = /^iqra(test)?\d+$/;
 export interface FillResult {
   created: number;
   removed: number;
+}
+
+/** e2e builds only: lets tests read the in-memory calendar. */
+function exposeFakeCalendar(calendar: FakeCalendar): FakeCalendar {
+  exposeE2eHandles({ __iqraCalendar: calendar });
+  return calendar;
 }
 
 /** Local time as ISO 8601 with the UTC offset, e.g. 2026-11-21T21:30:00+03:00. */
@@ -49,7 +56,7 @@ export class ReminderService {
   private readonly settings = inject(SettingsService);
   private readonly sync = inject(SyncEngine);
   private readonly calendar: CalendarApi =
-    inject(CALENDAR_API, { optional: true }) ?? (FAKE_DRIVE ? new FakeCalendar() : new GoogleCalendar((scope) => this.auth.scopeToken(scope)));
+    inject(CALENDAR_API, { optional: true }) ?? (FAKE_DRIVE ? exposeFakeCalendar(new FakeCalendar()) : new GoogleCalendar((scope) => this.auth.scopeToken(scope)));
 
   /** True when Calendar permission has to be granted again (after a reload or a revoke). */
   readonly needsPermission = signal(false);

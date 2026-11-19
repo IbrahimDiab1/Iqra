@@ -77,3 +77,42 @@ Real-device checks for reading time, progress and goals that the automated tests
 - **Mark read:** in marked mode, the Mark read button toggles the current page, the library progress follows, and checking a chapter in Contents marks every page of it (unchecking clears them). Switching back to last-page mode keeps both sets of data.
 - **Very large PDF:** open a book of 600 or more pages with many chapters. Contents opens quickly and every chapter shows a progress bar.
 - **Clock and time zone change:** move the phone's clock back by an hour, or change its time zone, while reading. Time read never goes negative and the same page is not counted twice on one day.
+
+## 10. Settings and reminders checks
+
+Real-device checks for Settings, your data and Calendar reminders. The automated tests run against fakes (fake Drive, fake Calendar), so none of this has been proven against Google yet.
+
+### Reminders: first run against real Google Calendar
+
+The real Calendar adapter (`reminders/google-calendar.ts`) has never talked to Google. Do these steps in order on one phone, with the browser's remote debugging or a desktop browser open next to it so you can read the network and console errors.
+
+1. **Prepare Google Cloud** (`docs/setup-google.md`, step 2): in the "Iqra" project, **enable the Google Calendar API** (APIs & Services → Library → Google Calendar API → Enable), and **add the scope `https://www.googleapis.com/auth/calendar.app.created`** to the OAuth consent screen. Without the API enabled, Google answers 403 "Calendar API has not been used in project..." and Iqra shows "Reminders stay off". Without the scope on the consent screen, the grant is refused or the token lacks the scope.
+2. **Sign in normally first.** The sign-in page must not mention Calendar. Reminders must not ask for anything at sign-in. If a Calendar permission shows up here, that is a bug.
+3. **Settings → Reminders → switch on.** Look for: Google's consent window listing only "See, create, and delete secondary Google calendars you have created" (the app-created scope). On an unverified or Testing app also the "Google hasn't verified this app" notice: Advanced → Go to Iqra. After you accept, the switch stays on and the "Connecting to Google Calendar…" line goes away.
+4. **Open Google Calendar** (calendar.google.com or the app) and check that:
+   - a calendar named **Iqra** exists in "My calendars" (if the name or color is wrong, note it);
+   - it holds up to **14 days** of single events (not a repeating series), at your chosen time, **15 minutes long**, on the chosen days only;
+   - the title is `Time to read · <book title>` of the book you opened most recently (or `Time to read` with no book);
+   - the description has the quote, its source (book and page for a highlight) and a link that opens the app at that book;
+   - each event has a **popup reminder at the start** (open one event: "Notification, 0 minutes before").
+5. **The popup reaches the phone.** Set the time to 3 minutes from now (the "Send a test reminder" button adds one about 2 minutes ahead). On the phone, the Google Calendar app must show a notification with the quote at that time. Calendar notifications must be allowed in Android/iOS settings; if nothing arrives, check that the Iqra calendar is shown and notifications are on for it in the Calendar app (Settings → Iqra).
+6. **Changing days or time rebuilds.** Change the time and untick a day. After about a second, old future events disappear and new ones appear at the new time. Switch the quote source. Count the events: no duplicates, still at most 14 days.
+7. **Re-opening the app repeatedly** (close and open it five times in a minute): the event count must not grow. Then leave it for a day and open it again: the window slides forward by one day and keeps exactly 14 days.
+8. **Two devices:** on the second device sign in, open Settings → Account → Sync now, wait until Settings show reminders on, then turn on there. Look in Calendar: still **one** Iqra calendar and no doubled events. Open the app on both devices: still no doubles. (If a second "Iqra" calendar appears, the calendar id did not sync before enabling; report it.)
+9. **Revoked permission:** at <https://myaccount.google.com/permissions> remove Iqra's access, reload the app. Reminders show "Iqra needs Google Calendar access again" with a Reconnect button, and there is no retry loop (check the network tab: no repeating Calendar requests). Reconnect restores them.
+10. **Switch off:** answer "Yes" to remove upcoming reminders. The events disappear from the Iqra calendar. Switch on again: they come back (Google keeps deleted event ids reserved; Iqra must still be able to recreate them. If events do not come back after remove and re-enable, report it).
+11. **Time zone and daylight saving:** change the phone's time zone, reopen the app. Events stay at your chosen local time in the new zone (21:30 stays 21:30). Around a daylight saving change, the events after the change are still at the chosen local time.
+12. **What to record if anything fails:** the HTTP status and message of the failing request (Network tab), the exact toast or line shown in Settings, and whether the Iqra calendar exists in Google Calendar.
+
+### Settings, storage and your data
+
+- **Settings from the gear:** the Library gear opens Settings. The account email shows. Back returns to the Library.
+- **Reading defaults:** change the week start, default progress mode, page mode and theme, reload, and they are kept. On a second device they arrive after a sync.
+- **Categories:** add, rename, reorder, delete with Undo. A deleted category disappears from books that used it, and Undo brings it back.
+- **Sign out, keep data:** signs out, local books stay. Signing back in finds them.
+- **Sign out and clear this device:** after confirming, the device shows the welcome screen and nothing is left (check Application → IndexedDB in the browser tools). Nothing is deleted from Drive: sign in again and the library is pulled back. Cancel at the confirm sheet keeps everything.
+- **Storage:** with a library of a few hundred MB, the Drive bar and the "Used by Iqra" number match what Google Drive shows (drive.google.com → Storage, and "Hidden app data" for synced records). With a Google account that has unlimited storage there is no percentage and no broken bar. The device bar matches Chrome's Site settings storage use within a few MB.
+- **Manage downloads:** lists downloaded books with sizes, largest first. Removing one frees space and the book stays in the library as "Not downloaded". A book still uploading stays and says so. "Remove all" asks first.
+- **Sync on mobile data:** turn it off, switch the phone to cellular only, change something, and no sync happens until Wi-Fi returns. Turn it on and it syncs on cellular.
+- **Export notes:** the zip opens on the phone and on a computer; there is one Markdown file per book with notes, Arabic shows correctly, and a title with `/ : ? "` still gives a valid file name.
+- **Backup and restore:** take a backup, then on a second device (or after clearing the first) restore it. Books and notes come back, and nothing newer on the device is overwritten. Restoring a random file shows an error and changes nothing.
