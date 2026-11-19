@@ -791,4 +791,91 @@ describe('ReaderPage', () => {
       expect(stateOf().flash()).toBeNull();
     });
   });
+  describe('progress', () => {
+    const markButton = () => el.querySelector<HTMLButtonElement>('button.mark-read');
+
+    it('shows the Mark read button only in marked mode, and it toggles', async () => {
+      await create();
+      expect(markButton()).toBeNull();
+      fixture.destroy();
+      await db.books.put(makeBook({ progressMode: 'marked' }));
+      await create();
+      const b = markButton()!;
+      expect(b.textContent).toContain(COPY.progress.markRead);
+      expect(b.getAttribute('aria-pressed')).toBe('false');
+      b.click();
+      await vi.waitFor(async () => {
+        fixture.detectChanges();
+        expect((await db.readMarks.get('book-1:7'))?.read).toBe(true);
+        expect(markButton()!.getAttribute('aria-pressed')).toBe('true');
+      });
+      expect(markButton()!.textContent).toContain(COPY.progress.markedRead);
+      markButton()!.click();
+      await vi.waitFor(async () => expect((await db.readMarks.get('book-1:7'))?.read).toBe(false));
+    });
+
+    it('offers to mark finished once when the last page is reached, and the action finishes the book', async () => {
+      await create();
+      const toast = TestBed.inject(ToastService);
+      expect(toast.current()).toBeNull();
+      pager().pageChange.emit(50);
+      fixture.detectChanges();
+      expect(toast.current()?.message).toBe(COPY.progress.finishPrompt);
+      expect(toast.current()?.actionLabel).toBe(COPY.progress.markFinished);
+      toast.dismiss();
+      pager().pageChange.emit(49);
+      fixture.detectChanges();
+      pager().pageChange.emit(50);
+      fixture.detectChanges();
+      expect(toast.current()).toBeNull();
+
+      pager().pageChange.emit(49);
+      fixture.detectChanges();
+      pager().pageChange.emit(50);
+      fixture.detectChanges();
+      expect(toast.current()).toBeNull();
+    });
+
+    it('the finish action sets status and finishedAt', async () => {
+      await create();
+      const toast = TestBed.inject(ToastService);
+      pager().pageChange.emit(50);
+      fixture.detectChanges();
+      toast.undo();
+      await vi.waitFor(async () => {
+        const stored = (await db.books.get('book-1'))!;
+        expect(stored.status).toBe('finished');
+        expect(stored.finishedAt).toBe(5000);
+      });
+    });
+
+    it('does not offer it again for a book already at its end or finished', async () => {
+      fixture?.destroy();
+      await db.books.put(makeBook({ lastPageReached: 50 }));
+      await create();
+      pager().pageChange.emit(50);
+      fixture.detectChanges();
+      expect(TestBed.inject(ToastService).current()).toBeNull();
+    });
+
+    it('in marked mode, marking the last unmarked page offers it', async () => {
+      fixture?.destroy();
+      await db.books.put(makeBook({ progressMode: 'marked' }));
+      for (let p = 1; p <= 50; p++) {
+        if (p !== 7) await db.readMarks.put({ id: `book-1:${p}`, bookId: 'book-1', page: p, read: true, updatedAt: 1, deviceId: 'dev' });
+      }
+      await create();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(markButton()).not.toBeNull();
+      });
+      pager().pageChange.emit(50);
+      fixture.detectChanges();
+      expect(TestBed.inject(ToastService).current()).toBeNull();
+      pager().pageChange.emit(7);
+      fixture.detectChanges();
+      markButton()!.click();
+      await vi.waitFor(() => expect(TestBed.inject(ToastService).current()?.message).toBe(COPY.progress.finishPrompt));
+    });
+  });
 });

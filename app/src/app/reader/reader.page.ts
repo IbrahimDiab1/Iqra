@@ -11,6 +11,7 @@ import {
   computed,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
@@ -21,10 +22,13 @@ import { NoteSheetComponent } from '../annotations/note-sheet.component';
 import { TextEditorSheet } from '../annotations/text-editor.sheet';
 import { findSummary } from '../annotations/summary-scope';
 import { tagSuggestionsFrom } from '../annotations/tag-input.component';
+import { CLOCK } from '../core/clock';
 import { DB } from '../core/db';
 import { newId } from '../core/ids';
 import type { Annotation, Book, Rect, SummaryScope } from '../core/models';
+import { Repo } from '../core/repo';
 import { SettingsService } from '../core/settings.service';
+import { ReadMarkService } from '../progress/read-mark.service';
 import { DRIVE_ADAPTER } from '../sync/drive-adapter';
 import { COPY } from '../ui/copy';
 import { icon, type IconName } from '../ui/icons';
@@ -37,6 +41,7 @@ import { PagerComponent } from './pager.component';
 import { PdfSession, ReaderOpenError, type PageRenderer, type PdfSource } from './pdf-session';
 import { PositionService } from './position.service';
 import { ReaderState } from './reader.state';
+import { SessionService, type ReaderSessionHandle } from './session.service';
 import { ReadingSettingsSheetComponent } from './reading-settings.sheet';
 import { ReflowViewComponent } from './reflow-view.component';
 import { ScrollerComponent } from './scroller.component';
@@ -58,6 +63,7 @@ const SYNC_TOAST_MS = 8000;
 const AREA_HINT_MS = 4000;
 /** A jump to an annotation lands a little above it. */
 const ANNOTATION_JUMP_MARGIN = 0.05;
+const FINISH_TOAST_MS = 8000;
 
 @Component({
   selector: 'iqra-reader-page',
@@ -222,6 +228,11 @@ const ANNOTATION_JUMP_MARGIN = 0.05;
             <div class="r-row" [attr.dir]="rtl() ? 'rtl' : null">
               <button type="button" class="ib" [attr.aria-label]="copy.prevPage" [disabled]="s.page() <= 1" (click)="step(-1)" [innerHTML]="ic(rtl() ? 'chevR' : 'chevL')"></button>
               <span class="pg" dir="ltr">{{ copy.pageOf(preview() ?? s.page(), r.numPages) }} <span>· {{ percent() }}%</span></span>
+              @if (b.progressMode === 'marked') {
+                <button type="button" class="pill mark-read" [attr.aria-pressed]="pageMarked()" [class.on]="pageMarked()" (click)="toggleMark()">
+                  {{ pageMarked() ? progressCopy.markedRead : progressCopy.markRead }}
+                </button>
+              }
               <button type="button" class="pill" (click)="openPanel('contents')">
                 {{ copy.contents }}
                 @if (pageNoteCount() > 0) {
@@ -312,6 +323,7 @@ const ANNOTATION_JUMP_MARGIN = 0.05;
     .pg { flex: 1; min-width: 0; font-size: 13px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
     .pg span { color: color-mix(in srgb, var(--ink) 55%, transparent); }
     .badge { display: inline-block; min-width: 18px; margin-inline-start: 6px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: var(--on-accent, #fff); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
+    .pill.on { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: var(--accent); color: var(--accent); }
     .pill { min-height: 40px; padding: 0 14px; border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); border-radius: 999px; background: none; color: inherit; font: 13px var(--ui); cursor: pointer; }
     .r-range { display: flex; align-items: center; padding: 0 6px; }
     .r-range input { direction: inherit; flex: 1; min-width: 0; min-height: 24px; accent-color: var(--accent); }
@@ -326,6 +338,7 @@ const ANNOTATION_JUMP_MARGIN = 0.05;
 export class ReaderPage implements OnDestroy {
   protected readonly copy = COPY.reader;
   protected readonly annCopy = COPY.annotations;
+  protected readonly progressCopy = COPY.progress;
   protected readonly zoomIn = zoomIn;
   protected readonly zoomOut = zoomOut;
 
@@ -336,10 +349,14 @@ export class ReaderPage implements OnDestroy {
   private readonly positions = inject(PositionService);
   private readonly settings = inject(SettingsService);
   private readonly toast = inject(ToastService);
+  private readonly clock = inject(CLOCK);
+  private readonly sessions = inject(SessionService);
+  private readonly readMarks = inject(ReadMarkService);
   private readonly open = inject(PDF_OPENER);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly annotationService = inject(AnnotationService);
+  private readonly repo = inject(Repo);
   protected readonly selection = inject(SelectionService);
   private readonly scroller = viewChild(ScrollerComponent);
   private readonly topBar = viewChild<ElementRef<HTMLElement>>('topBar');
@@ -358,6 +375,13 @@ export class ReaderPage implements OnDestroy {
     return typeof s === 'string' ? '' : s.error;
   });
   protected readonly book = signal<Book | null>(null);
+  private readonly markSource = signal<Signal<ReadonlySet<number> | undefined> | null>(null);
+  private readonly marked = computed(() => this.markSource()?.() ?? new Set<number>());
+  /** Whether the current page is marked read (marked mode). */
+  protected readonly pageMarked = computed(() => this.marked().has(this.state()?.page() ?? 0));
+  private tracking: ReaderSessionHandle | null = null;
+  /** The finish prompt is offered once per open. */
+  private finishOffered = false;
   private readonly annotationSource = signal<Signal<Annotation[] | undefined> | null>(null);
   /** This book's live annotations. */
   protected readonly annotations = computed(() => this.annotationSource()?.() ?? []);
@@ -407,12 +431,36 @@ export class ReaderPage implements OnDestroy {
     return s && n > 0 ? Math.round(((this.preview() ?? s.page()) / n) * 100) : 0;
   });
 
+  private stopListening: () => void = () => undefined;
   private destroyed = false;
   private loadId = 0;
 
   constructor() {
     this.measure(this.topBar, this.topH);
     this.measure(this.bottomBar, this.bottomH);
+    effect(() => {
+      const s = this.state();
+      if (!s) return;
+      const page = s.page();
+      untracked(() => {
+        this.tracking?.pageChanged(page);
+        this.offerFinishAtEnd(page);
+      });
+    });
+    effect(() => {
+      this.state()?.zoom();
+      untracked(() => this.tracking?.activity());
+    });
+    const activity = () => this.tracking?.activity();
+    const root = this.host.nativeElement;
+    for (const type of ['pointerdown', 'wheel', 'keydown', 'touchmove', 'scroll']) {
+      root.addEventListener(type, activity, { capture: true, passive: true });
+    }
+    document.addEventListener('selectionchange', activity);
+    this.stopListening = () => {
+      for (const type of ['pointerdown', 'wheel', 'keydown', 'touchmove', 'scroll']) root.removeEventListener(type, activity, { capture: true });
+      document.removeEventListener('selectionchange', activity);
+    };
     void this.load();
   }
 
@@ -474,6 +522,10 @@ export class ReaderPage implements OnDestroy {
       this.session.set(session);
       this.state.set(state);
       this.status.set('ready');
+      void this.tracking?.end();
+      this.tracking = this.sessions.start(book, state.page());
+      this.finishOffered = false;
+      this.markSource.set(this.readMarks.marked(book.id));
       this.positions.markOpened(book).catch((err) => console.warn('Could not record the open', err));
       if (target?.flashId) state.flashAnnotation(target.flashId);
       if (!target && restored.fromOtherDevice && restored.previousLocal) {
@@ -775,8 +827,58 @@ export class ReaderPage implements OnDestroy {
     if (document.visibilityState === 'hidden') void this.state()?.flush();
   }
 
+  /** Last-page mode: reaching the final page for the first time offers to mark the book finished. */
+  private offerFinishAtEnd(page: number): void {
+    const b = this.book();
+    if (!b || b.progressMode !== 'last-page' || b.pageCount <= 0 || page < b.pageCount) return;
+    if (b.lastPageReached >= b.pageCount) return;
+    this.offerFinish();
+  }
+
+  protected async toggleMark(): Promise<void> {
+    const s = this.state();
+    const b = this.book();
+    if (!s || !b) return;
+    const page = s.page();
+    const set = this.marked();
+    const completes = !set.has(page) && set.size + 1 >= b.pageCount;
+    try {
+      await this.readMarks.toggle(b.id, page);
+      if (completes) this.offerFinish();
+    } catch (err) {
+      console.warn('Could not change the read mark', err);
+      this.toast.show(COPY.annotations.saveFailed);
+    }
+  }
+
+  private offerFinish(): void {
+    const b = this.book();
+    if (!b || b.status === 'finished' || this.finishOffered) return;
+    this.finishOffered = true;
+    this.toast.show(COPY.progress.finishPrompt, {
+      actionLabel: COPY.progress.markFinished,
+      durationMs: FINISH_TOAST_MS,
+      undo: () => void this.markFinished(b.id),
+    });
+  }
+
+  private async markFinished(bookId: string): Promise<void> {
+    try {
+      const stored = await this.db.books.get(bookId);
+      if (!stored || stored.deleted) return;
+      const saved = await this.repo.put<Book>('books', { ...stored, status: 'finished', finishedAt: this.clock.now() });
+      if (!this.destroyed) this.book.set(saved);
+    } catch (err) {
+      console.warn('Could not mark the book finished', err);
+      this.toast.show(COPY.annotations.saveFailed);
+    }
+  }
+
   ngOnDestroy(): void {
     this.destroyed = true;
+    this.stopListening();
+    void this.tracking?.end();
+    this.tracking = null;
     void this.state()?.flush();
     this.session()?.destroy();
   }
