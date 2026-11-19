@@ -1,6 +1,7 @@
 // SVG path markup from the prototype's ICON object (folio-prototype.html).
+const CHEV_LEFT = '<path d="M15 18l-6-6 6-6"/>';
 const ICON = {
-  back: '<path d="M15 18l-6-6 6-6"/>',
+  back: CHEV_LEFT,
   search: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
   bookmark: '<path d="M7 4h10v16l-5-3.6L7 20z"/>',
   bookmarkFill: '<path d="M7 4h10v16l-5-3.6L7 20z" fill="currentColor"/>',
@@ -8,7 +9,7 @@ const ICON = {
   area: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
   reflow: '<path d="M4 6h16M4 10.5h16M4 15h11M4 19.5h7"/>',
   pageview: '<rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M8.5 7.5h7M8.5 11h7M8.5 14.5h4"/>',
-  chevL: '<path d="M15 18l-6-6 6-6"/>',
+  chevL: CHEV_LEFT,
   chevR: '<path d="M9 6l6 6-6 6"/>',
   note: '<path d="M5 4h10l4 4v12H5z"/><path d="M9 12h6M9 16h4"/>',
   tag: '<path d="M3.5 12.5V4h8.5l8.5 8.5-8 8z"/><circle cx="8" cy="8.5" r="1.3"/>',

@@ -55,6 +55,8 @@ export const COPY = {
     markedRead: 'Marked as read',
     finishPrompt: 'You reached the end. Mark as finished?',
     markFinished: 'Mark finished',
+    chapterPct: (n: number) => `${n}%`,
+    chaptersDone: (done: number, total: number) => `${done} of ${total} chapters done`,
   },
   annotations: {
     highlight: 'Highlight',

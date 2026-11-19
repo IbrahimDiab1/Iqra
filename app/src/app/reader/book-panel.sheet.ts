@@ -14,9 +14,14 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
+import { DomSanitizer } from '@angular/platform-browser';
 import { findSummary } from '../annotations/summary-scope';
 import type { Annotation, Book, SummaryScope } from '../core/models';
+import { chapterProgress, chaptersDone } from '../progress/progress';
+import { ReadMarkService } from '../progress/read-mark.service';
 import { COPY } from '../ui/copy';
+import { icon } from '../ui/icons';
+import { ToastService } from '../ui/toast.service';
 import { SheetComponent } from '../ui/sheet.component';
 import type { Place } from './jump-history';
 import { BookmarksTabComponent } from './bookmarks-tab.component';
@@ -57,6 +62,7 @@ const MIN_QUERY = 2;
         @if (entries().length === 0) {
           <p class="note">{{ copy.noContents }}</p>
         } @else {
+          <p class="done-line">{{ prog.chaptersDone(chapters().done, chapters().total) }}</p>
           <ul class="list">
             @for (e of entries(); track e.node.key) {
               <li class="item">
@@ -64,7 +70,21 @@ const MIN_QUERY = 2;
                   <span class="title" dir="auto">{{ e.node.title }}</span>
                   <span class="num">{{ e.node.page }}</span>
                 </button>
+                @if (markable()) {
+                  <button
+                    type="button"
+                    class="chk"
+                    [class.on]="e.done"
+                    [attr.aria-pressed]="e.done"
+                    [attr.aria-label]="prog.markRead + ' ' + e.node.title"
+                    (click)="markChapter(e)"
+                    [innerHTML]="checkIcon"
+                  ></button>
+                }
                 <button type="button" class="sum" (click)="summarize(e.scope)">{{ e.has ? ann.summary : ann.addSummary }}</button>
+                <span class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="e.pct" [attr.aria-label]="prog.chapterPct(e.pct)">
+                  <span class="fill" [style.width]="e.width"></span>
+                </span>
               </li>
             }
           </ul>
@@ -132,7 +152,12 @@ const MIN_QUERY = 2;
     .row, .hit { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding-block: 6px; padding-inline-end: 6px; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--fg); font: 15px var(--ui); text-align: start; cursor: pointer; }
     .row .title { flex: 1; min-width: 0; }
     .row .num, .pnum { flex: none; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
-    .item { display: flex; align-items: center; border-bottom: 1px solid var(--line); }
+    .item { position: relative; display: flex; align-items: center; border-bottom: 1px solid var(--line); }
+    .done-line { margin: 4px 2px 8px; color: var(--muted); font-size: 13px; }
+    .bar { position: absolute; inset-inline: 0; bottom: 0; height: 3px; background: var(--surface-2); }
+    .fill { display: block; height: 100%; background: var(--accent); }
+    .chk { flex: none; display: inline-grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: var(--radius-control); background: none; color: transparent; cursor: pointer; }
+    .chk.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); }
     .item .row { flex: 1; min-width: 0; border-bottom: 0; }
     .sum { flex: none; min-height: 40px; padding: 0 10px; border: 0; background: none; color: var(--accent); font: 600 13px var(--ui); cursor: pointer; }
     .book-sum { margin-bottom: 8px; padding: 6px 4px 6px 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface-2); }
@@ -155,6 +180,8 @@ export class BookPanelSheetComponent implements OnDestroy {
   readonly page = input<number>(1);
   /** This book's live annotations. */
   readonly annotations = input<Annotation[]>([]);
+  /** The pages marked read in this book (marked mode). */
+  readonly marked = input<ReadonlySet<number>>(new Set());
   readonly closed = output<void>();
   readonly jump = output<Place>();
   /** The panel asks for the summary editor on this scope (existing or new). */
@@ -169,7 +196,11 @@ export class BookPanelSheetComponent implements OnDestroy {
   readonly flash = output<string>();
 
   protected readonly copy = COPY.reader;
+  private readonly sanitizer = inject(DomSanitizer);
+  private readonly toast = inject(ToastService);
   protected readonly ann = COPY.annotations;
+  protected readonly prog = COPY.progress;
+  protected readonly checkIcon = this.sanitizer.bypassSecurityTrustHtml(icon('check', 20));
   protected readonly tabs: { id: PanelTab; label: string }[] = [
     { id: 'contents', label: COPY.reader.contents },
     { id: 'notes', label: COPY.reader.notes },
@@ -190,9 +221,13 @@ export class BookPanelSheetComponent implements OnDestroy {
     const { outline, pageCount } = this.book();
     return flattenOutline(outline).map((e) => {
       const scope: SummaryScope = { kind: 'outline', nodeKey: e.node.key, title: e.node.title, ...nodeRange(outline, e.node.key, pageCount) };
-      return { ...e, scope, has: !!findSummary(this.annotations(), scope) };
+      const { fraction, done } = chapterProgress(this.book(), e.node, this.marked());
+      const pct = Math.round(fraction * 100);
+      return { ...e, scope, has: !!findSummary(this.annotations(), scope), done, pct, width: `${Math.round(fraction * 1000) / 10}%` };
     });
   });
+  protected readonly chapters = computed(() => chaptersDone(this.book(), this.marked()));
+  protected readonly markable = computed(() => this.book().progressMode === 'marked');
   /** The entry with the greatest page not after the current one; later (deeper) entries win ties. */
   protected readonly currentKey = computed(() => {
     const page = this.page();
@@ -210,6 +245,7 @@ export class BookPanelSheetComponent implements OnDestroy {
   protected readonly searched = signal(false);
   protected readonly capped = signal(false);
 
+  private readonly readMarks = inject(ReadMarkService);
   private readonly searchService = inject(SearchService);
   private readonly injector = inject(Injector);
   private readonly field = viewChild<ElementRef<HTMLInputElement>>('field');
@@ -245,6 +281,16 @@ export class BookPanelSheetComponent implements OnDestroy {
   protected go(page: number): void {
     this.jump.emit({ page, offset: 0 });
     this.close();
+  }
+
+  /** Marks every page of the chapter, or clears them when the whole chapter is already marked. */
+  protected markChapter(e: { scope: SummaryScope; done: boolean }): void {
+    if (e.scope.kind !== 'outline') return;
+    const { fromPage, toPage } = e.scope;
+    this.readMarks.setRange(this.book().id, fromPage, toPage, !e.done).catch((err) => {
+      console.warn('Could not change the read marks', err);
+      this.toast.show(this.ann.saveFailed);
+    });
   }
 
   protected summarize(scope: SummaryScope): void {

@@ -249,6 +249,7 @@ const FINISH_TOAST_MS = 8000;
             [renderer]="r"
             [page]="s.page()"
             [annotations]="annotations()"
+            [marked]="marked()"
             (closed)="panel.set(null)"
             (jump)="jump($event)"
             (summary)="editSummary($event)"
@@ -376,7 +377,7 @@ export class ReaderPage implements OnDestroy {
   });
   protected readonly book = signal<Book | null>(null);
   private readonly markSource = signal<Signal<ReadonlySet<number> | undefined> | null>(null);
-  private readonly marked = computed(() => this.markSource()?.() ?? new Set<number>());
+  protected readonly marked = computed(() => this.markSource()?.() ?? new Set<number>());
   /** Whether the current page is marked read (marked mode). */
   protected readonly pageMarked = computed(() => this.marked().has(this.state()?.page() ?? 0));
   private tracking: ReaderSessionHandle | null = null;

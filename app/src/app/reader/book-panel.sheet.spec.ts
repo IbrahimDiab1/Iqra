@@ -36,6 +36,7 @@ const renderer = {
     [renderer]="renderer"
     [page]="page()"
     [annotations]="annotations()"
+    [marked]="marked()"
     (summary)="scopes.push($event)"
     (edit)="edits.push($event)"
     (note)="notes.push($event)"
@@ -50,12 +51,13 @@ class HostComponent {
   tab = signal<'contents' | 'notes' | 'bookmarks' | 'search'>('contents');
   page = signal(1);
   annotations = signal<Annotation[]>([]);
+  marked = signal<ReadonlySet<number>>(new Set());
   scopes: SummaryScope[] = [];
   edits: Annotation[] = [];
   notes: Annotation[] = [];
   sideNotes: Annotation[] = [];
   flashes: string[] = [];
-  book = { id: 'b1', pageCount: 40, outline: OUTLINE } as Book;
+  book = { id: 'b1', pageCount: 40, outline: OUTLINE, progressMode: 'last-page', lastPageReached: 0 } as unknown as Book;
   renderer = renderer;
   closes = 0;
   jumps: Place[] = [];
@@ -199,6 +201,77 @@ describe('BookPanelSheetComponent', () => {
       tabs[1].click();
       fixture.detectChanges();
       expect(chips()[2].getAttribute('aria-pressed')).toBe('true');
+    });
+  });
+
+  describe('progress in Contents', () => {
+    const bars = () => Array.from(el.querySelectorAll<HTMLElement>('.bar'));
+    const fills = () => Array.from(el.querySelectorAll<HTMLElement>('.bar .fill'));
+    const checks = () => Array.from(el.querySelectorAll<HTMLButtonElement>('button.chk'));
+    const one: OutlineNode[] = [{ key: '0', title: 'All', page: 1, children: [] }];
+
+    it('shows a chapter bar at 55.6 % when 5 of 9 pages are reached, labelled with the percentage', () => {
+      create((h) => {
+        h.book = { id: 'b1', pageCount: 9, outline: one, progressMode: 'last-page', lastPageReached: 5 } as unknown as Book;
+      });
+      expect(fills()[0].style.width).toBe('55.6%');
+      expect(bars()[0].getAttribute('aria-label')).toBe(COPY.progress.chapterPct(56));
+      expect(el.textContent).toContain(COPY.progress.chaptersDone(0, 1));
+    });
+
+    it('counts finished top-level chapters in the header line', () => {
+      create((h) => {
+        h.book = { id: 'b1', pageCount: 40, outline: OUTLINE, progressMode: 'last-page', lastPageReached: 25 } as unknown as Book;
+      });
+      expect(el.textContent).toContain(COPY.progress.chaptersDone(1, 2));
+      expect(fills().map((f) => f.style.width)).toEqual(['100%', '28.6%', '6.3%']);
+    });
+
+    it('hides the chapters-done line when the book has no outline', () => {
+      create((h) => {
+        h.book = { id: 'b1', pageCount: 9, outline: [], progressMode: 'last-page', lastPageReached: 5 } as unknown as Book;
+      });
+      expect(el.textContent).not.toContain('chapters done');
+      expect(bars()).toHaveLength(0);
+    });
+
+    it('never exceeds 100 % and shows 0 for a one-page book', () => {
+      create((h) => {
+        h.book = { id: 'b1', pageCount: 1, outline: one, progressMode: 'last-page', lastPageReached: 0 } as unknown as Book;
+      });
+      expect(fills()[0].style.width).toBe('0%');
+      fixture.destroy();
+      create((h) => {
+        h.book = { id: 'b1', pageCount: 9, outline: one, progressMode: 'last-page', lastPageReached: 500 } as unknown as Book;
+      });
+      expect(fills()[0].style.width).toBe('100%');
+    });
+
+    it('has no check buttons in last-page mode', () => {
+      create((h) => {
+        h.book = { id: 'b1', pageCount: 9, outline: one, progressMode: 'last-page', lastPageReached: 5 } as unknown as Book;
+      });
+      expect(checks()).toHaveLength(0);
+    });
+
+    it('in marked mode the check button marks the chapter range and pressing again clears it', async () => {
+      vi.useRealTimers();
+      create((h) => {
+        h.book = { id: 'b1', pageCount: 40, outline: OUTLINE, progressMode: 'marked', lastPageReached: 0 } as unknown as Book;
+      });
+      expect(checks()).toHaveLength(3);
+      expect(checks()[0].getAttribute('aria-pressed')).toBe('false');
+      checks()[0].click();
+      await vi.waitFor(async () => {
+        const marked = (await db.readMarks.toArray()).filter((m) => m.read).map((m) => m.page).sort((a, b) => a - b);
+        expect(marked).toEqual(Array.from({ length: 19 }, (_, i) => i + 1));
+      });
+      host.marked.set(new Set(Array.from({ length: 19 }, (_, i) => i + 1)));
+      fixture.detectChanges();
+      expect(checks()[0].getAttribute('aria-pressed')).toBe('true');
+      expect(fills()[0].style.width).toBe('100%');
+      checks()[0].click();
+      await vi.waitFor(async () => expect((await db.readMarks.toArray()).filter((m) => m.read)).toEqual([]));
     });
   });
 
