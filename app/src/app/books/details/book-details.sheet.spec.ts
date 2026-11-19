@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CLOCK } from '../../core/clock';
 import { DB, IqraDb } from '../../core/db';
@@ -48,6 +49,7 @@ describe('BookDetailsSheetComponent', () => {
     TestBed.configureTestingModule({
       imports: [BookDetailsSheetComponent],
       providers: [
+        provideRouter([]),
         { provide: DB, useValue: db },
         { provide: CLOCK, useValue: { now: () => 5000 } },
         { provide: DRIVE_ADAPTER, useValue: new FakeDrive() },
@@ -147,5 +149,18 @@ describe('BookDetailsSheetComponent', () => {
     const stored = await db.books.get('book-1');
     expect(stored?.title).toBe('Kitab');
     expect(stored?.rating).toBeUndefined();
+  });
+
+  it('shows the lazily loaded stats on the Stats tab', async () => {
+    click(buttonByText(COPY.details.tabStats));
+    await waitFor(() => el.querySelector('iqra-book-stats') !== null);
+    expect(el.querySelector('#bd-title')).toBeNull();
+  });
+
+  it('opens on the Stats tab when asked', async () => {
+    details.close();
+    await waitFor(() => details.openBook() === null);
+    details.open('book-1', 'stats');
+    await waitFor(() => el.querySelector('iqra-book-stats') !== null);
   });
 });

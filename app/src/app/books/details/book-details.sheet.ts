@@ -1,5 +1,6 @@
 import {
   Component,
+  ComponentRef,
   ElementRef,
   Injector,
   afterNextRender,
@@ -9,6 +10,7 @@ import {
   signal,
   untracked,
   viewChild,
+  ViewContainerRef,
 } from '@angular/core';
 import { CLOCK } from '../../core/clock';
 import type { Book, ID } from '../../core/models';
@@ -212,7 +214,7 @@ function draftOf(b: Book): Draft {
             }
           </div>
         } @else {
-          <p class="muted">{{ copy.statsSoon }}</p>
+          <ng-container #statsHost />
         }
       }
 
@@ -366,7 +368,6 @@ function draftOf(b: Book): Draft {
     }
     .fileinfo .grow { flex: 1; min-width: 0; }
     .fileinfo .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
-    .muted { color: var(--muted); font-size: 14px; }
     .btn-primary, .btn-ghost {
       min-height: 40px;
       border: 0;
@@ -415,10 +416,33 @@ export class BookDetailsSheetComponent {
   });
   protected readonly canSave = computed(() => (this.draft()?.title.trim() ?? '') !== '');
 
+  private readonly statsHost = viewChild('statsHost', { read: ViewContainerRef });
+  private statsRef: ComponentRef<{ book: unknown }> | null = null;
   private loadedId: ID | null = null;
   private saving = false;
 
   constructor() {
+    // The Stats tab is loaded on demand so its code stays out of the main bundle.
+    effect(() => {
+      const host = this.statsHost();
+      const b = this.book();
+      if (!host || !b) {
+        this.statsRef = null;
+        return;
+      }
+      if (this.statsRef) {
+        this.statsRef.setInput('book', b);
+        return;
+      }
+      untracked(() =>
+        import('./book-stats.component').then(({ BookStatsComponent }) => {
+          if (this.statsHost() !== host || this.statsRef) return;
+          this.statsRef = host.createComponent(BookStatsComponent) as ComponentRef<{ book: unknown }>;
+          this.statsRef.setInput('book', this.book());
+        }),
+      );
+    });
+
     // Loads a fresh draft when a different book opens. Live updates to the same book do not overwrite edits.
     effect(() => {
       const b = this.book();
@@ -430,7 +454,7 @@ export class BookDetailsSheetComponent {
         }
         if (b.id === this.loadedId) return;
         this.loadedId = b.id;
-        this.tab.set('details');
+        this.tab.set(this.details.openTab());
         this.addingCategory.set(false);
         this.draft.set(draftOf(b));
       });

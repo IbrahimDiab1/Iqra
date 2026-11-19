@@ -11,6 +11,7 @@ export class BookDetailsService {
 
   private readonly booksRec = this.repo.live(() => this.db.books.filter((b) => !b.deleted).toArray());
   private readonly openId = signal<ID | null>(null);
+  private readonly tab = signal<'details' | 'stats'>('details');
 
   /** The book the details sheet shows, or null when it is closed. */
   readonly openBook: Signal<Book | null> = computed(() => {
@@ -19,7 +20,11 @@ export class BookDetailsService {
     return this.booksRec()?.find((b) => b.id === id) ?? null;
   });
 
-  open(bookId: ID): void {
+  /** Which tab the sheet shows when it opens. */
+  readonly openTab: Signal<'details' | 'stats'> = this.tab.asReadonly();
+
+  open(bookId: ID, tab: 'details' | 'stats' = 'details'): void {
+    this.tab.set(tab);
     this.openId.set(bookId);
   }
 

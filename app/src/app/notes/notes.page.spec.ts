@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Router, provideRouter } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CLOCK } from '../core/clock';
 import { DB, IqraDb } from '../core/db';
@@ -111,6 +111,19 @@ describe('NotesPage', () => {
     chip(COPY.annotations.filters.notes).click();
     chip('big-question').click();
     await waitFor(() => rows().length === 1 && rows()[0].textContent!.includes('natural selection'));
+  });
+
+  it('presets the filter from ?book and ?type', async () => {
+    TestBed.overrideProvider(ActivatedRoute, { useValue: { snapshot: { queryParamMap: convertToParamMap({ book: 'b1', type: 'highlight' }) } } });
+    await db.annotations.bulkPut([
+      makeAnn({ id: 'h1', bookId: 'b1', type: 'highlight', page: 3, text: anchor('natural selection') }),
+      makeAnn({ id: 'n1', bookId: 'b1', type: 'note', page: 2, body: 'a note', text: anchor('q') }),
+      makeAnn({ id: 'h2', bookId: 'b2', type: 'highlight', page: 3, text: anchor('other book') }),
+    ]);
+    await create();
+    await waitFor(() => rows().length === 1);
+    expect(rows()[0].textContent).toContain('natural selection');
+    expect(el.querySelectorAll('.group h2')).toHaveLength(1);
   });
 
   it('tapping a highlight opens the book at its page with the annotation id', async () => {

@@ -1,2 +1,32 @@
 /** Strings for the Stats tab and goals. Lives with the stats screens so the eager copy.ts stays small. */
-export const STATS_COPY = {} as const;
+export const STATS_COPY = {
+  notYet: 'Not yet',
+  noData: 'No reading yet.',
+  book: {
+    timeline: 'Timeline',
+    added: 'Added',
+    started: 'Started',
+    finished: 'Finished',
+    chart: 'Reading',
+    pages: 'Pages',
+    time: 'Time',
+    totals: 'Totals',
+    timeSpent: 'Time spent',
+    pagesRead: 'Pages read',
+    sessions: 'Sessions',
+    daysRead: 'Days read',
+    weekOf: 'Week of',
+    avgPerPage: 'Average per page',
+    notes: 'Notes',
+    highlights: 'Highlights',
+    notesCount: 'Notes',
+    sideNotes: 'Side notes',
+    summaries: 'Summaries',
+    bookmarks: 'Bookmarks',
+    rating: 'Rating and review',
+    noRating: 'Not rated',
+    noReview: 'No review yet.',
+    chapters: 'Chapter progress',
+    noSessions: 'No reading sessions yet. Open the book and read for a few seconds.',
+  },
+} as const;

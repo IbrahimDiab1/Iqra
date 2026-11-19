@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { AnnotationService } from '../annotations/annotation.service';
 import { searchNotes } from '../annotations/notes-search';
@@ -19,6 +20,10 @@ const FILTER_TYPES: Record<Filter, readonly Annotation['type'][]> = {
   notes: ['note', 'side-note'],
   summaries: ['summary'],
   areas: ['area'],
+};
+/** `?type=` values the book's Stats tab links with, mapped to the chip they turn on. */
+const TYPE_PRESETS: Partial<Record<Annotation['type'], Filter>> = {
+  highlight: 'highlights', note: 'notes', 'side-note': 'notes', summary: 'summaries', area: 'areas',
 };
 const ROW_ICONS: Record<Annotation['type'], IconName> = {
   highlight: 'highlighter', note: 'note', area: 'areaSelect', 'side-note': 'words', summary: 'notes', bookmark: 'bookmark',
@@ -132,8 +137,17 @@ export class NotesPage {
   private readonly bookRecs = inject(Repo).live(() => this.db.books.filter((b) => !b.deleted).toArray());
   private readonly anns = this.service.all();
 
+  private readonly params = inject(ActivatedRoute).snapshot.queryParamMap;
+  /** Set by `?book=`: only this book's notes are listed. */
+  private readonly bookId = this.params.get('book');
+
   protected readonly query = signal('');
-  protected readonly types = signal<Filter[]>([]);
+  protected readonly types = signal<Filter[]>(
+    (() => {
+      const preset = TYPE_PRESETS[this.params.get('type') as Annotation['type']];
+      return preset ? [preset] : [];
+    })(),
+  );
   protected readonly tags = signal<string[]>([]);
   protected readonly textTarget = signal<Annotation | null>(null);
   protected readonly textBook = computed(() => (this.bookRecs() ?? []).find((b) => b.id === this.textTarget()?.bookId));
@@ -147,7 +161,9 @@ export class NotesPage {
       query: this.query(),
       types: this.types().flatMap((t) => FILTER_TYPES[t]),
       tags: this.tags(),
-    }).map((g) => ({ book: g.book, rows: g.items.map((a) => this.toRow(a)) })),
+    })
+      .filter((g) => this.bookId === null || g.book.id === this.bookId)
+      .map((g) => ({ book: g.book, rows: g.items.map((a) => this.toRow(a)) })),
   );
 
   protected onInput(e: Event): void {
