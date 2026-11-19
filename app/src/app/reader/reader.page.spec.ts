@@ -426,6 +426,71 @@ describe('ReaderPage', () => {
     });
   });
 
+  describe('bookmarks and summaries', () => {
+    const stored = () => db.annotations.toArray();
+    const bookmarkBtn = () => el.querySelector<HTMLButtonElement>('button.bookmark')!;
+
+    it('the bookmark button toggles a bookmark on the current page; removing offers Undo', async () => {
+      await create();
+      expect(bookmarkBtn().getAttribute('aria-label')).toBe(COPY.annotations.addBookmark);
+      bookmarkBtn().click();
+      await vi.waitFor(async () => expect((await stored()).filter((r) => !r.deleted && r.type === 'bookmark' && r.page === 7)).toHaveLength(1));
+      const toast = TestBed.inject(ToastService);
+      expect(toast.current()?.message).toBe(COPY.annotations.bookmarkAdded);
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(bookmarkBtn().getAttribute('aria-label')).toBe(COPY.annotations.removeBookmark);
+        expect(bookmarkBtn().getAttribute('aria-pressed')).toBe('true');
+      });
+      bookmarkBtn().click();
+      await vi.waitFor(async () => expect((await stored()).filter((r) => !r.deleted)).toHaveLength(0));
+      expect(toast.current()?.message).toBe(COPY.annotations.deleted);
+      toast.undo();
+      await vi.waitFor(async () => expect((await stored()).filter((r) => !r.deleted && r.type === 'bookmark')).toHaveLength(1));
+    });
+
+    async function openContents() {
+      (Array.from(el.querySelectorAll<HTMLButtonElement>('button.pill')).find((b) => b.textContent!.includes(COPY.reader.contents)))!.click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-book-panel-sheet .book-sum')).not.toBeNull();
+      });
+    }
+
+    it('Contents shows the book summary card; + Summary opens the editor and closing it untouched creates nothing', async () => {
+      await create();
+      await openContents();
+      el.querySelector<HTMLButtonElement>('iqra-book-panel-sheet .sum')!.click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-text-editor-sheet .panel.open')).not.toBeNull();
+      });
+      el.querySelector<HTMLButtonElement>('iqra-text-editor-sheet button.close')!.click();
+      await new Promise((r) => setTimeout(r, 50));
+      expect(await stored()).toHaveLength(0);
+    });
+
+    it('typing in a new summary creates it with the chapter scope', async () => {
+      await create();
+      await openContents();
+      el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-sheet .sum')[2].click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-text-editor-sheet .panel.open')).not.toBeNull();
+      });
+      const ta = el.querySelector<HTMLTextAreaElement>('iqra-text-editor-sheet textarea')!;
+      ta.value = 'About the second part';
+      ta.dispatchEvent(new Event('input'));
+      el.querySelector<HTMLButtonElement>('iqra-text-editor-sheet button.close')!.click();
+      await vi.waitFor(async () => {
+        const rows = (await stored()).filter((r) => r.type === 'summary');
+        expect(rows).toHaveLength(1);
+        expect(rows[0].scope).toEqual({ kind: 'outline', nodeKey: '1', title: 'Second', fromPage: 20, toPage: 50 });
+        expect(rows[0].body).toBe('About the second part');
+      });
+    });
+  });
+
   describe('highlighting a selection', () => {
     const fakeSelection = {
       pending: signal<PendingSelection | null>(null),

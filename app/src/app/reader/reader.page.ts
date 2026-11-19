@@ -18,9 +18,12 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { buildAnchor } from '../annotations/anchor';
 import { AnnotationService, type HighlightColor } from '../annotations/annotation.service';
 import { NoteSheetComponent } from '../annotations/note-sheet.component';
+import { TextEditorSheet } from '../annotations/text-editor.sheet';
+import { findSummary } from '../annotations/summary-scope';
 import { tagSuggestionsFrom } from '../annotations/tag-input.component';
 import { DB } from '../core/db';
-import type { Annotation, Book, Rect } from '../core/models';
+import { newId } from '../core/ids';
+import type { Annotation, Book, Rect, SummaryScope } from '../core/models';
 import { SettingsService } from '../core/settings.service';
 import { DRIVE_ADAPTER } from '../sync/drive-adapter';
 import { COPY } from '../ui/copy';
@@ -56,7 +59,7 @@ const AREA_HINT_MS = 4000;
 
 @Component({
   selector: 'iqra-reader-page',
-  imports: [RouterLink, BookPanelSheetComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective, SelectionToolbarComponent, NoteSheetComponent],
+  imports: [RouterLink, BookPanelSheetComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective, SelectionToolbarComponent, NoteSheetComponent, TextEditorSheet],
   providers: [SelectionService],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -117,6 +120,15 @@ const AREA_HINT_MS = 4000;
                 [innerHTML]="ic('areaSelect')"
               ></button>
             }
+            <button
+              type="button"
+              class="ib bookmark"
+              [attr.aria-label]="bookmark() ? annCopy.removeBookmark : annCopy.addBookmark"
+              [attr.aria-pressed]="!!bookmark()"
+              [class.on]="!!bookmark()"
+              (click)="toggleBookmark()"
+              [innerHTML]="ic(bookmark() ? 'bookmarkFill' : 'bookmark')"
+            ></button>
             <button type="button" class="ib" [attr.aria-label]="copy.search" (click)="openPanel('search')" [innerHTML]="ic('search')"></button>
             <button type="button" class="ib" [attr.aria-label]="copy.settings" (click)="settingsOpen.set(true)" [innerHTML]="ic('type')"></button>
           </header>
@@ -218,8 +230,17 @@ const AREA_HINT_MS = 4000;
             [book]="b"
             [renderer]="r"
             [page]="s.page()"
+            [annotations]="annotations()"
             (closed)="panel.set(null)"
             (jump)="jump($event)"
+            (summary)="editSummary($event)"
+          />
+          <iqra-text-editor-sheet
+            [annotation]="textTarget()"
+            [draft]="textIsDraft()"
+            [pageCount]="r.numPages"
+            [tagSuggestions]="tagSuggestions()"
+            (closed)="textTarget.set(null)"
           />
           <iqra-note-sheet
             [annotation]="noteTarget()"
@@ -330,6 +351,14 @@ export class ReaderPage implements OnDestroy {
   protected readonly noteTarget = signal<Annotation | null>(null);
   /** The note created by the Note action in this open session; only it is removed if closed empty. */
   protected readonly newNoteId = signal<string | null>(null);
+  /** The side note or summary the text editor sheet edits. */
+  protected readonly textTarget = signal<Annotation | null>(null);
+  protected readonly textIsDraft = signal(false);
+  /** The live bookmark on the current page, if any. */
+  protected readonly bookmark = computed(() => {
+    const page = this.state()?.page();
+    return this.annotations().find((a) => a.type === 'bookmark' && a.page === page);
+  });
   private readonly allAnnotations = this.annotationService.all();
   protected readonly tagSuggestions = computed(() => tagSuggestionsFrom(this.allAnnotations()));
   /** A rectangle just drawn with the area tool, waiting for a color or a note. */
@@ -480,6 +509,36 @@ export class ReaderPage implements OnDestroy {
   /** A tap on a highlight opens its note sheet. */
   protected onAnnotationTap(a: Annotation): void {
     this.noteTarget.set(a);
+  }
+
+  protected async toggleBookmark(): Promise<void> {
+    const s = this.state();
+    const book = this.book();
+    if (!s || !book) return;
+    const existing = this.bookmark();
+    try {
+      if (existing) {
+        const rec = await this.annotationService.remove(existing.id);
+        if (rec) this.toast.show(COPY.annotations.deleted, { undo: () => void this.annotationService.restore(rec) });
+      } else {
+        await this.annotationService.create({ bookId: book.id, type: 'bookmark', page: s.page() });
+        this.toast.show(COPY.annotations.bookmarkAdded);
+      }
+    } catch (err) {
+      console.warn('Could not change the bookmark', err);
+      this.toast.show(COPY.annotations.saveFailed);
+    }
+  }
+
+  /** Opens the summary editor on a scope: the stored summary, or an unsaved draft that is created on the first non-empty text. */
+  protected editSummary(scope: SummaryScope): void {
+    const book = this.book();
+    if (!book) return;
+    const existing = findSummary(this.annotations(), scope);
+    this.textIsDraft.set(!existing);
+    this.textTarget.set(
+      existing ?? { id: newId(), bookId: book.id, deviceId: '', updatedAt: 0, type: 'summary', scope, tags: [], createdAt: 0 },
+    );
   }
 
   protected toggleArea(): void {

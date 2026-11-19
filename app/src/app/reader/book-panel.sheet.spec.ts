@@ -1,7 +1,7 @@
 import { Component, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Book, OutlineNode } from '../core/models';
+import type { Annotation, Book, OutlineNode, SummaryScope } from '../core/models';
 import { COPY } from '../ui/copy';
 import { BookPanelSheetComponent } from './book-panel.sheet';
 import type { Place } from './jump-history';
@@ -32,6 +32,8 @@ const renderer = {
     [book]="book"
     [renderer]="renderer"
     [page]="page()"
+    [annotations]="annotations()"
+    (summary)="scopes.push($event)"
     (closed)="closes = closes + 1"
     (jump)="jumps.push($event)"
   />`,
@@ -40,7 +42,9 @@ class HostComponent {
   open = signal(true);
   tab = signal<'contents' | 'search'>('contents');
   page = signal(1);
-  book = { outline: OUTLINE } as Book;
+  annotations = signal<Annotation[]>([]);
+  scopes: SummaryScope[] = [];
+  book = { id: 'b1', pageCount: 40, outline: OUTLINE } as Book;
   renderer = renderer;
   closes = 0;
   jumps: Place[] = [];
@@ -81,9 +85,42 @@ describe('BookPanelSheetComponent', () => {
   });
 
   it('shows the empty message when there is no outline', () => {
-    create((h) => (h.book = { outline: [] } as unknown as Book));
+    create((h) => (h.book = { id: 'b1', pageCount: 40, outline: [] } as unknown as Book));
     expect(rows()).toHaveLength(0);
     expect(el.textContent).toContain(COPY.reader.noContents);
+    expect(COPY.reader.noContents).toContain('summarize a page range');
+  });
+
+  describe('summaries in Contents', () => {
+    const SUM = (id: string, scope: SummaryScope, body = 'text'): Annotation => ({
+      id, bookId: 'b1', type: 'summary', scope, body, tags: [], createdAt: 1, updatedAt: 1, deviceId: 'd',
+    });
+    const sumButtons = () => Array.from(el.querySelectorAll<HTMLButtonElement>('.sum'));
+
+    it('shows a book summary card on top and + Summary on every row', () => {
+      create();
+      expect(el.querySelector('.book-sum')!.textContent).toContain(COPY.annotations.bookSummary);
+      expect(sumButtons().map((b) => b.textContent!.trim())).toEqual(Array(4).fill(COPY.annotations.addSummary));
+    });
+
+    it('a row with a summary shows Summary and its text preview on the card', () => {
+      create((h) => h.annotations.set([SUM('a', { kind: 'book' }, 'My whole book'), SUM('b', { kind: 'outline', nodeKey: '1', title: 'Part Two', fromPage: 20, toPage: 40 })]));
+      const labels = sumButtons().map((b) => b.textContent!.trim());
+      expect(labels[0]).toBe(COPY.annotations.summary);
+      expect(labels.slice(1)).toEqual([COPY.annotations.addSummary, COPY.annotations.summary, COPY.annotations.addSummary]);
+      expect(el.querySelector('.book-sum .preview')!.textContent).toContain('My whole book');
+    });
+
+    it('the buttons ask for the book scope and the node scope with its page range, then close', () => {
+      create();
+      sumButtons()[0].click();
+      expect(host.scopes[0]).toEqual({ kind: 'book' });
+      expect(host.closes).toBe(1);
+      host.open.set(true);
+      fixture.detectChanges();
+      sumButtons()[2].click();
+      expect(host.scopes[1]).toEqual({ kind: 'outline', nodeKey: '1', title: 'Part Two', fromPage: 20, toPage: 40 });
+    });
   });
 
   it('has two tabs, switching with a click', () => {

@@ -40,7 +40,7 @@ export const COPY = {
     nextPage: 'Next page', prevPage: 'Previous page', contents: 'Contents', search: 'Search', settings: 'Reading settings',
     readingMode: 'Reading mode', pageView: 'Page view', jumpBack: 'Back', jumpForward: 'Forward',
     pageOf: (p: number, n: number) => `${p} of ${n}`, syncedFrom: (p: number) => `Synced from your other device \u00b7 Back to p. ${p}`, backAction: 'Back',
-    noContents: 'This PDF has no chapters.', searchPlaceholder: 'Search this book', searchHint: 'Type at least two letters.',
+    noContents: 'This PDF has no chapters. You can still summarize a page range from Notes.', notes: 'Notes', bookmarks: 'Bookmarks', searchPlaceholder: 'Search this book', searchHint: 'Type at least two letters.',
     searching: (done: number, total: number) => `Searching\u2026 ${done} of ${total} pages`,
     results: (n: number, capped: boolean) => (capped ? `First ${n} results` : `${n} ${n === 1 ? 'result' : 'results'}`),
     noResults: 'No results.',

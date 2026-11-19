@@ -56,6 +56,8 @@ const SAVE_DEBOUNCE_MS = 400;
 })
 export class TextEditorSheet {
   readonly annotation = input<Annotation | null>(null);
+  /** True when `annotation` is not stored yet: it is created on the first save of non-empty text. */
+  readonly draft = input(false);
   readonly tagSuggestions = input<string[]>([]);
   /** Upper bound for the page-range inputs. */
   readonly pageCount = input(1);
@@ -88,6 +90,9 @@ export class TextEditorSheet {
   private savedBody = '';
   private timer: ReturnType<typeof setTimeout> | undefined;
   private done = false;
+  /** Set once a draft has been stored; later saves update this record. */
+  private storedId: string | null = null;
+  private creating: Promise<void> = Promise.resolve();
 
   constructor() {
     effect(() => {
@@ -101,6 +106,7 @@ export class TextEditorSheet {
     clearTimeout(this.timer);
     this.timer = undefined;
     this.done = false;
+    this.storedId = null;
     const a = this.annotation();
     if (!id || !a) return;
     this.body.set(a.body ?? '');
@@ -121,13 +127,13 @@ export class TextEditorSheet {
     const a = this.annotation();
     if (!a || this.done || this.body() === this.savedBody) return;
     this.savedBody = this.body();
-    void this.service.update(a.id, { body: this.body() }).catch((err) => this.failed(err));
+    this.save(a, { body: this.body() });
   }
 
   protected onTags(next: string[]): void {
     this.tags.set(next);
     const a = this.annotation();
-    if (a) void this.service.update(a.id, { tags: next }).catch((err) => this.failed(err));
+    if (a) this.save(a, { tags: next });
   }
 
   /** Clamps both pages to 1..pageCount with toPage >= fromPage, writes the corrected values back to the fields, and saves. */
@@ -145,7 +151,35 @@ export class TextEditorSheet {
     toEl.value = String(toPage);
     const scope: SummaryScope = { kind: 'pages', fromPage, toPage };
     this.scope.set(scope);
-    void this.service.update(a.id, { scope }).catch((err) => this.failed(err));
+    this.save(a, { scope });
+  }
+
+  /** Writes a change. A draft is created on the first change once its text is non-empty; before that nothing is stored. */
+  private save(a: Annotation, patch: Partial<Pick<Annotation, 'body' | 'tags' | 'scope'>>): void {
+    if (!this.draft() && this.storedId === null) {
+      void this.service.update(a.id, patch).catch((err) => this.failed(err));
+      return;
+    }
+    // A draft: serialize so a change typed while the create is in flight updates the created record.
+    this.creating = this.creating.then(async () => {
+      try {
+        if (this.storedId !== null) {
+          await this.service.update(this.storedId, patch);
+        } else if (this.body().trim() !== '') {
+          const rec = await this.service.create({
+            bookId: a.bookId,
+            type: a.type,
+            ...(a.page !== undefined ? { page: a.page } : {}),
+            ...(this.scope() ? { scope: this.scope() } : {}),
+            body: this.body(),
+            tags: this.tags(),
+          });
+          this.storedId = rec.id;
+        }
+      } catch (err) {
+        this.failed(err);
+      }
+    });
   }
 
   protected close(): void {
@@ -161,7 +195,13 @@ export class TextEditorSheet {
     clearTimeout(this.timer);
     this.done = true;
     try {
-      const rec = await this.service.remove(a.id);
+      await this.creating;
+      const id = this.storedId ?? (this.draft() ? null : a.id);
+      if (id === null) {
+        this.closed.emit();
+        return;
+      }
+      const rec = await this.service.remove(id);
       if (rec) this.toast.show(this.copy.deleted, { undo: () => void this.service.restore(rec) });
       this.closed.emit();
     } catch (err) {

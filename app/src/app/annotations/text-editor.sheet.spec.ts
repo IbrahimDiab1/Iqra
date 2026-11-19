@@ -14,10 +14,11 @@ const SUMMARY: Annotation = {
 
 @Component({
   imports: [TextEditorSheet],
-  template: `<iqra-text-editor-sheet [annotation]="annotation()" [tagSuggestions]="[]" [pageCount]="50" (closed)="closed = closed + 1" />`,
+  template: `<iqra-text-editor-sheet [annotation]="annotation()" [draft]="draft()" [tagSuggestions]="[]" [pageCount]="50" (closed)="closed = closed + 1" />`,
 })
 class HostComponent {
   readonly annotation = signal<Annotation | null>(null);
+  readonly draft = signal(false);
   closed = 0;
 }
 
@@ -25,10 +26,11 @@ describe('TextEditorSheet', () => {
   let fixture: ComponentFixture<HostComponent>;
   let host: HostComponent;
   let el: HTMLElement;
-  let svc: { update: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn>; restore: ReturnType<typeof vi.fn> };
+  let svc: { create: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn>; restore: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     svc = {
+      create: vi.fn(async (r: Partial<Annotation>) => ({ ...r, id: 'made', updatedAt: 1, deviceId: 'd' })),
       update: vi.fn(async () => undefined),
       remove: vi.fn(async (id: string) => ({ ...SUMMARY, id })),
       restore: vi.fn(async () => undefined),
@@ -107,5 +109,55 @@ describe('TextEditorSheet', () => {
     await vi.waitFor(() => expect(toast.current()?.message).toBe(COPY.annotations.deleted));
     toast.undo();
     expect(svc.restore).toHaveBeenCalledWith(expect.objectContaining({ id: 's1' }));
+  });
+
+  describe('a draft that is not stored yet', () => {
+    const DRAFT: Annotation = { ...SUMMARY, id: 'draft', body: undefined, scope: { kind: 'outline', nodeKey: '2', title: 'Two', fromPage: 5, toPage: 9 } };
+    function openDraft() {
+      host.draft.set(true);
+      open(DRAFT);
+    }
+    function typeBody(v: string) {
+      const ta = el.querySelector<HTMLTextAreaElement>('textarea')!;
+      ta.value = v;
+      ta.dispatchEvent(new Event('input'));
+    }
+
+    it('closing it untouched creates nothing', async () => {
+      openDraft();
+      el.querySelector<HTMLButtonElement>('button.close')!.click();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(svc.create).not.toHaveBeenCalled();
+      expect(svc.update).not.toHaveBeenCalled();
+      expect(host.closed).toBe(1);
+    });
+
+    it('whitespace-only text creates nothing', async () => {
+      openDraft();
+      typeBody('   ');
+      el.querySelector<HTMLButtonElement>('button.close')!.click();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(svc.create).not.toHaveBeenCalled();
+    });
+
+    it('the first non-empty save creates the record with its scope; later saves update it', async () => {
+      openDraft();
+      typeBody('first');
+      el.querySelector<HTMLTextAreaElement>('textarea')!.dispatchEvent(new Event('blur'));
+      await vi.waitFor(() => expect(svc.create).toHaveBeenCalledTimes(1));
+      expect(svc.create).toHaveBeenCalledWith(expect.objectContaining({ bookId: 'b1', type: 'summary', body: 'first', scope: DRAFT.scope }));
+      typeBody('second');
+      el.querySelector<HTMLTextAreaElement>('textarea')!.dispatchEvent(new Event('blur'));
+      await vi.waitFor(() => expect(svc.update).toHaveBeenCalledWith('made', { body: 'second' }));
+      expect(svc.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('Delete on a draft that was never stored just closes', async () => {
+      openDraft();
+      el.querySelector<HTMLButtonElement>('button.del')!.click();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(svc.remove).not.toHaveBeenCalled();
+      expect(host.closed).toBe(1);
+    });
   });
 });

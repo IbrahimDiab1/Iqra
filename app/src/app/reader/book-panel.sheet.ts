@@ -14,11 +14,12 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import type { Book } from '../core/models';
+import { findSummary } from '../annotations/summary-scope';
+import type { Annotation, Book, SummaryScope } from '../core/models';
 import { COPY } from '../ui/copy';
 import { SheetComponent } from '../ui/sheet.component';
 import type { Place } from './jump-history';
-import { flattenOutline } from './outline';
+import { flattenOutline, nodeRange } from './outline';
 import type { PageRenderer } from './pdf-session';
 import { SearchService, type SearchHit } from './search.service';
 
@@ -38,16 +39,26 @@ const MIN_QUERY = 2;
       </div>
 
       @if (tab() === 'contents') {
+        <div class="book-sum">
+          <div class="bs-head">
+            <span class="bs-title">{{ ann.bookSummary }}</span>
+            <button type="button" class="sum" (click)="summarize(bookScope)">{{ bookSummary() ? ann.summary : ann.addSummary }}</button>
+          </div>
+          @if (bookSummary()?.body; as text) {
+            <p class="preview" dir="auto">{{ text }}</p>
+          }
+        </div>
         @if (entries().length === 0) {
           <p class="note">{{ copy.noContents }}</p>
         } @else {
           <ul class="list">
             @for (e of entries(); track e.node.key) {
-              <li>
+              <li class="item">
                 <button type="button" class="row" [class.current]="e.node.key === currentKey()" [style.padding-inline-start.px]="e.depth * indent" (click)="go(e.node.page)">
                   <span class="title" dir="auto">{{ e.node.title }}</span>
                   <span class="num">{{ e.node.page }}</span>
                 </button>
+                <button type="button" class="sum" (click)="summarize(e.scope)">{{ e.has ? ann.summary : ann.addSummary }}</button>
               </li>
             }
           </ul>
@@ -98,6 +109,13 @@ const MIN_QUERY = 2;
     .row, .hit { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding-block: 6px; padding-inline-end: 6px; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--fg); font: 15px var(--ui); text-align: start; cursor: pointer; }
     .row .title { flex: 1; min-width: 0; }
     .row .num, .pnum { flex: none; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+    .item { display: flex; align-items: center; border-bottom: 1px solid var(--line); }
+    .item .row { flex: 1; min-width: 0; border-bottom: 0; }
+    .sum { flex: none; min-height: 40px; padding: 0 10px; border: 0; background: none; color: var(--accent); font: 600 13px var(--ui); cursor: pointer; }
+    .book-sum { margin-bottom: 8px; padding: 6px 4px 6px 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface-2); }
+    .bs-head { display: flex; align-items: center; gap: 8px; }
+    .bs-title { flex: 1; font-weight: 600; font-size: 15px; }
+    .preview { margin: 0 8px 8px 0; font-size: 14px; line-height: 1.45; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
     .row.current { color: var(--accent); font-weight: 600; }
     .hit { align-items: flex-start; flex-direction: column; gap: 2px; }
     .snip { font-size: 14px; line-height: 1.45; }
@@ -112,15 +130,28 @@ export class BookPanelSheetComponent implements OnDestroy {
   readonly book = input.required<Book>();
   readonly renderer = input.required<PageRenderer>();
   readonly page = input<number>(1);
+  /** This book's live annotations. */
+  readonly annotations = input<Annotation[]>([]);
   readonly closed = output<void>();
   readonly jump = output<Place>();
+  /** The panel asks for the summary editor on this scope (existing or new). */
+  readonly summary = output<SummaryScope>();
 
   protected readonly copy = COPY.reader;
+  protected readonly ann = COPY.annotations;
+  protected readonly bookScope: SummaryScope = { kind: 'book' };
   protected readonly indent = INDENT_PX;
   protected readonly minQuery = MIN_QUERY;
   protected readonly tab = linkedSignal<'contents' | 'search'>(() => this.initialTab());
 
-  protected readonly entries = computed(() => flattenOutline(this.book().outline));
+  protected readonly bookSummary = computed(() => findSummary(this.annotations(), this.bookScope));
+  protected readonly entries = computed(() => {
+    const { outline, pageCount } = this.book();
+    return flattenOutline(outline).map((e) => {
+      const scope: SummaryScope = { kind: 'outline', nodeKey: e.node.key, title: e.node.title, ...nodeRange(outline, e.node.key, pageCount) };
+      return { ...e, scope, has: !!findSummary(this.annotations(), scope) };
+    });
+  });
   /** The entry with the greatest page not after the current one; later (deeper) entries win ties. */
   protected readonly currentKey = computed(() => {
     const page = this.page();
@@ -172,6 +203,11 @@ export class BookPanelSheetComponent implements OnDestroy {
 
   protected go(page: number): void {
     this.jump.emit({ page, offset: 0 });
+    this.close();
+  }
+
+  protected summarize(scope: SummaryScope): void {
+    this.summary.emit(scope);
     this.close();
   }
 
