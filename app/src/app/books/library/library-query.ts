@@ -1,5 +1,8 @@
 import { COPY } from '../../ui/copy';
 import type { Book, ID } from '../../core/models';
+import { bookProgress } from '../../progress/progress';
+
+export { bookProgress };
 
 export type LibraryTab = 'reading' | 'to-read' | 'finished' | 'all';
 export type SortKey = 'recent-read' | 'recent-added' | 'progress' | 'priority' | 'rating' | 'title';
@@ -31,13 +34,6 @@ export const DEFAULT_LIBRARY_STATE: LibraryState = {
   dir: 'desc',
   query: '',
 };
-
-/** 0..1. Last-page books use lastPageReached; marked books use markedCount. */
-export function bookProgress(b: Book, markedCount: number): number {
-  if (b.pageCount <= 0) return 0;
-  const reached = b.progressMode === 'marked' ? markedCount : b.lastPageReached;
-  return Math.min(1, Math.max(0, reached / b.pageCount));
-}
 
 export function statusLine(b: Book, progress: number): string {
   if (b.status === 'finished') return COPY.library.finished;
