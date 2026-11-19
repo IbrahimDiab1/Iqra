@@ -40,15 +40,19 @@ export const SHORTCUT_LIST: readonly { action: ShortcutAction | 'turn'; keys: st
  * `isReaderKeyIgnored`'s call, made first. Browser shortcuts are left alone: only Ctrl/Cmd+F, +Z, +Shift+Z and
  * +Y are taken, and only the reader calls this.
  */
-export function shortcutFor(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey' | 'repeat'>): ShortcutAction | null {
+export function shortcutFor(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey' | 'repeat'> & { code?: string }): ShortcutAction | null {
   const key = e.key.toLowerCase();
   if (e.key === 'ContextMenu' && !e.ctrlKey && !e.metaKey && !e.altKey) return 'menu';
   if (e.key === 'F10' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) return 'menu';
   const mod = e.ctrlKey || e.metaKey;
   if (mod && !e.altKey) {
-    if (key === 'f' && !e.shiftKey) return 'search';
-    if (key === 'z') return e.shiftKey ? 'redo' : 'undo';
-    if (key === 'y' && !e.shiftKey) return 'redo';
+    // Held keys must not run Undo or Redo through the whole history. The physical key (`code`) decides, so the
+    // combos also work on an Arabic layout, where `key` is a different letter.
+    if (e.repeat) return null;
+    const physical = e.code?.startsWith('Key') ? e.code.slice(3).toLowerCase() : key;
+    if (physical === 'f' && !e.shiftKey) return 'search';
+    if (physical === 'z') return e.shiftKey ? 'redo' : 'undo';
+    if (physical === 'y' && !e.shiftKey) return 'redo';
     return null;
   }
   if (e.altKey) {

@@ -228,7 +228,7 @@ export class SyncEngine implements OnDestroy {
 
   private handleFailure(error: unknown): void {
     if (error instanceof DriveAuthError) {
-      this.auth.markExpired();
+      this.auth.markExpired(error.token);
       this.statusSignal.set('paused');
       return;
     }

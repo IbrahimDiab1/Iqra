@@ -10,7 +10,12 @@ export interface DriveFileInfo {
 }
 
 /** 401, or a 403 for an auth reason: the access token is missing, expired or revoked. */
-export class DriveAuthError extends Error {}
+export class DriveAuthError extends Error {
+  /** The access token the rejected request used (null when there was none or it is unknown). */
+  constructor(readonly token: string | null = null) {
+    super();
+  }
+}
 
 /** The user's Drive is full. JSON sync can go on; PDF uploads must pause. */
 export class DriveQuotaError extends Error {

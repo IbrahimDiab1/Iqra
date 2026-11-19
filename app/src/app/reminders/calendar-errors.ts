@@ -17,6 +17,7 @@ export function describeCalendarError(e: unknown): CalendarProblem {
   if (e instanceof CalendarHttpError) {
     const base = { status: e.status, reason: e.reason };
     if (e.reason && API_DISABLED.has(e.reason)) return { message: c.apiDisabled, ...base };
+    if (e instanceof CalendarAuthError && e.status === 401) return { message: c.signInAgain, ...base };
     if (e instanceof CalendarAuthError) return { message: c.scopeNotGranted, ...base };
     return { message: c.apiError([e.status, e.reason].filter(Boolean).join(' ')), ...base };
   }

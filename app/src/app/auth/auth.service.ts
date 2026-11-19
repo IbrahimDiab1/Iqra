@@ -27,7 +27,7 @@ export abstract class AuthApi {
    * The sync engine and the upload queue call this when Google rejected the token (a 401). The real service tries one
    * silent renewal first and turns the state to expired only when that fails.
    */
-  abstract markExpired(): void;
+  abstract markExpired(rejected?: string | null): void;
   /** Counts every new token (sign-in, reconnect, silent renewal), so work that was waiting for one can retry. */
   abstract tokenVersion: Signal<number>;
   /**
@@ -305,7 +305,9 @@ export class GisAuthService extends AuthApi implements OnDestroy {
   }
 
   /** Google rejected the token: drop it and try one silent renewal; the state turns expired only if that fails. */
-  markExpired(): void {
+  markExpired(rejected?: string | null): void {
+    // A 401 for a token that has since been replaced (a renewal landed meanwhile) says nothing about the current one.
+    if (rejected && this.accessToken !== null && rejected !== this.accessToken) return;
     this.accessToken = null;
     this.expiresAt = 0;
     if (!this.profileSignal()) return;

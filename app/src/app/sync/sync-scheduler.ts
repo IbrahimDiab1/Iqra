@@ -3,6 +3,7 @@ import { NavigationEnd, Router } from '@angular/router';
 import type { Subscription } from 'rxjs';
 import { AuthApi } from '../auth/auth.service';
 import { CLOCK } from '../core/clock';
+import { Repo } from '../core/repo';
 import { SyncEngine } from './sync-engine';
 
 /** A last sync older than this counts as stale: coming back to the tab or opening the Library syncs again. */
@@ -25,15 +26,18 @@ export class SyncScheduler implements OnDestroy {
   private readonly auth = inject(AuthApi);
   private readonly clock = inject(CLOCK);
   private readonly router = inject(Router);
+  private readonly repo = inject(Repo);
 
   private started = false;
   private pollTimer: ReturnType<typeof setTimeout> | undefined;
   private idle = 0;
   private routerSub: Subscription | null = null;
+  private changesSub: Subscription | null = null;
   private seenToken = this.auth.tokenVersion();
 
   private readonly onVisible = (): void => {
     if (document.visibilityState === 'visible') {
+      this.resetBackoff();
       this.armPoll(POLL_MS);
       this.syncIfStale();
     } else {
@@ -42,6 +46,7 @@ export class SyncScheduler implements OnDestroy {
     }
   };
   private readonly onOnline = (): void => {
+    this.resetBackoff();
     if (this.canSync()) void this.engine.syncNow().catch(() => undefined);
     else if (this.canTry()) void this.engine.resume().catch(() => undefined);
   };
@@ -62,8 +67,11 @@ export class SyncScheduler implements OnDestroy {
     document.addEventListener('visibilitychange', this.onVisible);
     window.addEventListener('online', this.onOnline);
     this.routerSub = this.router.events.subscribe((e) => {
-      if (e instanceof NavigationEnd && e.urlAfterRedirects.split(/[?#]/)[0] === '/library') this.syncIfStale();
+      if (!(e instanceof NavigationEnd)) return;
+      this.resetBackoff();
+      if (e.urlAfterRedirects.split(/[?#]/)[0] === '/library') this.syncIfStale();
     });
+    this.changesSub = this.repo.changes$.subscribe(() => this.resetBackoff());
     this.armPoll(POLL_MS);
     void this.engine.resume().catch(() => undefined);
   }
@@ -83,6 +91,8 @@ export class SyncScheduler implements OnDestroy {
     window.removeEventListener('online', this.onOnline);
     this.routerSub?.unsubscribe();
     this.routerSub = null;
+    this.changesSub?.unsubscribe();
+    this.changesSub = null;
     this.started = false;
   }
 
@@ -106,6 +116,16 @@ export class SyncScheduler implements OnDestroy {
     if (version === this.seenToken) return;
     this.seenToken = version;
     if (this.started && this.canSync() && this.engine.status() !== 'synced') void this.engine.syncNow().catch(() => undefined);
+  }
+
+  /**
+   * The owner is active (tab shown, connection back, a page opened, something changed): the poll is quick again. Only a
+   * slowed poll is re-armed, so a stream of changes cannot keep pushing a normal poll back.
+   */
+  private resetBackoff(): void {
+    const wasSlow = this.idle >= IDLE_PASSES;
+    this.idle = 0;
+    if (wasSlow && this.pollTimer !== undefined) this.armPoll(POLL_MS);
   }
 
   private armPoll(delayMs: number): void {

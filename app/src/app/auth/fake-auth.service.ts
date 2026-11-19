@@ -60,7 +60,7 @@ export class FakeAuthService extends AuthApi {
 
   preload(): void {}
 
-  markExpired(): void {
+  markExpired(_rejected?: string | null): void {
     if (this.profileSignal()) {
       this.stateSignal.set('expired');
       this.lapsedSignal.set(true);

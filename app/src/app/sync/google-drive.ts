@@ -365,8 +365,8 @@ export class GoogleDrive implements DriveAdapter {
     if (!token) throw new DriveAuthError();
     const headers = { ...(init.headers as Record<string, string> | undefined), Authorization: `Bearer ${token}` };
     const res = await this.fetchFn(url, { ...init, headers });
-    if (res.status === 401) throw new DriveAuthError();
-    if (res.status === 403) throw await classifyForbidden(res);
+    if (res.status === 401) throw new DriveAuthError(token);
+    if (res.status === 403) throw await classifyForbidden(res, token);
     if (res.status === 429 || res.status >= 500) throw new DriveTransientError(`Drive failed with status ${res.status}`);
     return res;
   }
@@ -376,7 +376,7 @@ const AUTH_REASONS = new Set(['authError', 'invalidCredentials', 'insufficientPe
 const TRANSIENT_REASONS = new Set(['rateLimitExceeded', 'userRateLimitExceeded', 'backendError']);
 
 /** Reads the Drive error reason of a 403. Only auth reasons, or no reason at all, mean a bad token. */
-async function classifyForbidden(res: Response): Promise<Error> {
+async function classifyForbidden(res: Response, token: string): Promise<Error> {
   let reasons: string[] = [];
   try {
     const body = (await res.clone().json()) as { error?: { errors?: { reason?: string }[]; status?: string } };
@@ -389,7 +389,7 @@ async function classifyForbidden(res: Response): Promise<Error> {
   // Only auth reasons (or a 403 that names none) mean a bad token. Any other reason, such as
   // dailyLimitExceeded or domainPolicy, is not fixed by signing in again.
   const named = reasons.filter((r) => r !== '');
-  if (named.length === 0 || named.some((r) => AUTH_REASONS.has(r))) return new DriveAuthError();
+  if (named.length === 0 || named.some((r) => AUTH_REASONS.has(r))) return new DriveAuthError(token);
   return new DriveTransientError(`Drive refused the request (${named.join(', ')})`);
 }
 

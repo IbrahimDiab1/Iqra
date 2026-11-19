@@ -47,6 +47,13 @@ describe('GoogleDrive', () => {
     expect(files).toEqual([{ id: 'f1', name: 'a.json', modifiedTime: '2026-01-01T00:00:00.000Z', size: 12 }]);
   });
 
+  it('an auth error carries the token the rejected request used, so a renewed token is not dropped for it', async () => {
+    const drive = new GoogleDrive(tokens('t-old'), queueFetch(empty(401)), vi.fn());
+    await expect(drive.listAppData()).rejects.toMatchObject({ token: 't-old' });
+    const forbidden = new GoogleDrive(tokens('t-old'), queueFetch(json({ error: { errors: [{ reason: 'authError' }] } }, 403)), vi.fn());
+    await expect(forbidden.listAppData()).rejects.toMatchObject({ token: 't-old' });
+  });
+
   it('a 401 response rejects with DriveAuthError', async () => {
     const drive = new GoogleDrive(tokens(), queueFetch(empty(401)), vi.fn());
     await expect(drive.listAppData()).rejects.toBeInstanceOf(DriveAuthError);

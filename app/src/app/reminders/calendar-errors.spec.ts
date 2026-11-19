@@ -22,7 +22,13 @@ describe('describeCalendarError', () => {
 
   it('any other auth error (revoked, no token) says the same about permission', () => {
     expect(describeCalendarError(new CalendarAuthError()).message).toBe(SCOPE);
-    expect(describeCalendarError(new CalendarAuthError('x', 401, '')).message).toBe(SCOPE);
+    expect(describeCalendarError(new CalendarAuthError('x', 403, 'forbidden')).message).toBe(SCOPE);
+  });
+
+  it('a 401 (an expired or revoked token) asks to sign in again rather than hinting at the consent screen', () => {
+    const p = describeCalendarError(new CalendarAuthError('x', 401, 'authError'));
+    expect(p.message).toBe('Google Calendar needs you to sign in again. Try turning reminders on once more.');
+    expect(p).toMatchObject({ status: 401, reason: 'authError' });
   });
 
   it('an api-disabled reason wins even on an auth error', () => {

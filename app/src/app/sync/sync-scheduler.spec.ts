@@ -2,9 +2,11 @@ import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Subject } from 'rxjs';
 import { AuthApi } from '../auth/auth.service';
 import { FakeAuthService } from '../auth/fake-auth.service';
 import { CLOCK } from '../core/clock';
+import { Repo } from '../core/repo';
 import { POLL_MS, SLOW_POLL_MS, STALE_MS, SyncScheduler } from './sync-scheduler';
 import { SyncEngine, type SyncStatus } from './sync-engine';
 
@@ -31,6 +33,7 @@ describe('SyncScheduler', () => {
   let auth: FakeAuthService;
   let scheduler: SyncScheduler;
   let router: Router;
+  let changes: Subject<unknown>;
 
   const setVisible = (visible: boolean) => {
     Object.defineProperty(document, 'visibilityState', { value: visible ? 'visible' : 'hidden', configurable: true });
@@ -50,6 +53,7 @@ describe('SyncScheduler', () => {
     setOnline(true);
     engine = fakeEngine();
     auth = new FakeAuthService();
+    changes = new Subject();
     await auth.signIn();
     TestBed.configureTestingModule({
       providers: [
@@ -57,6 +61,7 @@ describe('SyncScheduler', () => {
         { provide: CLOCK, useValue: { now: () => now } },
         { provide: AuthApi, useValue: auth },
         { provide: SyncEngine, useValue: engine },
+        { provide: Repo, useValue: { changes$: changes.asObservable() } },
       ],
     });
     scheduler = TestBed.inject(SyncScheduler);
@@ -202,6 +207,51 @@ describe('SyncScheduler', () => {
       expect(engine.resume).toHaveBeenCalledTimes(5);
       await advance(POLL_MS);
       expect(engine.resume).toHaveBeenCalledTimes(6);
+    });
+
+    describe('the idle back-off ends when the owner is active', () => {
+      /** Three quiet passes: the poll has slowed to 5 minutes. */
+      async function slowDown(): Promise<void> {
+        scheduler.start();
+        engine.resume.mockClear();
+        engine.lastPassChanged = false;
+        for (let i = 0; i < 3; i++) await advance(POLL_MS);
+        expect(engine.resume).toHaveBeenCalledTimes(3);
+      }
+      /** After the trigger the next pass comes within 2 minutes and the following one 2 minutes later again. */
+      async function expectFast(): Promise<void> {
+        engine.resume.mockClear();
+        await advance(POLL_MS + 1000);
+        expect(engine.resume).toHaveBeenCalledTimes(1);
+        await advance(POLL_MS);
+        expect(engine.resume).toHaveBeenCalledTimes(2);
+      }
+
+      it('coming back to the tab', async () => {
+        await slowDown();
+        engine.lastSyncedAt.set(now);
+        setVisible(false);
+        setVisible(true);
+        await expectFast();
+      });
+
+      it('the connection returning', async () => {
+        await slowDown();
+        window.dispatchEvent(new Event('online'));
+        await expectFast();
+      });
+
+      it('a local change', async () => {
+        await slowDown();
+        changes.next({});
+        await expectFast();
+      });
+
+      it('opening another page', async () => {
+        await slowDown();
+        await router.navigateByUrl('/stats');
+        await expectFast();
+      });
     });
 
     it('does not run while the tab is hidden and starts again when it is visible', async () => {

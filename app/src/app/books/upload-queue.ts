@@ -66,7 +66,7 @@ export class UploadQueue {
         await this.process(next);
       } catch (error) {
         await this.db.pendingUploads.update(next.id, { attempts: next.attempts + 1 });
-        if (error instanceof DriveAuthError) this.auth.markExpired();
+        if (error instanceof DriveAuthError) this.auth.markExpired(error.token);
         else if (error instanceof DriveQuotaError) this.quotaSignal.set(true);
         else console.error('Upload failed', error);
         return;

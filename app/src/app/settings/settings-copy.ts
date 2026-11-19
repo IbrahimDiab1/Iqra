@@ -93,6 +93,7 @@ export const SETTINGS_COPY = {
     connecting: 'Connecting to Google Calendar…',
     denied: "Google didn't allow calendar access. Reminders stay off.",
     apiDisabled: "Google Calendar API isn't enabled for this project. Enable it in Google Cloud Console (APIs & Services → Library → Google Calendar API).",
+    signInAgain: 'Google Calendar needs you to sign in again. Try turning reminders on once more.',
     scopeNotGranted: "Google didn't grant calendar access. Check the consent screen scopes.",
     unreachable: "Couldn't reach Google. Check your connection and try again.",
     apiError: (detail: string) => (detail ? `Google Calendar returned an error (${detail}).` : 'Google Calendar returned an error.'),

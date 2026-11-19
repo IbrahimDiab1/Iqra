@@ -43,7 +43,18 @@ describe('shortcutFor', () => {
 
   it('ignores a held key so a toggle does not flicker', () => {
     expect(press('b', { repeat: true })).toBeNull();
-    expect(press('z', { ctrlKey: true, repeat: true })).toBe('undo');
+    expect(press('z', { ctrlKey: true, repeat: true })).toBeNull();
+    expect(press('y', { ctrlKey: true, repeat: true })).toBeNull();
+  });
+
+  it('Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y and Ctrl+F work on any keyboard layout (matched by the physical key)', () => {
+    // An Arabic layout reports key 'ئ' / 'ص' / 'ب' for these keys.
+    expect(press('ئ', { ctrlKey: true, code: 'KeyZ' })).toBe('undo');
+    expect(press('ئ', { ctrlKey: true, shiftKey: true, code: 'KeyZ' })).toBe('redo');
+    expect(press('ص', { ctrlKey: true, code: 'KeyY' })).toBe('redo');
+    expect(press('ب', { ctrlKey: true, code: 'KeyF' })).toBe('search');
+    expect(press('ب', { metaKey: true, code: 'KeyF' })).toBe('search');
+    expect(press('ب', { ctrlKey: true, code: 'KeyB' })).toBeNull();
   });
 
   it('opens the context menu with the Menu key or Shift+F10', () => {

@@ -431,6 +431,20 @@ describe('GisAuthService', () => {
       expect(auth.state()).toBe('signed-in');
     });
 
+    it('a 401 for a token that was already replaced leaves the newer token alone', async () => {
+      const auth = createService();
+      await auth.signIn();
+      await advance(RENEW_AT_MS + 1000);
+      expect(auth.token()).toBe('token-2');
+      auth.markExpired('token-1');
+      await advance(0);
+      expect(auth.token()).toBe('token-2');
+      expect(prompts).toEqual([undefined, 'none']);
+      auth.markExpired('token-2');
+      await advance(0);
+      expect(prompts).toEqual([undefined, 'none', 'none']);
+    });
+
     it('a rejected token that cannot be renewed turns the state to expired', async () => {
       const auth = createService();
       await auth.signIn();

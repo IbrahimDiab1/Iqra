@@ -49,7 +49,7 @@ export class CoverCache {
       await this.db.covers.put({ bookId, blob });
       url.set(URL.createObjectURL(blob));
     } catch (error) {
-      if (error instanceof DriveAuthError) this.auth.markExpired();
+      if (error instanceof DriveAuthError) this.auth.markExpired(error.token);
       else {
         this.failed.add(bookId);
         console.error('Cover download failed', error);
