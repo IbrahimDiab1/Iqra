@@ -32,8 +32,6 @@ const ICON = {
   wifiOff: '<path d="M3 3l18 18M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 3.2-2M19 12.9a10 10 0 0 0-6-2.8M2 8.8A15 15 0 0 1 7 5.7M22 8.8A15 15 0 0 0 12 5"/><path d="M12 20h.01"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   chevD: '<path d="M6 9l6 6 6-6"/>',
-  histBack: '<path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/>',
-  histFwd: '<path d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3"/>',
   zoomIn: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2M11 8v6M8 11h6"/>',
   zoomOut: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2M8 11h6"/>',
   grip: '<path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/>',
@@ -42,9 +40,13 @@ const ICON = {
   checkCircle: '<circle cx="12" cy="12" r="8.5"/><path d="M8.3 12.3l2.5 2.5 4.9-5.4"/>',
   checkCircleFill: '<circle cx="12" cy="12" r="8.5" fill="currentColor"/><path d="M8.3 12.3l2.5 2.5 4.9-5.4" stroke="var(--paper, #fff)"/>',
   progress: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 8.5 8.5H12z" fill="currentColor"/>',
-  undo: '<path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-6.7L3 9"/>',
-  redo: '<path d="M21 7v6h-6"/><path d="M21 13a9 9 0 1 1-3-6.7L21 9"/>',
+  undo: '<path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/>',
+  redo: '<path d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3"/>',
+  history: '<path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/><path d="M12 8v4l3 2"/>',
+  historyFwd: '<path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/><path d="M12 8v4l3 2"/>',
   fullscreen: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
+  noteFill: '<path d="M5 4h10l4 4v12H5z" fill="currentColor"/><path d="M9 12h6M9 16h4" stroke="var(--surface, #fff)"/>',
+  notePlus: '<path d="M5 4h10l4 4v12H5z"/><path d="M12 10v6M9 13h6"/>',
 } as const;
 
 export type IconName = keyof typeof ICON;

@@ -72,7 +72,6 @@ export const COPY = {
     sideNote: 'Side note',
     sideNoteOn: (p: number) => `+ Side note on p. ${p}`,
     summary: 'Summary',
-    addSummary: '+ Summary',
     bookSummary: 'Book summary',
     pageRangeSummary: '+ Page-range summary',
     fromPage: 'From page',

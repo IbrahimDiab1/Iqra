@@ -7,8 +7,8 @@ const EDGE_PX = 8;
 /** Elements this close to the right edge get their label on their left (the reader's toolbar). */
 const SIDE_ZONE_PX = 96;
 const TOOLTIP_ID = 'iqra-tooltip';
-/** Buttons and links whose name is only an `aria-label`. */
-const TARGET = 'button[aria-label], a[aria-label], [role="button"][aria-label]';
+/** Buttons, links and progress rings whose name is only an `aria-label`. */
+const TARGET = 'button[aria-label], a[aria-label], [role="button"][aria-label], [role="progressbar"][aria-label]';
 
 /**
  * Hover and keyboard-focus labels for every icon-only button, app-wide. One listener set on the document,
@@ -103,6 +103,9 @@ export class TooltipService {
       kbd.style.cssText = 'margin-inline-start:8px;padding:0 5px;border:1px solid var(--tool-line);border-radius:5px;font:inherit;font-size:11px;opacity:.85';
       tip.append(kbd);
     }
+    // Measure from the corner, so a previous spot near an edge cannot squeeze the box.
+    tip.style.left = '0px';
+    tip.style.top = '0px';
     tip.style.visibility = 'hidden';
     tip.style.display = 'block';
     this.place(tip, el);
@@ -148,7 +151,8 @@ export class TooltipService {
     tip.style.cssText =
       'position:fixed;z-index:200;display:none;max-width:260px;padding:5px 9px;border-radius:8px;' +
       'background:var(--tool-bg);color:var(--tool-fg);font:500 12.5px/1.35 var(--ui);pointer-events:none;' +
-      'box-shadow:0 4px 14px rgb(0 0 0 / .25);white-space:nowrap';
+      'box-shadow:0 4px 14px rgb(0 0 0 / .25);overflow-wrap:anywhere';
+    tip.dir = 'auto';
     this.doc.body.append(tip);
     this.tip = tip;
     return tip;

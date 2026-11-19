@@ -7,6 +7,7 @@ import { DB, IqraDb } from '../core/db';
 import { newId } from '../core/ids';
 import { COPY } from '../ui/copy';
 import { PROGRESS_COPY } from './progress-copy';
+import { CHROME_COPY } from './chrome-copy';
 import { BookPanelDrawerComponent } from './book-panel.drawer';
 import type { Place } from './jump-history';
 import type { PageRenderer } from './pdf-session';
@@ -93,17 +94,11 @@ describe('BookPanelDrawerComponent', () => {
     await db.delete();
   });
 
-  it('lists the outline indented and highlights the current chapter', () => {
+  it('the Contents tab shows the collapsible tree, highlights the current chapter and jumps on a row, then closes', () => {
     create((h) => h.page.set(26));
+    expect(el.querySelector('iqra-toc-tree')).not.toBeNull();
     expect(rows().map((r) => r.querySelector('.title')!.textContent)).toEqual(['Intro', 'Part Two', 'Nested']);
-    expect(rows().map((r) => r.style.paddingInlineStart)).toEqual(['0px', '0px', '16px']);
     expect(rows().map((r) => r.classList.contains('current'))).toEqual([false, false, true]);
-    expect(rows()[1].querySelector('.num')!.textContent).toBe('20');
-    expect(rows()[0].querySelector('.title')!.getAttribute('dir')).toBe('auto');
-  });
-
-  it('tapping an entry jumps to its page and closes', () => {
-    create();
     rows()[1].click();
     expect(host.jumps).toEqual([{ page: 20, offset: 0 }]);
     expect(host.closes).toBe(1);
@@ -121,30 +116,43 @@ describe('BookPanelDrawerComponent', () => {
       id, bookId: 'b1', type: 'summary', scope, body, tags: [], createdAt: 1, updatedAt: 1, deviceId: 'd',
     });
     const sumButtons = () => Array.from(el.querySelectorAll<HTMLButtonElement>('.sum'));
+    const card = () => el.querySelector<HTMLElement>('.book-sum')!;
 
-    it('shows a book summary card on top and + Summary on every row', () => {
+    it('with no book summary the card is a dashed "Write a summary" button and every row offers Add summary', () => {
       create();
-      expect(el.querySelector('.book-sum')!.textContent).toContain(COPY.annotations.bookSummary);
-      expect(sumButtons().map((b) => b.textContent!.trim())).toEqual(Array(4).fill(COPY.annotations.addSummary));
+      expect(card().classList.contains('empty')).toBe(true);
+      expect(card().tagName).toBe('BUTTON');
+      expect(card().textContent!.trim()).toBe(CHROME_COPY.writeSummary);
+      expect(el.querySelector('.bs-edit')).toBeNull();
+      expect(sumButtons().map((b) => b.getAttribute('aria-label'))).toEqual(Array(3).fill(CHROME_COPY.addSummary));
+      expect(el.textContent).not.toContain('+ Summary');
     });
 
-    it('a row with a summary shows Summary and its text preview on the card', () => {
+    it('with a book summary the card shows its text and an Edit button; rows with a summary are filled', () => {
       create((h) => h.annotations.set([SUM('a', { kind: 'book' }, 'My whole book'), SUM('b', { kind: 'outline', nodeKey: '1', title: 'Part Two', fromPage: 20, toPage: 40 })]));
-      const labels = sumButtons().map((b) => b.textContent!.trim());
-      expect(labels[0]).toBe(COPY.annotations.summary);
-      expect(labels.slice(1)).toEqual([COPY.annotations.addSummary, COPY.annotations.summary, COPY.annotations.addSummary]);
-      expect(el.querySelector('.book-sum .preview')!.textContent).toContain('My whole book');
+      expect(card().classList.contains('empty')).toBe(false);
+      expect(card().textContent).toContain(COPY.annotations.bookSummary);
+      expect(card().querySelector('.preview')!.textContent).toContain('My whole book');
+      expect(card().querySelector('.bs-edit')!.textContent!.trim()).toBe(COPY.annotations.edit);
+      expect(sumButtons().map((b) => b.classList.contains('has'))).toEqual([false, true, false]);
     });
 
-    it('the buttons ask for the book scope and the node scope with its page range, then close', () => {
+    it('the card and the badges ask for the book scope and the node scope with its page range, then close', () => {
       create();
-      sumButtons()[0].click();
+      card().click();
       expect(host.scopes[0]).toEqual({ kind: 'book' });
       expect(host.closes).toBe(1);
       host.open.set(true);
       fixture.detectChanges();
-      sumButtons()[2].click();
+      sumButtons()[1].click();
       expect(host.scopes[1]).toEqual({ kind: 'outline', nodeKey: '1', title: 'Part Two', fromPage: 20, toPage: 40 });
+      expect(host.closes).toBe(2);
+    });
+
+    it('Edit on a written book summary opens the editor on the book scope', () => {
+      create((h) => h.annotations.set([SUM('a', { kind: 'book' }, 'My whole book')]));
+      card().querySelector<HTMLButtonElement>('.bs-edit')!.click();
+      expect(host.scopes).toEqual([{ kind: 'book' }]);
     });
   });
 
@@ -205,75 +213,23 @@ describe('BookPanelDrawerComponent', () => {
     });
   });
 
-  describe('progress in Contents', () => {
-    const bars = () => Array.from(el.querySelectorAll<HTMLElement>('.bar'));
-    const fills = () => Array.from(el.querySelectorAll<HTMLElement>('.bar .fill'));
-    const checks = () => Array.from(el.querySelectorAll<HTMLButtonElement>('button.chk'));
-    const one: OutlineNode[] = [{ key: '0', title: 'All', page: 1, children: [] }];
-
-    it('shows a chapter bar at 55.6 % when 5 of 9 pages are reached, labelled with the percentage', () => {
-      create((h) => {
-        h.book = { id: 'b1', pageCount: 9, outline: one, progressMode: 'last-page', lastPageReached: 5 } as unknown as Book;
-      });
-      expect(fills()[0].style.width).toBe('55.6%');
-      expect(bars()[0].getAttribute('aria-label')).toBe(PROGRESS_COPY.chapterPct(56));
-      expect(el.textContent).toContain(PROGRESS_COPY.chaptersDone(0, 1));
+  it('passes the marks and progress mode to the tree: marked mode shows the chapter ring toggles', () => {
+    create((h) => {
+      h.book = { id: 'b1', pageCount: 40, outline: OUTLINE, progressMode: 'marked', lastPageReached: 0 } as unknown as Book;
+      h.marked.set(new Set(Array.from({ length: 19 }, (_, i) => i + 1)));
     });
+    const rings = Array.from(el.querySelectorAll<HTMLButtonElement>('button.ring'));
+    expect(rings).toHaveLength(3);
+    expect(rings.map((r) => r.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false']);
+    expect(el.textContent).toContain(PROGRESS_COPY.chaptersDone(1, 2));
+  });
 
-    it('counts finished top-level chapters in the header line', () => {
-      create((h) => {
-        h.book = { id: 'b1', pageCount: 40, outline: OUTLINE, progressMode: 'last-page', lastPageReached: 25 } as unknown as Book;
-      });
-      expect(el.textContent).toContain(PROGRESS_COPY.chaptersDone(1, 2));
-      expect(fills().map((f) => f.style.width)).toEqual(['100%', '28.6%', '6.3%']);
-    });
-
-    it('hides the chapters-done line when the book has no outline', () => {
-      create((h) => {
-        h.book = { id: 'b1', pageCount: 9, outline: [], progressMode: 'last-page', lastPageReached: 5 } as unknown as Book;
-      });
-      expect(el.textContent).not.toContain('chapters done');
-      expect(bars()).toHaveLength(0);
-    });
-
-    it('never exceeds 100 % and shows 0 for a one-page book', () => {
-      create((h) => {
-        h.book = { id: 'b1', pageCount: 1, outline: one, progressMode: 'last-page', lastPageReached: 0 } as unknown as Book;
-      });
-      expect(fills()[0].style.width).toBe('0%');
-      fixture.destroy();
-      create((h) => {
-        h.book = { id: 'b1', pageCount: 9, outline: one, progressMode: 'last-page', lastPageReached: 500 } as unknown as Book;
-      });
-      expect(fills()[0].style.width).toBe('100%');
-    });
-
-    it('has no check buttons in last-page mode', () => {
-      create((h) => {
-        h.book = { id: 'b1', pageCount: 9, outline: one, progressMode: 'last-page', lastPageReached: 5 } as unknown as Book;
-      });
-      expect(checks()).toHaveLength(0);
-    });
-
-    it('in marked mode the check button marks the chapter range and pressing again clears it', async () => {
-      vi.useRealTimers();
-      create((h) => {
-        h.book = { id: 'b1', pageCount: 40, outline: OUTLINE, progressMode: 'marked', lastPageReached: 0 } as unknown as Book;
-      });
-      expect(checks()).toHaveLength(3);
-      expect(checks()[0].getAttribute('aria-pressed')).toBe('false');
-      checks()[0].click();
-      await vi.waitFor(async () => {
-        const marked = (await db.readMarks.toArray()).filter((m) => m.read).map((m) => m.page).sort((a, b) => a - b);
-        expect(marked).toEqual(Array.from({ length: 19 }, (_, i) => i + 1));
-      });
-      host.marked.set(new Set(Array.from({ length: 19 }, (_, i) => i + 1)));
-      fixture.detectChanges();
-      expect(checks()[0].getAttribute('aria-pressed')).toBe('true');
-      expect(fills()[0].style.width).toBe('100%');
-      checks()[0].click();
-      await vi.waitFor(async () => expect((await db.readMarks.toArray()).filter((m) => m.read)).toEqual([]));
-    });
+  it('tells the tab strip about a tab picked by hand', () => {
+    create();
+    const picked: string[] = [];
+    fixture.debugElement.children[0].componentInstance.tabChange.subscribe((t: string) => picked.push(t));
+    el.querySelectorAll<HTMLElement>('[role=tab]')[2].click();
+    expect(picked).toEqual(['bookmarks']);
   });
 
   it('closing within the debounce window cancels the pending search', async () => {

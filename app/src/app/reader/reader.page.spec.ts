@@ -565,10 +565,10 @@ describe('ReaderPage', () => {
       });
     }
 
-    it('Contents shows the book summary card; + Summary opens the editor and closing it untouched creates nothing', async () => {
+    it('Contents shows the Write a summary card; it opens the editor and closing it untouched creates nothing', async () => {
       await create();
       await openContents();
-      el.querySelector<HTMLButtonElement>('iqra-book-panel-drawer .sum')!.click();
+      el.querySelector<HTMLButtonElement>('iqra-book-panel-drawer .book-sum')!.click();
       await vi.waitFor(() => {
         fixture.detectChanges();
         expect(el.querySelector('iqra-text-editor-sheet .panel.open')).not.toBeNull();
@@ -581,7 +581,7 @@ describe('ReaderPage', () => {
     it('typing in a new summary creates it with the chapter scope', async () => {
       await create();
       await openContents();
-      el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-drawer .sum')[2].click();
+      el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-drawer .sum')[1].click();
       await vi.waitFor(() => {
         fixture.detectChanges();
         expect(el.querySelector('iqra-text-editor-sheet .panel.open')).not.toBeNull();

@@ -136,17 +136,19 @@ test.describe('progress and stats', () => {
     expect(book.finishedAt).toBeGreaterThan(0);
   });
 
-  test('contents: shows chapter bars and "N of M chapters done"', async () => {
+  test('contents: chapter rings mark the range and "N of M chapters done" follows', async () => {
     await configureBook(page, { mode: 'Pages I mark as read' });
     await openBook(page);
     await page.getByRole('button', { name: 'Contents & notes', exact: true }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.getByText('0 of 3 chapters done')).toBeVisible();
     await expect(page.locator('.row')).toHaveCount(3);
-    await expect(page.getByRole('progressbar', { name: '0%' })).toHaveCount(3);
-    await page.getByRole('button', { name: 'Mark read Chapter 1', exact: true }).click();
+    const rings = page.getByRole('button', { name: /^Mark chapter read \(0 % read\)$/ });
+    await expect(rings).toHaveCount(3);
+    await rings.first().click();
     await expect(page.getByText('1 of 3 chapters done')).toBeVisible();
-    await expect(page.getByRole('progressbar', { name: '100%' })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Unmark chapter (100 % read)' })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: /^Mark chapter read/ })).toHaveCount(2);
   });
 
   test('book stats tab shows totals after a session', async () => {

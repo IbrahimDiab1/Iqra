@@ -278,6 +278,23 @@ test.describe('reader', () => {
     await expectPage(page, 9);
   });
 
+  test('contents: summary badges say Add summary with no text, and writing one fills the badge', async () => {
+    await openBook(page);
+    await openPanel(page, 'Contents');
+    const drawer = page.locator('iqra-drawer');
+    await expect(drawer.getByText('+ Summary')).toHaveCount(0);
+    await expect(drawer.getByRole('button', { name: 'Write a summary' })).toBeVisible();
+    const badges = drawer.getByRole('button', { name: 'Add summary' });
+    await expect(badges).toHaveCount(3);
+    await badges.nth(1).click();
+    const dialog = page.getByRole('dialog', { name: /Summary/ });
+    await dialog.getByRole('textbox', { name: 'Summary' }).fill('Second chapter in brief');
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await openPanel(page, 'Contents');
+    await expect(drawer.getByRole('button', { name: 'Summary written' })).toHaveCount(1);
+    await expect(drawer.getByRole('button', { name: 'Add summary' })).toHaveCount(2);
+  });
+
   test('search finds a page and tapping the hit jumps there', async () => {
     await openBook(page);
     await openPanel(page, 'Search');

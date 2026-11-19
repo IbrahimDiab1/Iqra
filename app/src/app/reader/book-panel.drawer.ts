@@ -14,33 +14,27 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { DomSanitizer } from '@angular/platform-browser';
 import { findSummary } from '../annotations/summary-scope';
 import type { Annotation, Book, SummaryScope } from '../core/models';
-import { chapterProgress, chaptersDone } from '../progress/progress';
-import { ReadMarkService } from '../progress/read-mark.service';
 import { COPY } from '../ui/copy';
-import { PROGRESS_COPY } from './progress-copy';
-import { icon } from '../ui/icons';
-import { ToastService } from '../ui/toast.service';
+import { CHROME_COPY } from './chrome-copy';
 import { DrawerComponent } from './drawer.component';
 import type { Place } from './jump-history';
 import { BookmarksTabComponent } from './bookmarks-tab.component';
-import { flattenOutline, nodeRange } from './outline';
 import { NotesTabComponent, type NotesFilter } from './notes-tab.component';
 import type { PageRenderer } from './pdf-session';
 import { SearchService, type SearchHit } from './search.service';
+import { TocTreeComponent } from './toc-tree.component';
 
 export type PanelTab = 'contents' | 'notes' | 'bookmarks' | 'search';
 type Filter = NotesFilter;
 
 const DEBOUNCE_MS = 300;
-const INDENT_PX = 16;
 const MIN_QUERY = 2;
 
 @Component({
   selector: 'iqra-book-panel-drawer',
-  imports: [DrawerComponent, NotesTabComponent, BookmarksTabComponent],
+  imports: [DrawerComponent, NotesTabComponent, BookmarksTabComponent, TocTreeComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <iqra-drawer [open]="open()" [title]="titles[tab()]" (closed)="close()">
@@ -51,45 +45,28 @@ const MIN_QUERY = 2;
       </div>
 
       @if (tab() === 'contents') {
-        <div class="book-sum">
-          <div class="bs-head">
-            <span class="bs-title">{{ ann.bookSummary }}</span>
-            <button type="button" class="sum" (click)="summarize(bookScope)">{{ bookSummary() ? ann.summary : ann.addSummary }}</button>
-          </div>
-          @if (bookSummary()?.body; as text) {
-            <p class="preview" dir="auto">{{ text }}</p>
-          }
-        </div>
-        @if (entries().length === 0) {
-          <p class="note">{{ copy.noContents }}</p>
-        } @else {
-          <p class="done-line">{{ prog.chaptersDone(chapters().done, chapters().total) }}</p>
-          <ul class="list">
-            @for (e of entries(); track e.node.key) {
-              <li class="item">
-                <button type="button" class="row" [class.current]="e.node.key === currentKey()" [style.padding-inline-start.px]="e.depth * indent" (click)="go(e.node.page)">
-                  <span class="title" dir="auto">{{ e.node.title }}</span>
-                  <span class="num">{{ e.node.page }}</span>
-                </button>
-                @if (markable()) {
-                  <button
-                    type="button"
-                    class="chk"
-                    [class.on]="e.done"
-                    [attr.aria-pressed]="e.done"
-                    [attr.aria-label]="prog.markRead + ' ' + e.node.title"
-                    (click)="markChapter(e)"
-                    [innerHTML]="checkIcon"
-                  ></button>
-                }
-                <button type="button" class="sum" (click)="summarize(e.scope)">{{ e.has ? ann.summary : ann.addSummary }}</button>
-                <span class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="e.pct" [attr.aria-label]="prog.chapterPct(e.pct)">
-                  <span class="fill" [style.width]="e.width"></span>
-                </span>
-              </li>
+        @if (bookSummary(); as sum) {
+          <div class="book-sum">
+            <div class="bs-head">
+              <span class="bs-title">{{ ann.bookSummary }}</span>
+              <button type="button" class="bs-edit" (click)="summarize(bookScope)">{{ ann.edit }}</button>
+            </div>
+            @if (sum.body) {
+              <p class="preview" dir="auto">{{ sum.body }}</p>
             }
-          </ul>
+          </div>
+        } @else {
+          <button type="button" class="book-sum empty" (click)="summarize(bookScope)">{{ toc.writeSummary }}</button>
         }
+        <iqra-toc-tree
+          [book]="book()"
+          [annotations]="annotations()"
+          [marked]="marked()"
+          [page]="page()"
+          [active]="open() && tab() === 'contents'"
+          (jump)="go($event.page)"
+          (summary)="summarize($event)"
+        />
       } @else if (tab() === 'notes') {
         <iqra-notes-tab
           [book]="book()"
@@ -150,22 +127,16 @@ const MIN_QUERY = 2;
     button:focus-visible, .field:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .note { margin: 12px 2px; color: var(--muted); font-size: 14px; }
     .list { list-style: none; margin: 0; padding: 0; }
-    .row, .hit { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding-block: 6px; padding-inline-end: 6px; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--fg); font: 15px var(--ui); text-align: start; cursor: pointer; }
-    .row .title { flex: 1; min-width: 0; }
-    .row .num, .pnum { flex: none; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
-    .item { position: relative; display: flex; align-items: center; border-bottom: 1px solid var(--line); }
-    .done-line { margin: 4px 2px 8px; color: var(--muted); font-size: 13px; }
-    .bar { position: absolute; inset-inline: 0; bottom: 0; height: 3px; background: var(--surface-2); }
-    .fill { display: block; height: 100%; background: var(--accent); }
-    .chk { flex: none; display: inline-grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: var(--radius-control); background: none; color: transparent; cursor: pointer; }
-    .chk.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); }
-    .item .row { flex: 1; min-width: 0; border-bottom: 0; }
-    .sum { flex: none; min-height: 40px; padding: 0 10px; border: 0; background: none; color: var(--accent); font: 600 13px var(--ui); cursor: pointer; }
-    .book-sum { margin-bottom: 8px; padding: 6px 4px 6px 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface-2); }
+    .hit { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding-block: 6px; padding-inline-end: 6px; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--fg); font: 15px var(--ui); text-align: start; cursor: pointer; }
+    .pnum { flex: none; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+    .book-sum { box-sizing: border-box; display: block; width: 100%; margin-bottom: 8px; padding: 8px 6px 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface-2); color: var(--fg); font: 15px var(--ui); text-align: start; }
+    .book-sum.empty { min-height: 44px; border-style: dashed; background: none; color: var(--muted); cursor: pointer; }
+    .book-sum.empty:hover { border-color: var(--accent); color: var(--accent); }
     .bs-head { display: flex; align-items: center; gap: 8px; }
     .bs-title { flex: 1; font-weight: 600; font-size: 15px; }
-    .preview { margin: 0 8px 8px 0; font-size: 14px; line-height: 1.45; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-    .row.current { color: var(--accent); font-weight: 600; }
+    .bs-edit { min-height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--accent); font: 600 13px var(--ui); cursor: pointer; }
+    .bs-edit:hover { background: var(--accent-soft); }
+    .preview { margin: 2px 8px 2px 0; font-size: 14px; line-height: 1.45; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .hit { align-items: flex-start; flex-direction: column; gap: 2px; }
     .snip { font-size: 14px; line-height: 1.45; }
     mark { background: var(--hl-yellow); color: inherit; border-radius: 2px; }
@@ -199,11 +170,8 @@ export class BookPanelDrawerComponent implements OnDestroy {
   readonly flash = output<string>();
 
   protected readonly copy = COPY.reader;
-  private readonly sanitizer = inject(DomSanitizer);
-  private readonly toast = inject(ToastService);
   protected readonly ann = COPY.annotations;
-  protected readonly prog = PROGRESS_COPY;
-  protected readonly checkIcon = this.sanitizer.bypassSecurityTrustHtml(icon('check', 20));
+  protected readonly toc = CHROME_COPY;
   protected readonly tabs: { id: PanelTab; label: string }[] = [
     { id: 'contents', label: COPY.reader.contents },
     { id: 'notes', label: COPY.reader.notes },
@@ -215,31 +183,10 @@ export class BookPanelDrawerComponent implements OnDestroy {
   };
   protected readonly filter = signal<Filter>('all');
   protected readonly bookScope: SummaryScope = { kind: 'book' };
-  protected readonly indent = INDENT_PX;
   protected readonly minQuery = MIN_QUERY;
   protected readonly tab = linkedSignal<PanelTab>(() => this.initialTab());
 
   protected readonly bookSummary = computed(() => findSummary(this.annotations(), this.bookScope));
-  protected readonly entries = computed(() => {
-    const { outline, pageCount } = this.book();
-    return flattenOutline(outline).map((e) => {
-      const scope: SummaryScope = { kind: 'outline', nodeKey: e.node.key, title: e.node.title, ...nodeRange(outline, e.node.key, pageCount) };
-      const { fraction, done } = chapterProgress(this.book(), e.node, this.marked());
-      const pct = Math.round(fraction * 100);
-      return { ...e, scope, has: !!findSummary(this.annotations(), scope), done, pct, width: `${Math.round(fraction * 1000) / 10}%` };
-    });
-  });
-  protected readonly chapters = computed(() => chaptersDone(this.book(), this.marked()));
-  protected readonly markable = computed(() => this.book().progressMode === 'marked');
-  /** The entry with the greatest page not after the current one; later (deeper) entries win ties. */
-  protected readonly currentKey = computed(() => {
-    const page = this.page();
-    let best: { key: string; page: number } | null = null;
-    for (const { node } of this.entries()) {
-      if (node.page <= page && (best === null || node.page >= best.page)) best = { key: node.key, page: node.page };
-    }
-    return best?.key ?? null;
-  });
 
   protected readonly query = signal('');
   protected readonly hits = signal<SearchHit[]>([]);
@@ -248,7 +195,6 @@ export class BookPanelDrawerComponent implements OnDestroy {
   protected readonly searched = signal(false);
   protected readonly capped = signal(false);
 
-  private readonly readMarks = inject(ReadMarkService);
   private readonly searchService = inject(SearchService);
   private readonly injector = inject(Injector);
   private readonly field = viewChild<ElementRef<HTMLInputElement>>('field');
@@ -289,16 +235,6 @@ export class BookPanelDrawerComponent implements OnDestroy {
   protected go(page: number): void {
     this.jump.emit({ page, offset: 0 });
     this.close();
-  }
-
-  /** Marks every page of the chapter, or clears them when the whole chapter is already marked. */
-  protected markChapter(e: { scope: SummaryScope; done: boolean }): void {
-    if (e.scope.kind !== 'outline') return;
-    const { fromPage, toPage } = e.scope;
-    this.readMarks.setRange(this.book().id, fromPage, toPage, !e.done).catch((err) => {
-      console.warn('Could not change the read marks', err);
-      this.toast.show(this.ann.saveFailed);
-    });
   }
 
   protected summarize(scope: SummaryScope): void {

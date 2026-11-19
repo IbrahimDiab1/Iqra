@@ -24,8 +24,8 @@ import { CHROME_COPY } from './chrome-copy';
       }
     </div>
     @if (canBack() || canForward()) {
-      <button type="button" class="ib" [attr.aria-label]="copy.jumpBack" data-shortcut="Alt+←" [disabled]="!canBack()" (click)="historyBack.emit()" [innerHTML]="ic('histBack')"></button>
-      <button type="button" class="ib" [attr.aria-label]="copy.jumpForward" data-shortcut="Alt+→" [disabled]="!canForward()" (click)="historyForward.emit()" [innerHTML]="ic('histFwd')"></button>
+      <button type="button" class="ib" [attr.aria-label]="copy.jumpBack" data-shortcut="Alt+←" [disabled]="!canBack()" (click)="historyBack.emit()" [innerHTML]="ic('history')"></button>
+      <button type="button" class="ib" [attr.aria-label]="copy.jumpForward" data-shortcut="Alt+→" [disabled]="!canForward()" (click)="historyForward.emit()" [innerHTML]="ic('historyFwd')"></button>
     }
     @if (gotoOpen()) {
       <form class="goto" (submit)="submit($event)">
