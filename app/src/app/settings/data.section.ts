@@ -173,7 +173,7 @@ export class DataSection {
     }
     const result = parseBackup(text);
     if (!result.ok) {
-      this.error.set(this.c.errors[result.error]);
+      this.error.set(result.error === 'bad-record' ? this.c.badRecord(result.table, result.index + 1) : this.c.errors[result.error]);
       return;
     }
     this.pending.set(result.tables);

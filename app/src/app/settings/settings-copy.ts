@@ -140,6 +140,7 @@ export const SETTINGS_COPY = {
     restored: 'Backup restored',
     restoreFailed: "Couldn't restore the backup. Nothing was changed.",
     nothingToRestore: 'This backup has no data to restore.',
+    badRecord: (table: string, n: number) => `That backup has a damaged entry (${table}, number ${n}). Nothing was changed.`,
     errors: {
       'not-json': "That file isn't an Iqra backup. Nothing was changed.",
       'wrong-version': 'That backup was made by a different version of Iqra. Nothing was changed.',

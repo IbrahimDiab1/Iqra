@@ -151,6 +151,13 @@ describe('DataSection', () => {
     expect(syncNow).not.toHaveBeenCalled();
   });
 
+  it('names the table and entry of a damaged record', async () => {
+    await pick(JSON.stringify({ schemaVersion: 1, tables: { categories: [{ id: 'c', updatedAt: 1, deviceId: 'a', name: 'ok', order: 0 }, { id: 'd', updatedAt: 1, deviceId: 'a', name: 7, order: 0 }] } }));
+    await settle(() => expect(q('[data-testid="restore-error"]')!.textContent).toContain('categories, number 2'));
+    expect(sheetOpen()).toBe(false);
+    expect(await db.categories.count()).toBe(0);
+  });
+
   it('refuses a file over 50 MB without reading it', async () => {
     const input = q<HTMLInputElement>('[data-testid="restore-input"]')!;
     const big = new File(['x'], 'big.json');

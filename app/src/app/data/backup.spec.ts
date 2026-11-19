@@ -2,7 +2,26 @@ import { describe, expect, it } from 'vitest';
 import type { SyncRecord } from '../core/models';
 import { BACKUP_VERSION, buildBackup, mergeInto, parseBackup } from './backup';
 
-const rec = (id: string, updatedAt: number, deviceId = 'a', extra: Record<string, unknown> = {}): SyncRecord => ({ id, updatedAt, deviceId, ...extra });
+const VALID: Record<string, Record<string, unknown>> = {
+  books: { title: 'Dune', author: 'FH', driveFileId: 'd', fileName: 'd.pdf', sizeBytes: 10, sha256: 'x', pageCount: 3, outline: [{ key: '0', title: 'A', page: 1, children: [] }], language: 'en', direction: 'ltr', addedAt: 1, status: 'reading', categoryIds: ['c1'], tags: ['t'], progressMode: 'marked', pageMode: 'swipe', lastPageReached: 1 },
+  categories: { name: 'Fiqh', order: 0 },
+  upNext: { bookIds: ['b1'] },
+  goals: { categoryId: null, measure: 'pages', target: 50 },
+  settings: { defaultProgressMode: 'last-page', defaultPageMode: 'swipe', defaultView: 'page', readerTheme: 'paper', weekStartsOn: 6, reminders: { enabled: true, days: [1], time: '21:30' }, cardDirection: 'mixed' },
+  annotations: { bookId: 'b1', type: 'highlight', page: 1, color: 'yellow', text: { page: 1, start: { item: 0, offset: 0 }, end: { item: 0, offset: 3 }, rects: [{ x: 0, y: 0, w: 1, h: 1 }], quote: 'q' }, tags: [], createdAt: 1 },
+  positions: { bookId: 'b1', page: 1, offset: 0, zoom: 1, view: 'page' },
+  readMarks: { bookId: 'b1', page: 1, read: true },
+  sessions: { bookId: 'b1', startedAt: 1_700_000_000_000, endedAt: 1_700_000_060_000, activeMs: 60000, pagesRead: [1] },
+};
+const valid = (table: string, id = 'r1', updatedAt = 1): SyncRecord => rec(id, updatedAt, 'a', VALID[table]);
+const BAD: Record<string, Record<string, unknown>> = {
+  books: { categoryIds: 'c1' }, categories: { name: 5 }, upNext: { bookIds: [1] }, goals: { measure: 'money' }, settings: { reminders: { days: [9] } },
+  annotations: { tags: undefined }, positions: { page: '1' }, readMarks: { read: 'yes' }, sessions: { pagesRead: 'x' },
+};
+
+function rec(id: string, updatedAt: number, deviceId = 'a', extra: Record<string, unknown> = {}): SyncRecord {
+  return { id, updatedAt, deviceId, ...extra };
+}
 
 describe('buildBackup', () => {
   it('wraps tables with the version and time, keeping tombstones', () => {
@@ -15,9 +34,24 @@ describe('buildBackup', () => {
   });
 });
 
+describe('parseBackup field validation', () => {
+  it.each(Object.keys(BAD))('rejects the whole backup when one %s record has a bad field, naming table and index', (table) => {
+    const tables = { books: [valid('books', 'ok')], [table]: [valid(table, 'good'), { ...valid(table, 'bad'), ...BAD[table] }] };
+    expect(parseBackup(JSON.stringify({ schemaVersion: 1, tables }))).toEqual({ ok: false, error: 'bad-record', table, index: 1 });
+  });
+
+  it('rejects a missing required field, a bad optional field and a far-future updatedAt', () => {
+    const { title: _t, ...noTitle } = VALID['books'];
+    const cases = [rec('b', 1, 'a', noTitle), { ...valid('books'), rating: 'high' }, { ...valid('annotations'), color: 'red' }, { ...valid('annotations'), rect: { x: 1 } }, valid('books', 'b', Date.now() + 10 * 86_400_000), { ...valid('books'), sizeBytes: -1 }];
+    for (const r of cases) {
+      expect(parseBackup(JSON.stringify({ schemaVersion: 1, tables: { books: [r] } }))).toMatchObject({ ok: false, error: 'bad-record', table: 'books' });
+    }
+  });
+});
+
 describe('parseBackup', () => {
   it('round-trips with buildBackup', () => {
-    const tables = { books: [rec('b1', 1, 'a', { title: 'Dune' })], annotations: [rec('n1', 5, 'a', { bookId: 'b1' })], sessions: [rec('s1', 5, 'a', { startedAt: 1_700_000_000_000 })] };
+    const tables = Object.fromEntries(Object.keys(VALID).map((t) => [t, [valid(t)]]));
     const res = parseBackup(JSON.stringify(buildBackup(tables, 9)));
     expect(res).toEqual({ ok: true, tables });
   });
@@ -40,13 +74,13 @@ describe('parseBackup', () => {
   it('rejects records without a string id or numeric updatedAt', () => {
     const bad = [{ updatedAt: 1 }, { id: '', updatedAt: 1 }, { id: 5, updatedAt: 1 }, { id: 'a' }, { id: 'a', updatedAt: '1' }, { id: 'a', updatedAt: null }, null, 'x'];
     for (const r of bad) {
-      expect(parseBackup(JSON.stringify({ schemaVersion: 1, tables: { books: [r] } }))).toEqual({ ok: false, error: 'bad-shape' });
+      expect(parseBackup(JSON.stringify({ schemaVersion: 1, tables: { books: [r] } }))).toMatchObject({ ok: false, error: 'bad-record' });
     }
   });
 
   it('rejects records the sync shards could not place', () => {
-    expect(parseBackup(JSON.stringify({ schemaVersion: 1, tables: { annotations: [rec('n1', 1)] } }))).toEqual({ ok: false, error: 'bad-shape' });
-    expect(parseBackup(JSON.stringify({ schemaVersion: 1, tables: { sessions: [rec('s1', 1)] } }))).toEqual({ ok: false, error: 'bad-shape' });
+    expect(parseBackup(JSON.stringify({ schemaVersion: 1, tables: { annotations: [rec('n1', 1)] } }))).toMatchObject({ ok: false, error: 'bad-record' });
+    expect(parseBackup(JSON.stringify({ schemaVersion: 1, tables: { sessions: [rec('s1', 1)] } }))).toMatchObject({ ok: false, error: 'bad-record' });
   });
 
   it('rejects text over 50 MB without parsing it', () => {
@@ -54,8 +88,8 @@ describe('parseBackup', () => {
   });
 
   it('ignores unknown tables', () => {
-    const res = parseBackup(JSON.stringify({ schemaVersion: 1, tables: { books: [rec('b1', 1)], evil: [{ nope: 1 }], __proto__: [rec('x', 1)] } }));
-    expect(res).toEqual({ ok: true, tables: { books: [rec('b1', 1)] } });
+    const res = parseBackup(JSON.stringify({ schemaVersion: 1, tables: { books: [valid('books', 'b1')], evil: [{ nope: 1 }], __proto__: [rec('x', 1)] } }));
+    expect(res).toEqual({ ok: true, tables: { books: [valid('books', 'b1')] } });
   });
 });
 
