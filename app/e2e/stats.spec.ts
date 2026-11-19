@@ -299,6 +299,36 @@ test.describe('stats heat map', () => {
     expect(rect!.x).toBeGreaterThanOrEqual(0);
   });
 
+  test('year: the large previous/next-day buttons step the selected day and keep it on screen', async () => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.getByRole('button', { name: 'Year', exact: true }).click();
+    await page.locator(`iqra-heatmap button[data-day="${today}"]`).click();
+    await expect(page.getByTestId('day-detail')).toBeVisible();
+    // The weekday labels stay at the start edge while the year is scrolled to its latest weeks.
+    const label = page.locator('iqra-heatmap .wd').nth(1);
+    const scroll = page.locator('iqra-heatmap .scroll');
+    const labelBox = await label.boundingBox();
+    const scrollBox = await scroll.boundingBox();
+    expect(labelBox!.x).toBeGreaterThanOrEqual(scrollBox!.x - 1);
+    expect(labelBox!.x).toBeLessThan(scrollBox!.x + 40);
+    const prev = page.getByTestId('day-prev');
+    const box = await prev.boundingBox();
+    expect(box!.width).toBeGreaterThanOrEqual(40);
+    expect(box!.height).toBeGreaterThanOrEqual(40);
+    await prev.click();
+    const selected = page.locator('iqra-heatmap button[aria-pressed="true"]');
+    await expect(selected).toHaveCount(1);
+    await expect(selected).not.toHaveAttribute('data-day', today);
+    const rect = await selected.boundingBox();
+    expect(rect!.x).toBeGreaterThanOrEqual(scrollBox!.x);
+    expect(rect!.x + rect!.width).toBeLessThanOrEqual(scrollBox!.x + scrollBox!.width);
+    if (process.env['SHOTS']) await page.screenshot({ path: process.env['SHOTS'], fullPage: true });
+    await page.getByTestId('day-next').click();
+    await expect(page.locator(`iqra-heatmap button[data-day="${today}"]`)).toHaveAttribute('aria-pressed', 'true');
+    // Today is the last block of the year grid only at year end; it just must not be a dead button elsewhere.
+    await expect(page.getByTestId('day-detail')).toContainText('Outline Book');
+  });
+
   test('keyboard: arrows move across blocks and Enter picks a day', async () => {
     await page.getByRole('button', { name: 'Month', exact: true }).click();
     const todayCell = page.locator(`iqra-heatmap button[data-day="${today}"]`);

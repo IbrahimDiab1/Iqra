@@ -360,6 +360,77 @@ describe('CategoryBarComponent', () => {
     });
   });
 
+  describe('keeping the selection in view', () => {
+    /** Lays the chips out in a 200 px wide strip, each 110 px wide in 120 px steps: only the first two fit. */
+    function layOut(offset: { value: number }): { scrolls: number[] } {
+      const scrolls: number[] = [];
+      const strip = el.querySelector<HTMLElement>('.strip')!;
+      Object.defineProperty(strip, 'scrollLeft', { configurable: true, get: () => offset.value, set: (v: number) => { scrolls.push(v); offset.value = v; } });
+      const order = ['all', 'uncategorized', 'c1', 'c2', 'c3', '+'];
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+        if (this === strip) return { left: 0, right: 200, top: 0, bottom: 40, width: 200, height: 40, x: 0, y: 0, toJSON: () => ({}) };
+        const at = order.indexOf(this.dataset['chip'] ?? '');
+        if (at < 0) return { left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) };
+        const left = at * 120 - offset.value;
+        return { left, right: left + 110, top: 0, bottom: 40, width: 110, height: 40, x: left, y: 0, toJSON: () => ({}) };
+      });
+      return { scrolls };
+    }
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it('scrolls a selected chip that is outside the bar into view, and does not report it hidden', async () => {
+      await render();
+      const offset = { value: 0 };
+      const { scrolls } = layOut(offset);
+      const hidden: boolean[] = [];
+      fixture.componentInstance.selectionHidden.subscribe((h) => hidden.push(h));
+      fixture.componentRef.setInput('selected', ['c3']);
+      await settle(() => expect(scrolls.length).toBeGreaterThan(0));
+      // c3 spans 480-590 before scrolling; the strip is 0-200, so it is brought to the right edge.
+      expect(offset.value).toBe(390);
+      expect(hidden).toEqual([]);
+    });
+
+    it('reports a selected chip that cannot be fully shown, and clears the report when it can', async () => {
+      await render();
+      const offset = { value: 0 };
+      layOut(offset);
+      const hidden: boolean[] = [];
+      fixture.componentInstance.selectionHidden.subscribe((h) => hidden.push(h));
+      // Two far-apart chips: the first is revealed, the other stays out.
+      fixture.componentRef.setInput('selected', ['c1', 'c3']);
+      await settle(() => expect(hidden).toEqual([true]));
+      fixture.componentRef.setInput('selected', []);
+      await settle(() => expect(hidden).toEqual([true, false]));
+    });
+
+    it('works mirrored: a chip off the left edge scrolls back (negative offsets in right-to-left)', async () => {
+      await render(['c3']);
+      const offset = { value: 0 };
+      layOut(offset);
+      // Chip sits at -200..-90 relative to the strip.
+      offset.value = 700;
+      fixture.componentRef.setInput('selected', ['c3', 'c2']);
+      await settle(() => expect(offset.value).toBeLessThan(700));
+    });
+  });
+
+  describe('menu and scrolling', () => {
+    it('closes the open menu when the page scrolls or the window is resized', async () => {
+      await render();
+      rightClick(chip('c1'));
+      expect(menuItem('menu-rename')).not.toBeNull();
+      window.dispatchEvent(new Event('scroll'));
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="menu"]')).toBeNull();
+      rightClick(chip('c1'));
+      window.dispatchEvent(new Event('resize'));
+      fixture.detectChanges();
+      expect(el.querySelector('[data-testid="menu"]')).toBeNull();
+    });
+  });
+
   describe('add', () => {
     it('the + chip opens a field; Enter creates the category at the end and closes the field', async () => {
       await render();
@@ -373,6 +444,19 @@ describe('CategoryBarComponent', () => {
         expect(added.order).toBe(3);
       });
       await settle(() => expect(el.querySelector('[data-testid="add-input"]')).toBeNull());
+    });
+
+    it('a second Enter while the first is saving does not add the name twice', async () => {
+      await render();
+      click(chip('+'));
+      const input = el.querySelector<HTMLInputElement>('[data-testid="add-input"]')!;
+      type(input, 'Seerah');
+      key(input, 'Enter');
+      key(input, 'Enter');
+      await settle(async () => expect((await db.categories.toArray()).filter((c) => c.name === 'Seerah')).toHaveLength(1));
+      await new Promise((r) => setTimeout(r, 50));
+      expect((await db.categories.toArray()).filter((c) => c.name === 'Seerah')).toHaveLength(1);
+      expect(el.querySelector('[data-testid="error"]')).toBeNull();
     });
 
     it('Escape cancels the field; an empty or duplicate name is refused', async () => {

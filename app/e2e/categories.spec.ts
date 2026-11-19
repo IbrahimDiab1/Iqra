@@ -94,3 +94,28 @@ test('the bar works right to left with an Arabic category and the arrow keys are
   await expect(bar(page).locator('[data-chip]').nth(2)).toBeFocused();
   await expect(bar(page).locator('.nm')).toHaveAttribute('dir', 'auto');
 });
+
+test('a selected category far along the bar is scrolled into view after a reload', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto('/library');
+  await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
+  await page.locator('input[type="file"]').setInputFiles([SAMPLE]);
+  for (let i = 1; i <= 8; i++) await addCategory(page, `A rather long category name ${i}`);
+  await bar(page).locator('[data-chip]', { hasText: 'category name 7' }).click();
+  await page.reload();
+  const selected = bar(page).locator('[data-chip][aria-pressed="true"]');
+  await expect(selected).toHaveCount(1);
+  await expect(selected).toContainText('category name 7');
+  const inside = await page.evaluate(() => {
+    const strip = document.querySelector('iqra-category-bar .strip')!.getBoundingClientRect();
+    const chip = document.querySelector('iqra-category-bar [aria-pressed="true"]')!.getBoundingClientRect();
+    return chip.left >= strip.left - 1 && chip.right <= strip.right + 1;
+  });
+  expect(inside).toBe(true);
+  // Visible, so no summary chip is needed.
+  await expect(page.locator('[aria-label^="Remove filter"]')).toHaveCount(0);
+  // Two selected: one summary chip that clears both.
+  await bar(page).locator('[data-chip]', { hasText: 'category name 2' }).click({ modifiers: ['Control'] });
+  await page.getByRole('button', { name: 'Remove filter 2 categories' }).click();
+  await expect(bar(page).locator('[data-chip="all"]')).toHaveAttribute('aria-pressed', 'true');
+});

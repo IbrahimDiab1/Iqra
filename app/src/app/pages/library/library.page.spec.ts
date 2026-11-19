@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthApi } from '../../auth/auth.service';
@@ -13,6 +14,7 @@ import { DRIVE_ADAPTER } from '../../sync/drive-adapter';
 import { FakeDrive } from '../../sync/fake-drive';
 import { COPY } from '../../ui/copy';
 import { ToastService } from '../../ui/toast.service';
+import { CategoryBarComponent } from '../../books/library/category-bar.component';
 import { LibraryPage } from './library.page';
 
 function makeBook(overrides: Partial<Book> & Pick<Book, 'id' | 'title' | 'status'>): Book {
@@ -160,16 +162,55 @@ describe('LibraryPage', () => {
     expect(barChip('all').getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('does not repeat the selected categories as active-filter chips; the bar shows them', async () => {
+  it('does not repeat one visible selected category as a chip, but summarises several, and the chip clears them', async () => {
     await seed([reading, loose, history], twoCats);
     await create();
     await waitFor(() => barChip('cat-2') !== null);
     barChip('cat-2').click();
     await waitFor(() => barChip('cat-2').getAttribute('aria-pressed') === 'true');
+    expect(el.querySelector('[aria-label^="Remove filter"]')).toBeNull();
+
     barChip('uncategorized').dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
     await waitFor(() => barChip('uncategorized').getAttribute('aria-pressed') === 'true');
     expect(JSON.parse(localStorage.getItem('iqra.library')!).categoryIds).toEqual(['cat-2', '__uncategorized__']);
-    expect(el.querySelector('[aria-label^="Remove filter"]')).toBeNull();
+    const remove = el.querySelector<HTMLButtonElement>('[aria-label="Remove filter 2 categories"]')!;
+    expect(remove).not.toBeNull();
+    remove.click();
+    await waitFor(() => el.querySelector('[aria-label^="Remove filter"]') === null);
+    expect(barChip('all').getAttribute('aria-pressed')).toBe('true');
+    expect(JSON.parse(localStorage.getItem('iqra.library')!).categoryIds).toEqual([]);
+  });
+
+  it('shows a summary chip for one selected category when the bar reports it scrolled out of view', async () => {
+    await seed([reading, loose, history], twoCats);
+    await create();
+    await waitFor(() => barChip('cat-2') !== null);
+    barChip('cat-2').click();
+    await waitFor(() => barChip('cat-2').getAttribute('aria-pressed') === 'true');
+    const bar = fixture.debugElement.query(By.directive(CategoryBarComponent)).componentInstance as CategoryBarComponent;
+    bar.selectionHidden.emit(true);
+    await waitFor(() => el.querySelector('[aria-label="Remove filter History"]') !== null);
+    bar.selectionHidden.emit(false);
+    await waitFor(() => el.querySelector('[aria-label^="Remove filter"]') === null);
+  });
+
+  it('says so with a Retry when the category bar code fails to load, keeps the selection visible, and recovers', async () => {
+    const real = (LibraryPage.prototype as unknown as { loadBarComponent: () => Promise<unknown> }).loadBarComponent;
+    const spy = vi.spyOn(LibraryPage.prototype as unknown as { loadBarComponent: () => Promise<unknown> }, 'loadBarComponent');
+    spy.mockRejectedValueOnce(new Error('ChunkLoadError'));
+    localStorage.setItem('iqra.library', JSON.stringify({ categoryIds: ['cat-2'] }));
+    await seed([reading, loose, history], twoCats);
+    await create();
+    await waitFor(() => el.querySelector('[data-testid="bar-failed"]') !== null);
+    expect(el.querySelector('[data-testid="bar-failed"]')!.textContent).toContain('Categories couldn\u2019t load');
+    // The filter is still on and says so, although the bar is missing.
+    expect(el.querySelector('[aria-label="Remove filter History"]')).not.toBeNull();
+
+    spy.mockImplementation(real);
+    el.querySelector<HTMLButtonElement>('[data-testid="bar-retry"]')!.click();
+    await waitFor(() => barChip('cat-2') !== null);
+    expect(el.querySelector('[data-testid="bar-failed"]')).toBeNull();
+    spy.mockRestore();
   });
 
   it('does not count categories in the Filter button badge', async () => {

@@ -1,9 +1,8 @@
 import { Injectable, Signal, computed, inject } from '@angular/core';
 import { DB } from '../core/db';
-import { newId } from '../core/ids';
 import type { Book, Category, ID } from '../core/models';
 import { Repo } from '../core/repo';
-import { moveCategory, nextOrder, normalizeName } from '../settings/category-order';
+import { moveCategory, normalizeName } from '../settings/category-order';
 import { COPY } from '../ui/copy';
 import { ToastService } from '../ui/toast.service';
 import { CatalogService } from './catalog.service';
@@ -39,9 +38,7 @@ export class CategoryService {
   async add(raw: string): Promise<CategoryNameError | null> {
     const name = normalizeName(raw);
     if (name === '') return 'empty';
-    if (this.taken(name)) return 'duplicate';
-    await this.repo.put<Category>('categories', { id: newId(), name, order: nextOrder(this.list()) });
-    return null;
+    return (await this.catalog.createCategory(name)).created ? null : 'duplicate';
   }
 
   /** Renames a category. Returns why it was refused, or null (also when the name is unchanged). */
@@ -49,13 +46,13 @@ export class CategoryService {
     const name = normalizeName(raw);
     if (name === '') return 'empty';
     if (this.taken(name, cat.id)) return 'duplicate';
-    if (name !== cat.name) await this.repo.put<Category>('categories', { ...cat, name });
+    if (name !== cat.name) await this.repo.update<Category>('categories', cat.id, () => ({ name }));
     return null;
   }
 
   /** Moves the category at index `from` to index `to` in the current order. */
   async move(from: number, to: number): Promise<void> {
-    for (const cat of moveCategory(this.list(), from, to)) await this.repo.put<Category>('categories', cat);
+    for (const cat of moveCategory(this.list(), from, to)) await this.repo.update<Category>('categories', cat.id, () => ({ order: cat.order }));
   }
 
   /**

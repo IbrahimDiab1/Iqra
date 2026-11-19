@@ -7,6 +7,7 @@ import {
   Injector,
   afterNextRender,
   computed,
+  effect,
   inject,
   input,
   output,
@@ -52,7 +53,7 @@ const ADD_KEY = '+';
   selector: 'iqra-category-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div #row class="strip" role="toolbar" aria-orientation="horizontal" [attr.aria-label]="c.label" (focusin)="onFocusIn($event)" (keydown)="onRowKey($event)">
+    <div #row class="strip" role="toolbar" aria-orientation="horizontal" [attr.aria-label]="c.label" (focusin)="onFocusIn($event)" (scroll)="reportHidden()" (keydown)="onRowKey($event)">
       <button
         type="button"
         class="chip"
@@ -302,6 +303,8 @@ export class CategoryBarComponent {
   /** The selected category ids, `UNCATEGORIZED` included. Empty means All. */
   readonly selected = input<readonly ID[]>([]);
   readonly selectedChange = output<ID[]>();
+  /** True while a selected chip is scrolled out of the visible part of the bar; the page then shows a summary chip. */
+  readonly selectionHidden = output<boolean>();
 
   protected readonly c = COPY.categoryBar;
   protected readonly uncategorized = UNCATEGORIZED;
@@ -330,11 +333,63 @@ export class CategoryBarComponent {
   private suppressClick = false;
   private lastPointer = '';
 
+  private hiddenReported = false;
+
   constructor() {
+    // The open menu is fixed to the screen, so anything that moves its chip closes it.
+    const close = (event: Event) => {
+      if (this.menu() && !(event.target as HTMLElement | null)?.closest?.('.menu')) this.closeMenu(false);
+    };
+    window.addEventListener('scroll', close, { capture: true, passive: true });
+    window.addEventListener('resize', close, { passive: true });
     inject(DestroyRef).onDestroy(() => {
       this.destroyed = true;
       this.pressEnd();
+      window.removeEventListener('scroll', close, { capture: true });
+      window.removeEventListener('resize', close);
     });
+    // A selection made earlier (kept from the last visit) or changed elsewhere must not sit out of sight.
+    effect(() => {
+      this.selected();
+      this.categories();
+      afterNextRender(
+        () => {
+          this.revealSelected();
+          this.reportHidden();
+        },
+        { injector: this.injector },
+      );
+    });
+  }
+
+  private selectedChips(): HTMLElement[] {
+    const keys = new Set(this.selected().map((id) => (id === UNCATEGORIZED ? 'uncategorized' : id)));
+    return this.chipButtons().filter((el) => keys.has(el.dataset['chip'] ?? ''));
+  }
+
+  /** Scrolls the bar sideways until the first selected chip is fully inside it. Works in either direction. */
+  private revealSelected(): void {
+    const first = this.selectedChips()[0];
+    if (!first) return;
+    const box = this.row().nativeElement;
+    const b = box.getBoundingClientRect();
+    const r = first.getBoundingClientRect();
+    if (r.left < b.left) box.scrollLeft -= b.left - r.left;
+    else if (r.right > b.right) box.scrollLeft += r.right - b.right;
+  }
+
+  /** Tells the page whether any selected chip is out of view (1 px tolerance for rounding). */
+  protected reportHidden(): void {
+    if (this.destroyed) return;
+    const b = this.row().nativeElement.getBoundingClientRect();
+    const hidden = this.selectedChips().some((el) => {
+      const r = el.getBoundingClientRect();
+      return r.left < b.left - 1 || r.right > b.right + 1;
+    });
+    if (hidden !== this.hiddenReported) {
+      this.hiddenReported = hidden;
+      this.selectionHidden.emit(hidden);
+    }
   }
 
   protected isOn(id: ID): boolean {
@@ -571,8 +626,18 @@ export class CategoryBarComponent {
     });
   }
 
+  private saving = false;
+
   protected async saveAdd(raw: string): Promise<void> {
-    const failed = await this.service.add(raw);
+    // A second Enter while the first is still being written would repeat the same name.
+    if (this.saving) return;
+    this.saving = true;
+    let failed: CategoryNameError | null;
+    try {
+      failed = await this.service.add(raw);
+    } finally {
+      this.saving = false;
+    }
     if (failed) {
       this.error.set(this.message(failed));
       return;

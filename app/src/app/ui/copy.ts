@@ -30,6 +30,7 @@ export const COPY = {
     label: 'Categories', all: 'All', uncategorized: 'Uncategorized', add: 'Add category', newLabel: 'New category name', newPlaceholder: 'New category',
     renameInput: 'Category name', more: (name: string) => `Actions for ${name}`, rename: 'Rename', delete: 'Delete', moveLeft: 'Move left', moveRight: 'Move right',
     duplicate: 'A category with that name already exists.', empty: 'Enter a name.', deleted: (name: string) => `Deleted ${name}`,
+    selectedCount: (n: number) => `${n} categories`, loadFailed: 'Categories couldn\u2019t load', retry: 'Retry',
   },
   import: { duplicate: (n: string) => `${n} is already in your library`, unreadable: (n: string) => `${n} couldn't be added: it isn't a readable PDF.`, importFailedMany: (names: string[]) => `${names.length} files couldn't be added: ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` and ${names.length - 3} more` : ''}.`, added: (c: number) => c === 1 ? 'Book added' : `${c} books added`, uploading: (p: number) => `Uploading to Drive · ${p}%` },
   open: { title: 'This book isn’t on this device', stream: 'Read from Google Drive', streamHint: 'Opens now. Nothing is saved on this device.', download: 'Download to this device', downloadHint: (mb: string) => `${mb} MB · available offline`, offline: 'Connect to the internet to read it from Drive or download it.', downloading: (p: number) => `Downloading · ${p}%`, failed: 'Download failed. Check your connection and try again.' },

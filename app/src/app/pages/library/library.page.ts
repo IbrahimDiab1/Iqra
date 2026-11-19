@@ -47,6 +47,8 @@ import { UpNextComponent } from './up-next.component';
 
 const TABS: readonly LibraryTab[] = ['reading', 'to-read', 'finished', 'all'];
 
+type BarComponentType = typeof import('../../books/library/category-bar.component').CategoryBarComponent;
+
 /** An active filter shown as a chip above the grid. */
 interface FilterChip {
   key: string;
@@ -138,7 +140,15 @@ function isPdf(file: File): boolean {
 
       @if (showCategoryBar()) {
         <!-- The bar's code loads on demand (see mountBar), so it stays out of the initial bundle. -->
-        <div class="bar-slot"><ng-container #barHost /></div>
+        <div class="bar-slot">
+          <ng-container #barHost />
+          @if (barFailed()) {
+            <p class="bar-failed" role="status" data-testid="bar-failed">
+              <span>{{ barCopy.loadFailed }}</span> ·
+              <button type="button" class="retry" data-testid="bar-retry" (click)="retryBar()">{{ barCopy.retry }}</button>
+            </p>
+          }
+        </div>
       }
 
       <div class="toolbar">
@@ -348,6 +358,9 @@ function isPdf(file: File): boolean {
 
     /* Holds the row's height while the bar's code loads. */
     .bar-slot { min-height: 52px; }
+    .bar-failed { display: flex; align-items: center; gap: 6px; min-height: 40px; margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+    .retry { min-height: 40px; padding: 0 8px; border: 0; background: none; color: var(--accent); font: 600 13px var(--ui); cursor: pointer; }
+    .retry:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .toolbar {
       display: flex;
       flex-wrap: wrap;
@@ -491,6 +504,7 @@ export class LibraryPage {
   private readonly uploads = inject(UploadQueue);
 
   protected readonly copy = COPY.library;
+  protected readonly barCopy = COPY.categoryBar;
   protected readonly tabs = TABS;
   protected readonly sortHasDirection = sortHasDirection;
   private focusSearch = false;
@@ -504,6 +518,10 @@ export class LibraryPage {
   private readonly fileInput = viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
   private readonly barHost = viewChild('barHost', { read: ViewContainerRef });
+  /** The bar's code could not be loaded. */
+  protected readonly barFailed = signal(false);
+  /** A selected category chip is scrolled out of the bar's visible part. */
+  protected readonly barHidden = signal(false);
   private readonly injector = inject(Injector);
   private gone = false;
 
@@ -576,7 +594,17 @@ export class LibraryPage {
   protected readonly chips = computed<FilterChip[]>(() => {
     const s = this.effective();
     const chips: FilterChip[] = [];
-    // Categories are not repeated here: the category bar above shows which are selected.
+    // Selected categories show as pressed chips in the bar, so they are not listed one by one here. One summary chip
+    // appears only when the bar cannot show them all: several selected, one scrolled out of view, or the bar not loaded.
+    const picked = s.categoryIds.length;
+    if (picked > 0 && (picked > 1 || this.barHidden() || this.barFailed())) {
+      const names = new Map(this.categories().map((c) => [c.id, c.name]));
+      chips.push({
+        key: 'categories',
+        label: picked > 1 ? COPY.categoryBar.selectedCount(picked) : s.categoryIds[0] === UNCATEGORIZED ? COPY.categoryBar.uncategorized : (names.get(s.categoryIds[0]) ?? ''),
+        remove: () => this.setState({ categoryIds: [] }),
+      });
+    }
     for (const tag of s.tags) {
       chips.push({
         key: `tag-${tag}`,
@@ -622,12 +650,31 @@ export class LibraryPage {
   }
 
   /** Loads the category bar's code on first need and keeps its inputs in step with the page. */
+  /** The lazy import, on its own so a failed load can be retried (and tested). */
+  protected loadBarComponent(): Promise<BarComponentType> {
+    return import('../../books/library/category-bar.component').then((m) => m.CategoryBarComponent);
+  }
+
+  protected retryBar(): void {
+    const host = this.barHost();
+    if (host && host.length === 0) void this.mountBar(host);
+  }
+
   private async mountBar(host: ViewContainerRef): Promise<void> {
-    const { CategoryBarComponent } = await import('../../books/library/category-bar.component');
+    let CategoryBarComponent: BarComponentType;
+    try {
+      CategoryBarComponent = await this.loadBarComponent();
+    } catch {
+      // A stale deploy or no connection: say so and offer a retry instead of leaving an empty slot.
+      if (!this.gone) this.barFailed.set(true);
+      return;
+    }
+    this.barFailed.set(false);
     // The page or the slot may have gone, or another load may have filled it, while the code was loading.
     if (this.gone || host.length > 0 || this.barHost() !== host) return;
     const ref = host.createComponent(CategoryBarComponent);
     const sub = ref.instance.selectedChange.subscribe((ids) => this.setCategories(ids));
+    const hiddenSub = ref.instance.selectionHidden.subscribe((hidden) => this.barHidden.set(hidden));
     const inputs = effect(
       () => {
         ref.setInput('categories', this.categories());
@@ -638,6 +685,8 @@ export class LibraryPage {
     );
     ref.onDestroy(() => {
       sub.unsubscribe();
+      hiddenSub.unsubscribe();
+      this.barHidden.set(false);
       inputs.destroy();
     });
   }

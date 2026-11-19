@@ -29,6 +29,14 @@ export class CatalogService {
    * matches case-insensitively. A new category goes after the highest order.
    */
   async addCategory(name: string): Promise<Category> {
+    return (await this.createCategory(name)).category;
+  }
+
+  /**
+   * Like `addCategory`, but says whether a category was created (`created`) or the name already existed.
+   * The check and the write share one transaction, so a double submit cannot make two categories or two equal orders.
+   */
+  async createCategory(name: string): Promise<{ category: Category; created: boolean }> {
     const trimmed = name.trim();
     if (trimmed === '') throw new Error('Category name is empty');
     const key = trimmed.toLowerCase();
@@ -36,9 +44,9 @@ export class CatalogService {
     return this.db.transaction('rw', store, async () => {
       const all = await store.toArray();
       const existing = all.find((c) => !c.deleted && c.name.toLowerCase() === key);
-      if (existing) return existing;
+      if (existing) return { category: existing, created: false };
       const order = all.length === 0 ? 0 : Math.max(...all.map((c) => c.order)) + 1;
-      return this.repo.put<Category>('categories', { id: newId(), name: trimmed, order });
+      return { category: await this.repo.put<Category>('categories', { id: newId(), name: trimmed, order }), created: true };
     });
   }
 
