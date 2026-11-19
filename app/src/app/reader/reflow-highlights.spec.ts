@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { splitRuns } from './reflow-highlights';
+import { splitPageRuns, splitRuns } from './reflow-highlights';
 
 const mark = (id: string, quote: string, extra: Partial<Parameters<typeof splitRuns>[1][number]> = {}) => ({
   id,
@@ -72,23 +72,79 @@ describe('splitRuns', () => {
 
   describe('a quote spanning two paragraphs', () => {
     const quote = 'the end of one and the start of next';
-    it('highlights the tail of the first paragraph (no dot)', () => {
-      const runs = splitRuns('Some text then the end of one', [mark('s', quote, { hasDetail: true })]);
-      expect(runs.map((r) => r.text)).toEqual(['Some text then ', 'the end of one']);
-      expect(runs[1].annotationId).toBe('s');
-      expect(runs[1].dot).toBeUndefined();
+    it('marks the tail of the first paragraph and the head of the second; the dot is on the last piece', () => {
+      const runs = splitPageRuns(['Some text then the end of one', 'and the start of next, more words'], [mark('s', quote, { hasDetail: true })]);
+      expect(runs[0].map((r) => r.text)).toEqual(['Some text then ', 'the end of one']);
+      expect(runs[0][1].dot).toBeUndefined();
+      expect(runs[1].map((r) => r.text)).toEqual(['and the start of next', ', more words']);
+      expect(runs[1][0]).toMatchObject({ annotationId: 's', dot: true });
     });
-    it('highlights the head of the second paragraph and puts the dot there', () => {
-      const runs = splitRuns('and the start of next, more words', [mark('s', quote, { hasDetail: true })]);
-      expect(runs.map((r) => r.text)).toEqual(['and the start of next', ', more words']);
-      expect(runs[0]).toMatchObject({ annotationId: 's', dot: true });
+    it('marks a whole middle paragraph', () => {
+      const runs = splitPageRuns(['tail words', 'and then more', 'head words'], [mark('s', 'tail words and then more head words')]);
+      expect(runs.map((r) => r.map((x) => x.annotationId))).toEqual([['s'], ['s'], ['s']]);
     });
-    it('highlights a whole middle paragraph', () => {
-      const runs = splitRuns('and then more', [mark('s', 'tail words and then more head words')]);
-      expect(runs).toEqual([{ text: 'and then more', annotationId: 's', color: 'yellow' }]);
+    it('does not mark paragraph edges when the full quote is not on the page', () => {
+      const runs = splitPageRuns(['Some text then the end of one', 'something else entirely'], [mark('s', quote)]);
+      expect(runs.flat().some((r) => r.annotationId)).toBe(false);
     });
-    it('does not highlight a stray character that merely ends a word', () => {
-      expect(splitRuns('banana', [mark('s', 'a different quote')])).toEqual([{ text: 'banana' }]);
+    it('does not mark a lone paragraph edge that merely matches the quote start', () => {
+      // The quote lives wholly in paragraph 3; paragraph 1 ends with its first words and paragraph 2 starts with its last.
+      const runs = splitPageRuns(['It was over the', 'lazy dog. Then', 'x the quick brown fox jumps over the lazy dog'], [mark('q', 'the quick brown fox jumps over the lazy dog')]);
+      expect(runs[0].some((r) => r.annotationId)).toBe(false);
+      expect(runs[1].some((r) => r.annotationId)).toBe(false);
+      expect(runs[2].some((r) => r.annotationId)).toBe(true);
+    });
+  });
+
+  describe('which occurrence', () => {
+    it('takes the nth occurrence, counted across paragraphs', () => {
+      const runs = splitPageRuns(['the cat sat', 'the cat ran', 'the cat hid'], [mark('a', 'the cat', { nth: 1 })]);
+      expect(runs.map((r) => r.some((x) => x.annotationId))).toEqual([false, true, false]);
+    });
+
+    it('two marks with the same quote land on their own occurrences, whatever their order', () => {
+      const marks = [mark('second', 'dog', { nth: 1 }), mark('first', 'dog', { nth: 0 })];
+      const runs = splitPageRuns(['dog and dog'], marks)[0];
+      expect(runs.map((r) => [r.text, r.annotationId])).toEqual([
+        ['dog', 'first'],
+        [' and ', undefined],
+        ['dog', 'second'],
+      ]);
+    });
+
+    it('an nth that does not exist draws nothing', () => {
+      expect(splitPageRuns(['one dog'], [mark('a', 'dog', { nth: 3 })])[0]).toEqual([{ text: 'one dog' }]);
+    });
+  });
+
+  describe('word boundaries', () => {
+    it('does not draw a short quote inside a longer word', () => {
+      const runs = splitRuns('Beginning in the end', [mark('a', 'in')]);
+      expect(runs.map((r) => [r.text, r.annotationId])).toEqual([
+        ['Beginning ', undefined],
+        ['in', 'a'],
+        [' the end', undefined],
+      ]);
+    });
+
+    it('does not draw an Arabic word inside a longer word with the al- prefix', () => {
+      const runs = splitRuns('العلم نور علم نافع', [mark('a', 'علم')]);
+      expect(runs.some((r) => r.annotationId && r.text === 'علم')).toBe(true);
+      expect(runs.find((r) => r.annotationId)!.text).toBe('علم');
+      expect(runs[0].annotationId).toBeUndefined();
+    });
+
+    it('the Arabic repeated word lands on its own occurrence by nth', () => {
+      const runs = splitRuns('طلب علم ثم نشر علم', [mark('a', 'علم', { nth: 1 })]);
+      expect(runs.map((r) => [r.text, r.annotationId])).toEqual([
+        ['طلب علم ثم نشر ', undefined],
+        ['علم', 'a'],
+      ]);
+    });
+
+    it('draws mid-word when the original selection was mid-word', () => {
+      const runs = splitRuns('Beginning', [mark('a', 'gin', { wordStart: false, wordEnd: false })]);
+      expect(runs.map((r) => r.text)).toEqual(['Be', 'gin', 'ning']);
     });
   });
 });

@@ -7,6 +7,7 @@ import {
   hasDetail,
   hitTest,
   locateQuote,
+  occurrenceOf,
   quoteOf,
   rectsFromItems,
   unionAnchor,
@@ -189,5 +190,34 @@ describe('hasDetail', () => {
   it('is true when a body or a tag is set', () => {
     expect(hasDetail(ann({ type: 'note', body: 'x', tags: [] }))).toBe(true);
     expect(hasDetail(ann({ type: 'note', body: '', tags: ['t'] }))).toBe(true);
+  });
+});
+
+describe('occurrenceOf', () => {
+  const it2: TextItem[] = [
+    { ...A, str: 'Beginning in the end' },
+    { ...B, str: 'and in the middle' },
+  ];
+  it('counts raw occurrences before the anchor start (the same count locateQuote uses)', () => {
+    // 'in' occurs in Beg-in-n-in-g, then 'in', then the second item's 'in'.
+    const occ = (nth: number) => locateQuote(it2, 'in', nth)!;
+    for (let n = 0; n < 4; n++) {
+      const found = occurrenceOf(it2, 'in', occ(n).start)!;
+      expect(found.nth).toBe(n);
+      expect(found.start).toEqual(occ(n).start);
+    }
+  });
+
+  it('reports whether the occurrence sits on word boundaries', () => {
+    const inside = locateQuote(it2, 'in', 0)!;
+    expect(occurrenceOf(it2, 'in', inside.start)).toMatchObject({ wordStart: false, wordEnd: false });
+    const standalone = locateQuote(it2, 'in', 2)!;
+    expect(occurrenceOf(it2, 'in', standalone.start)).toMatchObject({ wordStart: true, wordEnd: true });
+  });
+
+  it('takes the first occurrence at or after the start caret, and null when none', () => {
+    expect(occurrenceOf(it2, 'in', { item: 1, offset: 0 })!.start).toEqual({ item: 1, offset: 4 });
+    expect(occurrenceOf(it2, 'in', { item: 1, offset: 15 })).toBeNull();
+    expect(occurrenceOf(it2, 'zzz', { item: 0, offset: 0 })).toBeNull();
   });
 });

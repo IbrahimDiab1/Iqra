@@ -92,6 +92,8 @@ export class NoteSheetComponent {
   /** The record being edited; null keeps the sheet closed. */
   readonly annotation = input<Annotation | null>(null);
   readonly tagSuggestions = input<string[]>([]);
+  /** The note was created just now (by the Note action), so closing it untouched removes it. */
+  readonly isNew = input(false);
   readonly closed = output<void>();
   /** Reserved for the Notes hub, which jumps to the annotation's page. */
   readonly jump = output<Annotation>();
@@ -139,7 +141,7 @@ export class NoteSheetComponent {
     this.savedBody = a.body ?? '';
     this.tags.set([...a.tags]);
     this.color.set(a.color);
-    this.startedEmpty = a.type === 'note' && this.savedBody.trim() === '' && a.tags.length === 0;
+    this.startedEmpty = a.type === 'note' && this.isNew() && this.savedBody.trim() === '' && a.tags.length === 0;
     if (this.startedEmpty) setTimeout(() => this.textarea()?.nativeElement.focus());
   }
 

@@ -15,10 +15,11 @@ const REC: Annotation = {
 
 @Component({
   imports: [NoteSheetComponent],
-  template: `<iqra-note-sheet [annotation]="annotation()" [tagSuggestions]="[]" (closed)="closed = closed + 1" />`,
+  template: `<iqra-note-sheet [annotation]="annotation()" [isNew]="isNew()" [tagSuggestions]="[]" (closed)="closed = closed + 1" />`,
 })
 class HostComponent {
   readonly annotation = signal<Annotation | null>(null);
+  readonly isNew = signal(true);
   closed = 0;
 }
 
@@ -118,6 +119,14 @@ describe('NoteSheetComponent', () => {
     closeBtn().click();
     await vi.waitFor(() => expect(svc.remove).toHaveBeenCalledWith('n1'));
     expect(svc.update).not.toHaveBeenCalled();
+  });
+
+  it('an old empty note opened from a tap is not removed on close', async () => {
+    host.isNew.set(false);
+    open({ ...REC, id: 'old', type: 'note', color: undefined });
+    closeBtn().click();
+    await vi.waitFor(() => expect(host.closed).toBe(1));
+    expect(svc.remove).not.toHaveBeenCalled();
   });
 
   it('a note with text is kept on close', async () => {

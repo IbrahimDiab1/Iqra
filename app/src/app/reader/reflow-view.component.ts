@@ -11,18 +11,18 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { hasDetail } from '../annotations/anchor';
+import { hasDetail, occurrenceOf } from '../annotations/anchor';
 import type { Annotation } from '../core/models';
 import { COPY } from '../ui/copy';
 import { isReaderKeyIgnored } from './keys';
 import type { PageTheme } from './page-view.component';
 import type { PageRenderer } from './pdf-session';
-import { splitRuns, type RunMark } from './reflow-highlights';
-import { buildReflow, hasSelectableText, type Paragraph } from './text';
+import { splitPageRuns, type RunMark } from './reflow-highlights';
+import { buildReflow, hasSelectableText, type Paragraph, type TextItem } from './text';
 
 const BASE_FONT_PX = 17;
 
-type State = { kind: 'loading' } | { kind: 'failed' } | { kind: 'empty' } | { kind: 'text'; paragraphs: Paragraph[] };
+type State = { kind: 'loading' } | { kind: 'failed' } | { kind: 'empty' } | { kind: 'text'; paragraphs: Paragraph[]; items: TextItem[] };
 
 const THEME_VARS: Record<PageTheme, { paper: string; ink: string }> = {
   paper: { paper: 'var(--paper-light)', ink: 'var(--ink-light)' },
@@ -139,14 +139,26 @@ export class ReflowViewComponent {
     this.annotations().filter((a) => (a.type === 'highlight' || a.type === 'note') && a.text?.page === this.page()),
   );
   protected readonly rendered = computed(() => {
-    const marks: RunMark[] = this.pageAnnotations().map((a) => ({
-      id: a.id,
-      quote: a.text!.quote,
-      color: a.type === 'highlight' ? a.color : undefined,
-      underline: a.type === 'note',
-      hasDetail: hasDetail(a),
-    }));
-    return this.paragraphs().map((p) => ({ rtl: p.rtl, runs: splitRuns(p.text, marks) }));
+    const s = this.state();
+    const items = s.kind === 'text' ? s.items : [];
+    const marks: RunMark[] = this.pageAnnotations().map((a) => {
+      // Where the annotated text sits among the page's occurrences of it, so repeated text is drawn on the right one.
+      const where = occurrenceOf(items, a.text!.quote, a.text!.start);
+      return {
+        id: a.id,
+        quote: a.text!.quote,
+        color: a.type === 'highlight' ? a.color : undefined,
+        underline: a.type === 'note',
+        hasDetail: hasDetail(a),
+        ...(where ? { nth: where.nth, wordStart: where.wordStart, wordEnd: where.wordEnd } : {}),
+      };
+    });
+    const paragraphs = this.paragraphs();
+    const runs = splitPageRuns(
+      paragraphs.map((p) => p.text),
+      marks,
+    );
+    return paragraphs.map((p, i) => ({ rtl: p.rtl, runs: runs[i] }));
   });
   protected readonly colors = computed(() => THEME_VARS[this.theme()]);
   protected readonly fontPx = computed(() => Math.round(BASE_FONT_PX * this.zoom() * 100) / 100);
@@ -169,7 +181,7 @@ export class ReflowViewComponent {
           (items) => {
             if (generation !== this.generation) return;
             this.state.set(
-              hasSelectableText(items) ? { kind: 'text', paragraphs: buildReflow(items, { rtl }) } : { kind: 'empty' },
+              hasSelectableText(items) ? { kind: 'text', paragraphs: buildReflow(items, { rtl }), items } : { kind: 'empty' },
             );
             el.scrollTop = 0;
           },

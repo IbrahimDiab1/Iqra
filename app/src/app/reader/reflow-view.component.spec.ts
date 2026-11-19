@@ -155,6 +155,13 @@ describe('ReflowViewComponent', () => {
   });
 
   describe('highlights', () => {
+    /** The paragraph's text before an element (skipping Angular's comment anchors). */
+    const before = (m: Element): string => {
+      let out = '';
+      for (let n = m.previousSibling; n; n = n.previousSibling) out = (n.nodeType === Node.COMMENT_NODE ? '' : (n.textContent ?? '')) + out;
+      return out;
+    };
+
     const ann = (over: Partial<Annotation>): Annotation => ({
       id: 'h1', bookId: 'b', deviceId: 'd', updatedAt: 1, createdAt: 1, type: 'highlight', page: 3, color: 'green', tags: [],
       text: { page: 3, start: { item: 0, offset: 0 }, end: { item: 0, offset: 5 }, rects: [], quote: 'second line of the same' },
@@ -191,6 +198,35 @@ describe('ReflowViewComponent', () => {
       host.annotations.set([ann({ text: { page: 4, start: { item: 0, offset: 0 }, end: { item: 0, offset: 1 }, rects: [], quote: 'second line' } }), ann({ id: 'x', type: 'area', text: undefined })]);
       await settle();
       expect(el.querySelector('mark')).toBeNull();
+    });
+
+    it('draws a highlight of repeated text on the annotated occurrence, not the first', async () => {
+      host.renderer.pages.set(3, [item('the cat sat and the cat ran today', 700)]);
+      host.annotations.set([ann({ text: { page: 3, start: { item: 0, offset: 16 }, end: { item: 0, offset: 19 }, rects: [], quote: 'cat' } })]);
+      await settle();
+      const marks = el.querySelectorAll('article p mark');
+      expect(marks).toHaveLength(1);
+      expect(before(marks[0])).toBe('the cat sat and the ');
+    });
+
+    it('two annotations with one quote each get their own occurrence', async () => {
+      host.renderer.pages.set(3, [item('dog and dog and more text here', 700)]);
+      const at = (id: string, offset: number) =>
+        ann({ id, text: { page: 3, start: { item: 0, offset }, end: { item: 0, offset: offset + 3 }, rects: [], quote: 'dog' } });
+      host.annotations.set([at('second', 8), at('first', 0)]);
+      await settle();
+      const ids = Array.from(el.querySelectorAll<HTMLElement>('article p mark')).map((m) => m.dataset['id']);
+      expect(ids).toEqual(['first', 'second']);
+    });
+
+    it('does not draw an Arabic word inside a longer al- word; the repeated word lands on its occurrence', async () => {
+      host.renderer.pages.set(3, [item('العلم نور وطلب علم ثم نشر علم نافع', 700)]);
+      const start = 'العلم نور وطلب علم ثم نشر '.length;
+      host.annotations.set([ann({ text: { page: 3, start: { item: 0, offset: start }, end: { item: 0, offset: start + 3 }, rects: [], quote: 'علم' } })]);
+      await settle();
+      const marks = el.querySelectorAll('article p mark');
+      expect(marks).toHaveLength(1);
+      expect(before(marks[0])).toBe('العلم نور وطلب علم ثم نشر ');
     });
 
     it('the article carries its page for the selection service', async () => {

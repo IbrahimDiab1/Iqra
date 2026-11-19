@@ -223,6 +223,7 @@ const AREA_HINT_MS = 4000;
           />
           <iqra-note-sheet
             [annotation]="noteTarget()"
+            [isNew]="noteTarget()?.id === newNoteId()"
             [tagSuggestions]="tagSuggestions()"
             (closed)="noteTarget.set(null)"
           />
@@ -327,6 +328,8 @@ export class ReaderPage implements OnDestroy {
   protected readonly annotations = computed(() => this.annotationSource()?.() ?? []);
   /** The annotation the note sheet edits: a tapped highlight, or a freshly created note. */
   protected readonly noteTarget = signal<Annotation | null>(null);
+  /** The note created by the Note action in this open session; only it is removed if closed empty. */
+  protected readonly newNoteId = signal<string | null>(null);
   private readonly allAnnotations = this.annotationService.all();
   protected readonly tagSuggestions = computed(() => tagSuggestionsFrom(this.allAnnotations()));
   /** A rectangle just drawn with the area tool, waiting for a color or a note. */
@@ -556,6 +559,7 @@ export class ReaderPage implements OnDestroy {
       const { anchor } = await this.anchorOf(sel);
       const note = await this.annotationService.create({ bookId: book.id, type: 'note', page: anchor.page, text: anchor });
       this.selection.clear();
+      this.newNoteId.set(note.id);
       this.noteTarget.set(note);
     } catch (err) {
       console.warn('Could not save the note', err);

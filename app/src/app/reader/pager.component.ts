@@ -329,7 +329,7 @@ export class PagerComponent implements OnDestroy {
   @HostListener('document:keydown', ['$event'])
   protected onKey(e: KeyboardEvent): void {
     if (isReaderKeyIgnored(e)) return;
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || this.tool() !== 'none') return;
     const arrowNext = this.rtl() ? 'ArrowLeft' : 'ArrowRight';
     const arrowPrev = this.rtl() ? 'ArrowRight' : 'ArrowLeft';
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {

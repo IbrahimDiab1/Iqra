@@ -535,6 +535,23 @@ describe('ReaderPage', () => {
       expect((await stored())[0].deleted).toBeFalsy();
     });
 
+    it('tapping an old empty note and closing does not delete it', async () => {
+      await create();
+      fakeSelection.pending.set(null);
+      const rec = await TestBed.inject(AnnotationService).create({
+        bookId: 'book-1', type: 'note', page: 7, tags: [],
+        text: { page: 7, start: { item: 0, offset: 0 }, end: { item: 0, offset: 5 }, rects: [], quote: 'Hello' },
+      });
+      pager().annotationTap.emit(rec);
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-note-sheet .panel.open')).not.toBeNull();
+      });
+      el.querySelector<HTMLButtonElement>('iqra-note-sheet button.close')!.click();
+      await new Promise((r) => setTimeout(r, 50));
+      expect((await stored()).filter((r) => !r.deleted)).toHaveLength(1);
+    });
+
     it('tapping a highlight opens its note sheet', async () => {
       await create();
       fakeSelection.pending.set(null);

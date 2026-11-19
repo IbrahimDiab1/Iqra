@@ -45,6 +45,21 @@ describe('TagInputComponent', () => {
     expect(host.tags()).toEqual(['fiqh']);
   });
 
+  it('the Arabic comma adds the tag', () => {
+    type('علم', '،');
+    expect(host.tags()).toEqual(['علم']);
+  });
+
+  it('Enter while an IME is composing does not commit', () => {
+    input().value = 'ni';
+    input().dispatchEvent(new Event('input'));
+    const e = new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, cancelable: true });
+    input().dispatchEvent(e);
+    fixture.detectChanges();
+    expect(host.tags()).toEqual([]);
+    expect(e.defaultPrevented).toBe(false);
+  });
+
   it('blur adds the pending text', () => {
     type('hadith');
     input().dispatchEvent(new Event('blur'));

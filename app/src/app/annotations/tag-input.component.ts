@@ -77,7 +77,8 @@ export class TagInputComponent {
   });
 
   protected onKey(e: KeyboardEvent): void {
-    if (e.key === 'Enter' || e.key === ',') {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Enter' || e.key === ',' || e.key === '،') {
       e.preventDefault();
       this.commit();
     }

@@ -126,6 +126,15 @@ describe('PagerComponent', () => {
     expect(host.changes).toEqual([6]);
   });
 
+  it('arrow and page keys do not turn the page while the area tool is active', () => {
+    host.tool.set('area');
+    fixture.detectChanges();
+    for (const key of ['ArrowRight', 'ArrowLeft', 'PageDown', 'PageUp', ' ']) {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    }
+    expect(host.changes).toEqual([]);
+  });
+
   it('a short slow drag stays and the track returns to 0', async () => {
     await drag(-40, 400);
     await settle();

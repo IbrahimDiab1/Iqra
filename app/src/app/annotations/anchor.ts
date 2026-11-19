@@ -79,6 +79,43 @@ export function locateQuote(
   }
 }
 
+const WORD_CHAR = /[\p{L}\p{N}\p{M}]/u;
+
+/**
+ * Where a quote sits among the page's occurrences of it: the first occurrence at or after `from`
+ * (counted like locateQuote: non-overlapping, left to right), its index `nth`, and whether it starts and
+ * ends on word boundaries of the page text. Null when there is none.
+ */
+export function occurrenceOf(
+  items: TextItem[],
+  quote: string,
+  from: Caret,
+): { nth: number; start: Caret; end: Caret; wordStart: boolean; wordEnd: boolean } | null {
+  const needle = collapse(quote);
+  if (needle === '') return null;
+  const units = streamOf(items);
+  const text = units.map((u) => u.ch).join('');
+  let at = 0;
+  for (let nth = 0; ; nth++) {
+    const found = text.indexOf(needle, at);
+    if (found < 0) return null;
+    const start = units[found].start;
+    const end = units[found + needle.length - 1].end;
+    if (compareCaret(start, from) >= 0) {
+      const before = start.offset > 0 ? items[start.item].str[start.offset - 1] : undefined;
+      const after = end.offset < items[end.item].str.length ? items[end.item].str[end.offset] : undefined;
+      return {
+        nth,
+        start,
+        end,
+        wordStart: before === undefined || !WORD_CHAR.test(before),
+        wordEnd: after === undefined || !WORD_CHAR.test(after),
+      };
+    }
+    at = found + needle.length;
+  }
+}
+
 /** Fraction of a text item's width from its left edge: Arabic items are measured from the right. */
 function itemRect(item: TextItem, from: number, to: number, size: PageSize): Rect {
   const len = item.str.length;
