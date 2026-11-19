@@ -32,7 +32,7 @@ import { ToastService } from '../ui/toast.service';
 import type { Place } from './jump-history';
 import { isReaderKeyIgnored } from './keys';
 import { chapterTitleAt } from './outline';
-import { BookPanelSheetComponent } from './book-panel.sheet';
+import { BookPanelSheetComponent, type PanelTab } from './book-panel.sheet';
 import { PagerComponent } from './pager.component';
 import { PdfSession, ReaderOpenError, type PageRenderer, type PdfSource } from './pdf-session';
 import { PositionService } from './position.service';
@@ -220,7 +220,12 @@ const AREA_HINT_MS = 4000;
             <div class="r-row" [attr.dir]="rtl() ? 'rtl' : null">
               <button type="button" class="ib" [attr.aria-label]="copy.prevPage" [disabled]="s.page() <= 1" (click)="step(-1)" [innerHTML]="ic(rtl() ? 'chevR' : 'chevL')"></button>
               <span class="pg" dir="ltr">{{ copy.pageOf(preview() ?? s.page(), r.numPages) }} <span>· {{ percent() }}%</span></span>
-              <button type="button" class="pill" (click)="openPanel('contents')">{{ copy.contents }}</button>
+              <button type="button" class="pill" (click)="openPanel('contents')">
+                {{ copy.contents }}
+                @if (pageNoteCount() > 0) {
+                  <span class="badge">{{ pageNoteCount() }}</span>
+                }
+              </button>
               <button type="button" class="ib" [attr.aria-label]="copy.nextPage" [disabled]="s.page() >= r.numPages" (click)="step(1)" [innerHTML]="ic(rtl() ? 'chevL' : 'chevR')"></button>
             </div>
           </footer>
@@ -234,13 +239,17 @@ const AREA_HINT_MS = 4000;
             (closed)="panel.set(null)"
             (jump)="jump($event)"
             (summary)="editSummary($event)"
+            (edit)="editText($event)"
+            (note)="noteTarget.set($event)"
+            (sideNote)="startSideNote($event)"
+            (flash)="s.flashAnnotation($event)"
           />
           <iqra-text-editor-sheet
             [annotation]="textTarget()"
             [draft]="textIsDraft()"
             [pageCount]="r.numPages"
             [tagSuggestions]="tagSuggestions()"
-            (closed)="textTarget.set(null)"
+            (closed)="closeText()"
           />
           <iqra-note-sheet
             [annotation]="noteTarget()"
@@ -299,6 +308,7 @@ const AREA_HINT_MS = 4000;
     .r-row { display: flex; align-items: center; gap: 6px; }
     .pg { flex: 1; min-width: 0; font-size: 13px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
     .pg span { color: color-mix(in srgb, var(--ink) 55%, transparent); }
+    .badge { display: inline-block; min-width: 18px; margin-inline-start: 6px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: var(--on-accent, #fff); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
     .pill { min-height: 40px; padding: 0 14px; border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); border-radius: 999px; background: none; color: inherit; font: 13px var(--ui); cursor: pointer; }
     .r-range { display: flex; align-items: center; padding: 0 6px; }
     .r-range input { direction: inherit; flex: 1; min-width: 0; min-height: 24px; accent-color: var(--accent); }
@@ -359,6 +369,13 @@ export class ReaderPage implements OnDestroy {
     const page = this.state()?.page();
     return this.annotations().find((a) => a.type === 'bookmark' && a.page === page);
   });
+  /** How many notes, highlights, areas and side notes are on the current page (bookmarks do not count). */
+  protected readonly pageNoteCount = computed(() => {
+    const page = this.state()?.page();
+    return this.annotations().filter((a) => a.type !== 'bookmark' && a.page === page).length;
+  });
+  /** The side note the panel just created in this open session; closed empty, it is removed. */
+  private newSideNoteId: string | null = null;
   private readonly allAnnotations = this.annotationService.all();
   protected readonly tagSuggestions = computed(() => tagSuggestionsFrom(this.allAnnotations()));
   /** A rectangle just drawn with the area tool, waiting for a color or a note. */
@@ -367,7 +384,7 @@ export class ReaderPage implements OnDestroy {
   protected readonly session = signal<ReaderSession | null>(null);
   protected readonly state = signal<ReaderState | null>(null);
   protected readonly preview = signal<number | null>(null);
-  protected readonly panel = signal<'contents' | 'search' | null>(null);
+  protected readonly panel = signal<PanelTab | null>(null);
   protected readonly settingsOpen = signal(false);
 
   protected readonly theme = computed(() => this.settings.settings().readerTheme);
@@ -502,7 +519,7 @@ export class ReaderPage implements OnDestroy {
     s?.setView('page');
   }
 
-  protected openPanel(which: 'contents' | 'search'): void {
+  protected openPanel(which: PanelTab): void {
     this.panel.set(which);
   }
 
@@ -539,6 +556,28 @@ export class ReaderPage implements OnDestroy {
     this.textTarget.set(
       existing ?? { id: newId(), bookId: book.id, deviceId: '', updatedAt: 0, type: 'summary', scope, tags: [], createdAt: 0 },
     );
+  }
+
+  protected editText(a: Annotation): void {
+    this.textIsDraft.set(false);
+    this.textTarget.set(a);
+  }
+
+  protected startSideNote(a: Annotation): void {
+    this.newSideNoteId = a.id;
+    this.editText(a);
+  }
+
+  /** Closing the text editor drops a side note made just now and left empty. */
+  protected closeText(): void {
+    const target = this.textTarget();
+    this.textTarget.set(null);
+    if (!target || target.id !== this.newSideNoteId) return;
+    this.newSideNoteId = null;
+    const live = this.annotations().find((a) => a.id === target.id);
+    if (live && (live.body ?? '').trim() === '' && live.tags.length === 0) {
+      void this.annotationService.remove(live.id).catch((err) => console.warn('Could not drop the empty side note', err));
+    }
   }
 
   protected toggleArea(): void {

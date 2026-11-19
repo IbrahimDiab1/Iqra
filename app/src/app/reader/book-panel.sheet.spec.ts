@@ -2,7 +2,12 @@ import { Component, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Annotation, Book, OutlineNode, SummaryScope } from '../core/models';
+import { AnnotationService } from '../annotations/annotation.service';
+import { CLOCK } from '../core/clock';
+import { DB, IqraDb } from '../core/db';
+import { newId } from '../core/ids';
 import { COPY } from '../ui/copy';
+import { ToastService } from '../ui/toast.service';
 import { BookPanelSheetComponent } from './book-panel.sheet';
 import type { Place } from './jump-history';
 import type { PageRenderer } from './pdf-session';
@@ -34,16 +39,24 @@ const renderer = {
     [page]="page()"
     [annotations]="annotations()"
     (summary)="scopes.push($event)"
+    (edit)="edits.push($event)"
+    (note)="notes.push($event)"
+    (sideNote)="sideNotes.push($event)"
+    (flash)="flashes.push($event)"
     (closed)="closes = closes + 1"
     (jump)="jumps.push($event)"
   />`,
 })
 class HostComponent {
   open = signal(true);
-  tab = signal<'contents' | 'search'>('contents');
+  tab = signal<'contents' | 'notes' | 'bookmarks' | 'search'>('contents');
   page = signal(1);
   annotations = signal<Annotation[]>([]);
   scopes: SummaryScope[] = [];
+  edits: Annotation[] = [];
+  notes: Annotation[] = [];
+  sideNotes: Annotation[] = [];
+  flashes: string[] = [];
   book = { id: 'b1', pageCount: 40, outline: OUTLINE } as Book;
   renderer = renderer;
   closes = 0;
@@ -65,8 +78,19 @@ describe('BookPanelSheetComponent', () => {
 
   const rows = () => Array.from(el.querySelectorAll<HTMLButtonElement>('.row'));
 
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
+  let db: IqraDb;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    db = new IqraDb(`iqra-test-${newId()}`);
+    TestBed.configureTestingModule({
+      providers: [{ provide: DB, useValue: db }, { provide: CLOCK, useValue: { now: () => 5000 } }],
+    });
+  });
+  afterEach(async () => {
+    vi.useRealTimers();
+    fixture?.destroy();
+    await db.delete();
+  });
 
   it('lists the outline indented and highlights the current chapter', () => {
     create((h) => h.page.set(26));
@@ -123,19 +147,19 @@ describe('BookPanelSheetComponent', () => {
     });
   });
 
-  it('has two tabs, switching with a click', () => {
+  it('has four tabs, switching with a click', () => {
     create();
     const tabs = Array.from(el.querySelectorAll<HTMLElement>('[role=tab]'));
-    expect(tabs.map((t) => t.textContent!.trim())).toEqual([COPY.reader.contents, COPY.reader.search]);
+    expect(tabs.map((t) => t.textContent!.trim())).toEqual([COPY.reader.contents, COPY.reader.notes, COPY.reader.bookmarks, COPY.reader.search]);
     expect(tabs[0].getAttribute('aria-selected')).toBe('true');
-    tabs[1].click();
+    tabs[3].click();
     fixture.detectChanges();
     expect(el.querySelector('input[type=search]')).not.toBeNull();
   });
 
   it('reopens on the requested tab after being closed on another', () => {
     create();
-    el.querySelectorAll<HTMLElement>('[role=tab]')[1].click();
+    el.querySelectorAll<HTMLElement>('[role=tab]')[3].click();
     fixture.detectChanges();
     expect(el.querySelector('input[type=search]')).not.toBeNull();
     host.open.set(false);
@@ -144,6 +168,148 @@ describe('BookPanelSheetComponent', () => {
     fixture.detectChanges();
     expect(el.querySelector('input[type=search]')).toBeNull();
     expect(el.querySelector('.row')).not.toBeNull();
+  });
+
+  describe('Notes tab', () => {
+    const rect = (y: number) => ({ x: 0.1, y, w: 0.5, h: 0.02 });
+    const hl = (id: string, page: number, quote: string, y = 0.4): Annotation => ({
+      id, bookId: 'b1', type: 'highlight', page, color: 'yellow', tags: ['t1'], createdAt: page, updatedAt: 1, deviceId: 'd',
+      text: { page, start: { item: 0, offset: 0 }, end: { item: 0, offset: 3 }, rects: [rect(y)], quote },
+    });
+    const side = (id: string, page: number, body: string): Annotation => ({
+      id, bookId: 'b1', type: 'side-note', page, body, tags: [], createdAt: page, updatedAt: 1, deviceId: 'd',
+    });
+    const sum = (id: string, body: string): Annotation => ({
+      id, bookId: 'b1', type: 'summary', scope: { kind: 'book' }, body, tags: [], createdAt: 1, updatedAt: 1, deviceId: 'd',
+    });
+    const group = (id: string) => Array.from(el.querySelectorAll<HTMLElement>(`[data-group="${id}"] .prev`)).map((n) => n.textContent!.trim());
+    const chip = (name: string) => Array.from(el.querySelectorAll<HTMLButtonElement>('.chip')).find((c) => c.textContent!.trim() === name)!;
+
+    function notesTab(anns: Annotation[], page = 2) {
+      create((h) => {
+        h.tab.set('notes');
+        h.page.set(page);
+        h.annotations.set(anns);
+      });
+    }
+
+    it('groups notes into On this page and Rest of the book, in page order', () => {
+      notesTab([hl('h9', 9, 'ninth'), hl('h2', 2, 'second'), side('s5', 5, 'five')]);
+      expect(group('here')).toEqual(['second']);
+      expect(group('rest')).toEqual(['five', 'ninth']);
+      expect(Array.from(el.querySelectorAll('.group')).map((g) => g.textContent)).toEqual([COPY.annotations.onThisPage, COPY.annotations.restOfBook]);
+      expect(el.querySelector('[data-group=here] .prev')!.getAttribute('dir')).toBe('auto');
+      expect(el.querySelector('[data-group=here] .tag')!.textContent).toBe('t1');
+      expect(el.querySelector('[data-group=here] .num')!.textContent).toBe('p. 2');
+    });
+
+    it('lists the book summary first in the rest, before page 5', () => {
+      notesTab([side('s5', 5, 'five'), sum('b', 'whole')], 1);
+      expect(group('rest')).toEqual(['whole', 'five']);
+    });
+
+    it('the Summaries chip hides highlights; All brings them back', () => {
+      notesTab([hl('h2', 2, 'second'), sum('b', 'whole')]);
+      chip(COPY.annotations.filters.summaries).click();
+      fixture.detectChanges();
+      expect([...group('here'), ...group('rest')]).toEqual(['whole']);
+      expect(chip(COPY.annotations.filters.summaries).getAttribute('aria-pressed')).toBe('true');
+      chip(COPY.annotations.filters.all).click();
+      fixture.detectChanges();
+      expect([...group('here'), ...group('rest')]).toEqual(['second', 'whole']);
+    });
+
+    it('the Notes chip covers notes and side notes', () => {
+      notesTab([hl('h2', 2, 'second'), side('s5', 5, 'five')]);
+      chip(COPY.annotations.filters.notes).click();
+      fixture.detectChanges();
+      expect([...group('here'), ...group('rest')]).toEqual(['five']);
+    });
+
+    it('shows the empty state', () => {
+      notesTab([]);
+      expect(el.textContent).toContain(COPY.annotations.noNotes);
+    });
+
+    it('tapping a highlight row jumps just above it and asks for a flash', () => {
+      notesTab([hl('h9', 9, 'ninth', 0.4), hl('h8', 8, 'eighth', 0.02)]);
+      const rows = Array.from(el.querySelectorAll<HTMLButtonElement>('.nrow'));
+      rows[1].click();
+      expect(host.jumps).toEqual([{ page: 9, offset: 0.4 - 0.05 }]);
+      expect(host.flashes).toEqual(['h9']);
+      expect(host.closes).toBe(1);
+      rows[0].click();
+      expect(host.jumps[1].page).toBe(8);
+      expect(host.jumps[1].offset).toBe(0);
+    });
+
+    it('tapping a side note or summary row opens the editor; the pencil opens the note sheet', () => {
+      notesTab([hl('h2', 2, 'second'), side('s5', 5, 'five'), sum('b', 'whole')]);
+      const rows = Array.from(el.querySelectorAll<HTMLButtonElement>('.nrow'));
+      rows[1].click(); // book summary sorts first in the rest group
+      rows[2].click();
+      expect(host.edits.map((a) => a.id)).toEqual(['b', 's5']);
+      expect(host.jumps).toEqual([]);
+      const pencils = Array.from(el.querySelectorAll<HTMLButtonElement>('button.tool'));
+      expect(pencils).toHaveLength(1);
+      pencils[0].click();
+      expect(host.notes.map((a) => a.id)).toEqual(['h2']);
+    });
+
+    it('the side-note action creates one on the current page and hands it over', async () => {
+      notesTab([], 4);
+      vi.useRealTimers();
+      const btn = Array.from(el.querySelectorAll<HTMLButtonElement>('.act')).find((b) => b.textContent!.trim() === COPY.annotations.sideNoteOn(4))!;
+      btn.click();
+      await vi.waitFor(() => expect(host.sideNotes).toHaveLength(1));
+      expect(host.sideNotes[0]).toMatchObject({ type: 'side-note', page: 4, bookId: 'b1' });
+      expect((await db.annotations.toArray()).filter((a) => a.type === 'side-note')).toHaveLength(1);
+    });
+
+    it('the page-range action creates nothing and asks for a pages scope on this page', async () => {
+      notesTab([], 6);
+      Array.from(el.querySelectorAll<HTMLButtonElement>('.act')).find((b) => b.textContent!.trim() === COPY.annotations.pageRangeSummary)!.click();
+      expect(host.scopes).toEqual([{ kind: 'pages', fromPage: 6, toPage: 6 }]);
+      vi.useRealTimers();
+      expect(await db.annotations.count()).toBe(0);
+    });
+  });
+
+  describe('Bookmarks tab', () => {
+    const mark = (id: string, page: number): Annotation => ({
+      id, bookId: 'b1', type: 'bookmark', page, tags: [], createdAt: page, updatedAt: 1, deviceId: 'd',
+    });
+
+    it('lists bookmarks by page with the chapter title; tapping jumps', () => {
+      create((h) => {
+        h.tab.set('bookmarks');
+        h.annotations.set([mark('m30', 30), mark('m3', 3), mark('m0', 0)]);
+      });
+      const rows = Array.from(el.querySelectorAll<HTMLButtonElement>('.row.bm'));
+      expect(rows.map((r) => [r.querySelector('.num')!.textContent, r.querySelector('.title')!.textContent])).toEqual([['p. 0', ''], ['p. 3', 'Intro'], ['p. 30', 'Nested']]);
+      rows[1].click();
+      expect(host.jumps).toEqual([{ page: 3, offset: 0 }]);
+    });
+
+    it('shows the empty state', () => {
+      create((h) => h.tab.set('bookmarks'));
+      expect(el.textContent).toContain(COPY.annotations.noBookmarks);
+    });
+
+    it('the trash button removes with an Undo toast; Undo brings it back', async () => {
+      vi.useRealTimers();
+      const rec = await TestBed.inject(AnnotationService).create({ bookId: 'b1', type: 'bookmark', page: 3 });
+      create((h) => {
+        h.tab.set('bookmarks');
+        h.annotations.set([rec]);
+      });
+      el.querySelector<HTMLButtonElement>('button.tool')!.click();
+      await vi.waitFor(async () => expect((await db.annotations.get(rec.id))?.deleted).toBe(true));
+      const toast = TestBed.inject(ToastService);
+      expect(toast.current()?.message).toBe(COPY.annotations.deleted);
+      toast.undo();
+      await vi.waitFor(async () => expect((await db.annotations.get(rec.id))?.deleted).toBeFalsy());
+    });
   });
 
   it('closing within the debounce window cancels the pending search', async () => {

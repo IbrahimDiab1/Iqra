@@ -426,6 +426,64 @@ describe('ReaderPage', () => {
     });
   });
 
+  describe('notes tab and badge', () => {
+    const hl = (id: string, page: number) => TestBed.inject(AnnotationService).create({
+      bookId: 'book-1', type: 'highlight', page, color: 'green', tags: [],
+      text: { page, start: { item: 0, offset: 0 }, end: { item: 0, offset: 5 }, rects: [{ x: 0.1, y: 0.5, w: 0.2, h: 0.02 }], quote: `quote ${id}` },
+    });
+
+    it('the Contents button shows how many notes the current page has, and hides at zero; bookmarks do not count', async () => {
+      await create();
+      const pill = () => Array.from(el.querySelectorAll<HTMLButtonElement>('button.pill')).find((b) => b.textContent!.includes(COPY.reader.contents))!;
+      expect(pill().querySelector('.badge')).toBeNull();
+      const svc = TestBed.inject(AnnotationService);
+      await svc.create({ bookId: 'book-1', type: 'bookmark', page: 7 });
+      await hl('a', 7);
+      await hl('b', 9);
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(pill().querySelector('.badge')!.textContent!.trim()).toBe('1');
+      });
+    });
+
+    it('tapping a note row jumps, pushes a history entry and flashes it', async () => {
+      await create();
+      const rec = await hl('far', 30);
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        el.querySelector<HTMLButtonElement>('button.pill')!.click();
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-book-panel-sheet .tabs')).not.toBeNull();
+      });
+      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-sheet [role=tab]')).find((t) => t.textContent!.trim() === COPY.reader.notes)!.click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-book-panel-sheet .nrow')).not.toBeNull();
+      });
+      el.querySelector<HTMLButtonElement>('iqra-book-panel-sheet .nrow')!.click();
+      fixture.detectChanges();
+      expect(label()).toContain(COPY.reader.pageOf(30, 50));
+      expect(btn(COPY.reader.jumpBack)!.disabled).toBe(false);
+      expect(rec.id).toBeTruthy();
+    });
+
+    it('a side note made from the panel opens the editor; closing it empty removes it', async () => {
+      await create();
+      el.querySelector<HTMLButtonElement>('button.pill')!.click();
+      fixture.detectChanges();
+      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-sheet [role=tab]')).find((t) => t.textContent!.trim() === COPY.reader.notes)!.click();
+      fixture.detectChanges();
+      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-book-panel-sheet .act')).find((b) => b.textContent!.includes('Side note'))!.click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-text-editor-sheet .panel.open')).not.toBeNull();
+      });
+      expect((await db.annotations.toArray()).filter((r) => r.type === 'side-note' && !r.deleted)).toHaveLength(1);
+      el.querySelector<HTMLButtonElement>('iqra-text-editor-sheet button.close')!.click();
+      await vi.waitFor(async () => expect((await db.annotations.toArray()).filter((r) => r.type === 'side-note' && !r.deleted)).toHaveLength(0));
+    });
+  });
+
   describe('bookmarks and summaries', () => {
     const stored = () => db.annotations.toArray();
     const bookmarkBtn = () => el.querySelector<HTMLButtonElement>('button.bookmark')!;
