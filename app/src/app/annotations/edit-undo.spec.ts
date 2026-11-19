@@ -3,10 +3,10 @@ import { UndoStack } from '../reader/undo-stack';
 import { FieldEdits, removalCommand } from './edit-undo';
 
 function fakeService() {
-  const update = vi.fn(async () => undefined);
-  const remove = vi.fn(async () => undefined);
-  const restore = vi.fn(async () => undefined);
-  return { update, remove, restore } as unknown as { update: typeof update; remove: typeof remove; restore: typeof restore } & import('./annotation.service').AnnotationService;
+  const updateIfOurs = vi.fn(async () => undefined);
+  const removeIfOurs = vi.fn(async () => undefined);
+  const restoreIfOurs = vi.fn(async () => undefined);
+  return { updateIfOurs, removeIfOurs, restoreIfOurs } as unknown as { updateIfOurs: typeof updateIfOurs; removeIfOurs: typeof removeIfOurs; restoreIfOurs: typeof restoreIfOurs } & import('./annotation.service').AnnotationService;
 }
 
 describe('FieldEdits', () => {
@@ -17,9 +17,9 @@ describe('FieldEdits', () => {
     edits.record(stack, svc, 'a1', 'colour change', { color: 'yellow' }, { color: 'pink' });
     expect(stack.nextUndoLabel()).toBe('colour change');
     await stack.undo();
-    expect(svc.update).toHaveBeenLastCalledWith('a1', { color: 'yellow' });
+    expect(svc.updateIfOurs).toHaveBeenLastCalledWith('a1', { color: 'yellow' });
     await stack.redo();
-    expect(svc.update).toHaveBeenLastCalledWith('a1', { color: 'pink' });
+    expect(svc.updateIfOurs).toHaveBeenLastCalledWith('a1', { color: 'pink' });
   });
 
   it('merges quick successive edits while the command is still the newest', async () => {
@@ -29,10 +29,10 @@ describe('FieldEdits', () => {
     edits.record(stack, svc, 'a1', 'edit', { body: '' }, { body: 'he' });
     edits.record(stack, svc, 'a1', 'edit', { body: 'he' }, { body: 'hello' });
     await stack.undo();
-    expect(svc.update).toHaveBeenLastCalledWith('a1', { body: '' });
+    expect(svc.updateIfOurs).toHaveBeenLastCalledWith('a1', { body: '' });
     expect(stack.canUndo()).toBe(false);
     await stack.redo();
-    expect(svc.update).toHaveBeenLastCalledWith('a1', { body: 'hello' });
+    expect(svc.updateIfOurs).toHaveBeenLastCalledWith('a1', { body: 'hello' });
   });
 
   it('starts a new command once something else was recorded in between', async () => {
@@ -59,9 +59,9 @@ describe('removalCommand', () => {
     const rec = { id: 'a1' } as never;
     const cmd = removalCommand(svc, rec);
     await cmd.undo();
-    expect(svc.restore).toHaveBeenCalledWith(rec);
+    expect(svc.restoreIfOurs).toHaveBeenCalledWith(rec);
     await cmd.redo();
-    expect(svc.remove).toHaveBeenCalledWith('a1');
+    expect(svc.removeIfOurs).toHaveBeenCalledWith('a1');
     expect(cmd.subject).toBe('a1');
   });
 });

@@ -1,4 +1,5 @@
 import { Injectable, computed, signal } from '@angular/core';
+import { ChangedElsewhereError } from '../core/changed-elsewhere';
 
 /** A reversible action. Both directions are async because they write to the database. */
 export interface UndoCommand {
@@ -29,6 +30,7 @@ export class UndoStack {
 
   /** Records an action that has just happened. Whatever could have been redone is forgotten. */
   push(cmd: UndoCommand): void {
+    this.generation++;
     this.undos.update((list) => [...list, cmd].slice(-MAX_UNDO));
     this.redos.set([]);
   }
@@ -38,14 +40,23 @@ export class UndoStack {
     return this.undos().at(-1);
   }
 
-  /** Reverses the newest command; null when there is nothing to undo. A failing command stays on the stack and the error is thrown. */
+  /** Called when a command is dropped because its record was changed on another device; the reader says so. */
+  onConflict: ((cmd: UndoCommand) => void) | null = null;
+  /** Bumped by every push and clear, so an undo that finishes after a newer action knows redo was already cleared. */
+  private generation = 0;
+
+  /**
+   * Reverses the newest command; null when there is nothing to undo or the record changed on another device (the command
+   * is then dropped and `onConflict` told). Any other failure leaves the command on the stack and is thrown.
+   */
   undo(): Promise<UndoCommand | null> {
     return this.enqueue(async () => {
       const cmd = this.undos().at(-1);
       if (!cmd) return null;
-      await cmd.undo();
+      const gen = this.generation;
+      if (!(await this.run(cmd, () => cmd.undo()))) return null;
       this.undos.update((list) => list.filter((c) => c !== cmd));
-      this.redos.update((list) => [...list, cmd]);
+      if (gen === this.generation) this.redos.update((list) => [...list, cmd]);
       return cmd;
     });
   }
@@ -54,7 +65,7 @@ export class UndoStack {
     return this.enqueue(async () => {
       const cmd = this.redos().at(-1);
       if (!cmd) return null;
-      await cmd.redo();
+      if (!(await this.run(cmd, () => cmd.redo()))) return null;
       this.redos.update((list) => list.filter((c) => c !== cmd));
       this.undos.update((list) => [...list, cmd].slice(-MAX_UNDO));
       return cmd;
@@ -63,16 +74,31 @@ export class UndoStack {
 
   /**
    * Undoes one specific command, for a toast's Undo button. False when it is no longer on the stack (an Undo or Ctrl+Z
-   * got there first), so the same action is never reversed twice.
+   * got there first) or its record changed elsewhere, so the same action is never reversed twice.
    */
   undoCommand(cmd: UndoCommand): Promise<boolean> {
     return this.enqueue(async () => {
       if (!this.undos().includes(cmd)) return false;
-      await cmd.undo();
+      const gen = this.generation;
+      if (!(await this.run(cmd, () => cmd.undo()))) return false;
       this.undos.update((list) => list.filter((c) => c !== cmd));
-      this.redos.update((list) => [...list, cmd]);
+      if (gen === this.generation) this.redos.update((list) => [...list, cmd]);
       return true;
     });
+  }
+
+  /** Runs one direction of a command. False (command dropped, onConflict told) when its record changed elsewhere. */
+  private async run(cmd: UndoCommand, step: () => Promise<void>): Promise<boolean> {
+    try {
+      await step();
+      return true;
+    } catch (err) {
+      if (!(err instanceof ChangedElsewhereError)) throw err;
+      this.undos.update((list) => list.filter((c) => c !== cmd));
+      this.redos.update((list) => list.filter((c) => c !== cmd));
+      this.onConflict?.(cmd);
+      return false;
+    }
   }
 
   /** Drops every command about one record: a note or side note that was closed empty is gone, so its history is too. */
@@ -82,6 +108,7 @@ export class UndoStack {
   }
 
   clear(): void {
+    this.generation++;
     this.undos.set([]);
     this.redos.set([]);
   }

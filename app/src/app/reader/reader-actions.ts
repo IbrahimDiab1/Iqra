@@ -68,6 +68,11 @@ export class ReaderActions {
   });
   readonly bookmarked = computed(() => this.bookmarkId() !== undefined);
 
+  constructor() {
+    // An undo or redo whose record changed on another device is skipped and dropped, and the owner is told why.
+    this.undoStack.onConflict = () => this.toast.show(CHROME_COPY.changedElsewhere);
+  }
+
   attach(ctx: ReaderActionsContext): void {
     this.ctx = ctx;
   }
@@ -113,12 +118,12 @@ export class ReaderActions {
             label: CHROME_COPY.actions.removeBookmark,
             subject: rec.id,
             undo: async () => {
+              await this.annotationService.restoreIfOurs(rec);
               this.markBookmark(page, rec.id, true);
-              await this.annotationService.restore(rec);
             },
             redo: async () => {
+              await this.annotationService.removeIfOurs(rec.id);
               this.markBookmark(page, rec.id, false);
-              await this.annotationService.remove(rec.id);
             },
           };
           this.toast.show(COPY.annotations.deleted, { undo: recordCommand(this.undoStack, cmd) });
@@ -130,12 +135,12 @@ export class ReaderActions {
           label: CHROME_COPY.actions.addBookmark,
           subject: created.id,
           undo: async () => {
+            await this.annotationService.removeIfOurs(created.id);
             this.markBookmark(page, created.id, false);
-            await this.annotationService.remove(created.id);
           },
           redo: async () => {
+            await this.annotationService.restoreIfOurs(created);
             this.markBookmark(page, created.id, true);
-            await this.annotationService.restore(created);
           },
         };
         this.undoStack.push(cmd);
@@ -298,8 +303,8 @@ export class ReaderActions {
     return {
       label,
       subject: rec.id,
-      undo: async () => void (await this.annotationService.remove(rec.id)),
-      redo: () => this.annotationService.restore(rec),
+      undo: () => this.annotationService.removeIfOurs(rec.id),
+      redo: () => this.annotationService.restoreIfOurs(rec),
     };
   }
 

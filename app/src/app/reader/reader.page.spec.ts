@@ -1338,6 +1338,49 @@ describe('ReaderPage', () => {
       expect(undoBtn().disabled).toBe(true);
     });
 
+    /** The phone's later write to a row, as sync would leave it. */
+    const foreignWrite = async (id: string, patch: Record<string, unknown>) => {
+      const row = (await db.annotations.get(id))!;
+      await db.annotations.put({ ...row, ...patch, updatedAt: row.updatedAt + 500, deviceId: 'phone' } as never);
+    };
+
+    it('Ctrl+Z skips a highlight another device has edited: Changed on another device, nothing undone, the command is gone', async () => {
+      await create();
+      await highlightGreen();
+      const [rec] = await live();
+      await foreignWrite(rec.id, { body: 'from the phone' });
+      key('z', { ctrlKey: true });
+      await vi.waitFor(() => expect(toast().current()?.message).toBe(CHROME_COPY.changedElsewhere));
+      expect((await db.annotations.get(rec.id))!.deleted).toBeUndefined();
+      fixture.detectChanges();
+      expect(undoBtn().disabled).toBe(true);
+      expect(redoBtn().disabled).toBe(true);
+    });
+
+    it('never resurrects a record another device deleted (undo of a delete, redo of a creation)', async () => {
+      await create();
+      fakeSelection.pending.set(null);
+      key('b');
+      await vi.waitFor(async () => expect(await live()).toHaveLength(1));
+      const [bm] = await live();
+      key('z', { ctrlKey: true });
+      await vi.waitFor(async () => expect(await live()).toHaveLength(0));
+      await foreignWrite(bm.id, { deleted: true });
+      key('z', { ctrlKey: true, shiftKey: true });
+      await vi.waitFor(() => expect(toast().current()?.message).toBe(CHROME_COPY.changedElsewhere));
+      expect((await db.annotations.get(bm.id))!.deleted).toBe(true);
+    });
+
+    it('a toast Undo on a record changed elsewhere says so instead of undoing', async () => {
+      await create();
+      await highlightGreen();
+      const [rec] = await live();
+      await foreignWrite(rec.id, { color: 'blue' });
+      toast().undo();
+      await vi.waitFor(() => expect(toast().current()?.message).toBe(CHROME_COPY.changedElsewhere));
+      expect((await db.annotations.get(rec.id))!.deleted).toBeUndefined();
+    });
+
     it('the history belongs to one reader session', async () => {
       await create();
       await highlightGreen();

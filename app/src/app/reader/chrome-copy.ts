@@ -26,6 +26,7 @@ export const CHROME_COPY = {
   summaryWritten: 'Summary written',
   addSummary: 'Add summary',
   writeSummary: 'Write a summary',
+  changedElsewhere: 'Changed on another device',
   undid: (label: string) => `Undid ${label}`,
   redid: (label: string) => `Redid ${label}`,
   /** What each reversible action is called in `Undid <label>`. */

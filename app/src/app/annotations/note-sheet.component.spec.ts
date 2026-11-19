@@ -27,13 +27,14 @@ describe('NoteSheetComponent', () => {
   let fixture: ComponentFixture<HostComponent>;
   let host: HostComponent;
   let el: HTMLElement;
-  let svc: { update: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn>; restore: ReturnType<typeof vi.fn> };
+  let svc: { update: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn>; restore: ReturnType<typeof vi.fn>; restoreIfOurs: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     svc = {
       update: vi.fn(async () => undefined),
       remove: vi.fn(async (id: string) => ({ ...REC, id })),
       restore: vi.fn(async () => undefined),
+      restoreIfOurs: vi.fn(async () => undefined),
     };
     TestBed.configureTestingModule({ providers: [{ provide: AnnotationService, useValue: svc }] });
     fixture = TestBed.createComponent(HostComponent);
@@ -110,7 +111,7 @@ describe('NoteSheetComponent', () => {
     const toast = TestBed.inject(ToastService);
     await vi.waitFor(() => expect(toast.current()?.message).toBe(COPY.annotations.deleted));
     toast.undo();
-    expect(svc.restore).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }));
+    expect(svc.restoreIfOurs).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }));
     expect(host.closed).toBe(1);
   });
 

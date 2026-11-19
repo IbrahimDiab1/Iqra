@@ -228,8 +228,8 @@ export class TextEditorSheet {
           this.undoStack?.push({
             label: CHROME_COPY.actions.summary,
             subject: rec.id,
-            undo: async () => void (await this.service.remove(rec.id)),
-            redo: () => this.service.restore(rec),
+            undo: () => this.service.removeIfOurs(rec.id),
+            redo: () => this.service.restoreIfOurs(rec),
           });
         }
       } catch (err) {

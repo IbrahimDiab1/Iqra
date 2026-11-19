@@ -1,7 +1,8 @@
 import { Injectable, Injector, Signal, inject, runInInjectionContext } from '@angular/core';
 import { CLOCK } from '../core/clock';
 import { DB } from '../core/db';
-import { newId } from '../core/ids';
+import { ChangedElsewhereError } from '../core/changed-elsewhere';
+import { DEVICE_ID, newId } from '../core/ids';
 import type { Annotation, ID, TextAnchor } from '../core/models';
 import { Repo } from '../core/repo';
 import type { PageSize } from '../reader/pdf-session';
@@ -46,6 +47,7 @@ export class AnnotationService {
   private readonly repo = inject(Repo);
   private readonly db = inject(DB);
   private readonly clock = inject(CLOCK);
+  private readonly deviceId = inject(DEVICE_ID);
   private readonly injector = inject(Injector);
   private readonly byBook = new Map<ID, Signal<Annotation[] | undefined>>();
   private everything?: Signal<Annotation[] | undefined>;
@@ -149,9 +151,40 @@ export class AnnotationService {
     });
   }
 
-  /** Reverses addHighlight: the new record is removed and the absorbed ones are restored. */
-  undoAddHighlight(result: HighlightResult): Promise<void> {
+  /**
+   * Runs `apply` only if every listed row is currently in the state this device left it: last written here, deleted or
+   * not as expected. A row another device has changed, deleted or never had makes the whole call throw
+   * ChangedElsewhereError and change nothing, so an old undo never overwrites or resurrects a newer remote change.
+   */
+  private guarded<T>(expect: { id: ID; deleted: boolean }[], apply: () => Promise<T>): Promise<T> {
     return this.db.transaction('rw', this.db.annotations, async () => {
+      for (const e of expect) {
+        const row = await this.db.annotations.get(e.id);
+        if (!row || !!row.deleted !== e.deleted || row.deviceId !== this.deviceId) throw new ChangedElsewhereError();
+      }
+      return apply();
+    });
+  }
+
+  /** Undo of a creation (or redo of a delete): removes a live record this device last wrote. */
+  async removeIfOurs(id: ID): Promise<void> {
+    await this.guarded([{ id, deleted: false }], () => this.remove(id));
+  }
+
+  /** Undo of a delete (or redo of a creation): restores a record this device soft-deleted. */
+  restoreIfOurs(rec: Annotation): Promise<void> {
+    return this.guarded([{ id: rec.id, deleted: true }], () => this.restore(rec));
+  }
+
+  /** Undo or redo of a field edit on a live record this device last wrote. */
+  async updateIfOurs(id: ID, patch: Patch): Promise<void> {
+    await this.guarded([{ id, deleted: false }], () => this.update(id, patch));
+  }
+
+  /** Reverses addHighlight: the new record is removed and the absorbed ones are restored (all or nothing, see `guarded`). */
+  undoAddHighlight(result: HighlightResult): Promise<void> {
+    const expect = [{ id: result.created.id, deleted: false }, ...result.mergedAway.map((r) => ({ id: r.id, deleted: true }))];
+    return this.guarded(expect, async () => {
       await this.remove(result.created.id);
       for (const rec of result.mergedAway) await this.restore(rec);
     });
@@ -159,7 +192,8 @@ export class AnnotationService {
 
   /** Reapplies an undone addHighlight: the absorbed highlights go away again and the merged one comes back. */
   redoAddHighlight(result: HighlightResult): Promise<void> {
-    return this.db.transaction('rw', this.db.annotations, async () => {
+    const expect = [{ id: result.created.id, deleted: true }, ...result.mergedAway.map((r) => ({ id: r.id, deleted: false }))];
+    return this.guarded(expect, async () => {
       for (const rec of result.mergedAway) await this.remove(rec.id);
       await this.restore(result.created);
     });

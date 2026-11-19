@@ -23,8 +23,8 @@ export class FieldEdits {
     state.cmd = {
       label,
       subject: id,
-      undo: async () => void (await service.update(id, state.before)),
-      redo: async () => void (await service.update(id, state.after)),
+      undo: () => service.updateIfOurs(id, state.before),
+      redo: () => service.updateIfOurs(id, state.after),
     };
     this.current = state;
     stack.push(state.cmd);
@@ -36,7 +36,7 @@ export function removalCommand(service: AnnotationService, rec: Annotation): Und
   return {
     label: CHROME_COPY.actions.delete,
     subject: rec.id,
-    undo: () => service.restore(rec),
-    redo: async () => void (await service.remove(rec.id)),
+    undo: () => service.restoreIfOurs(rec),
+    redo: () => service.removeIfOurs(rec.id),
   };
 }

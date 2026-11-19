@@ -7,6 +7,7 @@ import type { Annotation, TextAnchor } from '../core/models';
 import type { TextItem } from '../reader/text';
 import { buildAnchor } from './anchor';
 import { AnnotationService } from './annotation.service';
+import { ChangedElsewhereError } from '../core/changed-elsewhere';
 
 const SIZE = { widthPt: 600, heightPt: 800 };
 const ITEMS: TextItem[] = [
@@ -221,5 +222,62 @@ describe('AnnotationService', () => {
     await vi.waitFor(() => expect(signal()).toHaveLength(0));
     await service.redoAddHighlight(result);
     await vi.waitFor(() => expect(signal()?.map((r) => r.id)).toEqual([result.created.id]));
+  });
+
+  describe('undo and redo only touch what this device last wrote', () => {
+    /** Another device's later write to a row, as sync would leave it. */
+    const foreign = async (id: string, patch: Partial<Annotation>) => {
+      const row = (await db.annotations.get(id))!;
+      await db.annotations.put({ ...row, ...patch, updatedAt: row.updatedAt + 500, deviceId: 'other-device' });
+    };
+
+    it('removeIfOurs / restoreIfOurs / updateIfOurs work on our own rows', async () => {
+      const rec = await service.create({ bookId: 'b1', type: 'note', page: 1, body: 'a' });
+      await service.updateIfOurs(rec.id, { body: 'b' });
+      expect((await db.annotations.get(rec.id))!.body).toBe('b');
+      await service.removeIfOurs(rec.id);
+      expect((await db.annotations.get(rec.id))!.deleted).toBe(true);
+      await service.restoreIfOurs(rec);
+      expect((await db.annotations.get(rec.id))!.deleted).toBeUndefined();
+    });
+
+    it('does not overwrite an edit from another device: it throws and changes nothing', async () => {
+      const rec = await service.create({ bookId: 'b1', type: 'note', page: 1, body: 'a' });
+      await foreign(rec.id, { body: 'from the phone' });
+      await expect(service.updateIfOurs(rec.id, { body: 'mine' })).rejects.toBeInstanceOf(ChangedElsewhereError);
+      await expect(service.removeIfOurs(rec.id)).rejects.toBeInstanceOf(ChangedElsewhereError);
+      const row = (await db.annotations.get(rec.id))!;
+      expect(row.body).toBe('from the phone');
+      expect(row.deleted).toBeUndefined();
+    });
+
+    it('never resurrects a record another device deleted, and does not edit it either', async () => {
+      const rec = await service.create({ bookId: 'b1', type: 'note', page: 1, body: 'a' });
+      await foreign(rec.id, { deleted: true });
+      await expect(service.restoreIfOurs(rec)).rejects.toBeInstanceOf(ChangedElsewhereError);
+      await expect(service.updateIfOurs(rec.id, { body: 'x' })).rejects.toBeInstanceOf(ChangedElsewhereError);
+      expect((await db.annotations.get(rec.id))!.deleted).toBe(true);
+    });
+
+    it('a missing row is a conflict too', async () => {
+      await expect(service.updateIfOurs('nope', { body: 'x' })).rejects.toBeInstanceOf(ChangedElsewhereError);
+    });
+
+    it('undoAddHighlight is all or nothing: an original edited elsewhere stops the whole undo', async () => {
+      const a = await service.create({ bookId: 'b1', type: 'highlight', page: 3, color: 'green', text: anchor(3, [1, 0], [1, 5]), tags: [] });
+      const result = await service.addHighlight('b1', anchor(3, [1, 3], [1, 8]), 'pink', GEOMETRY);
+      // The phone edited the merged-away original after this device removed it.
+      await foreign(a.id, { body: 'phone note' });
+      await expect(service.undoAddHighlight(result)).rejects.toBeInstanceOf(ChangedElsewhereError);
+      expect((await db.annotations.get(result.created.id))!.deleted).toBeUndefined();
+      expect((await db.annotations.get(a.id))!.deleted).toBe(true);
+    });
+
+    it('redoAddHighlight refuses when the merged highlight was deleted elsewhere', async () => {
+      const result = await service.addHighlight('b1', anchor(3, [1, 0], [1, 5]), 'blue', GEOMETRY);
+      await service.undoAddHighlight(result);
+      await foreign(result.created.id, { deleted: true, body: 'x' });
+      await expect(service.redoAddHighlight(result)).rejects.toBeInstanceOf(ChangedElsewhereError);
+    });
   });
 });

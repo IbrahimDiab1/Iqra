@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ChangedElsewhereError } from '../core/changed-elsewhere';
 import { MAX_UNDO, UndoStack, type UndoCommand } from './undo-stack';
 
 function cmd(label: string, log: string[] = []): UndoCommand {
@@ -167,5 +168,62 @@ describe('UndoStack', () => {
       await s.undo();
       expect(s.canUndo()).toBe(false);
     });
+  });
+
+  describe('a command whose record changed elsewhere', () => {
+    const conflicting = (label: string): UndoCommand => ({
+      label,
+      undo: async () => {
+        throw new ChangedElsewhereError();
+      },
+      redo: async () => {
+        throw new ChangedElsewhereError();
+      },
+    });
+
+    it('is dropped, reported once, and undo says nothing happened', async () => {
+      const s = new UndoStack();
+      const seen: string[] = [];
+      s.onConflict = (c) => seen.push(c.label);
+      s.push(cmd('ok'));
+      s.push(conflicting('stale'));
+      expect(await s.undo()).toBeNull();
+      expect(seen).toEqual(['stale']);
+      expect(s.canRedo()).toBe(false);
+      expect(s.nextUndoLabel()).toBe('ok');
+      expect((await s.undo())?.label).toBe('ok');
+    });
+
+    it('a redo that conflicts is dropped too', async () => {
+      const s = new UndoStack();
+      let fail = false;
+      s.push({ label: 'x', undo: async () => undefined, redo: async () => { if (fail) throw new ChangedElsewhereError(); } });
+      await s.undo();
+      fail = true;
+      expect(await s.redo()).toBeNull();
+      expect(s.canRedo()).toBe(false);
+      expect(s.canUndo()).toBe(false);
+    });
+
+    it('the toast Undo reports false and drops it', async () => {
+      const s = new UndoStack();
+      const c = conflicting('stale');
+      s.push(c);
+      expect(await s.undoCommand(c)).toBe(false);
+      expect(s.canUndo()).toBe(false);
+    });
+  });
+
+  it('a push while an undo is running clears redo for good: the finished undo is not redoable', async () => {
+    const s = new UndoStack();
+    let release!: () => void;
+    s.push({ label: 'slow', undo: () => new Promise<void>((r) => (release = r)), redo: async () => undefined });
+    const running = s.undo();
+    await Promise.resolve();
+    s.push(cmd('newer'));
+    release();
+    await running;
+    expect(s.canRedo()).toBe(false);
+    expect(s.nextUndoLabel()).toBe('newer');
   });
 });

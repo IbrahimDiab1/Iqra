@@ -27,7 +27,7 @@ describe('TextEditorSheet', () => {
   let fixture: ComponentFixture<HostComponent>;
   let host: HostComponent;
   let el: HTMLElement;
-  let svc: { create: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn>; restore: ReturnType<typeof vi.fn> };
+  let svc: { create: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn>; restore: ReturnType<typeof vi.fn>; restoreIfOurs: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     svc = {
@@ -35,6 +35,7 @@ describe('TextEditorSheet', () => {
       update: vi.fn(async () => undefined),
       remove: vi.fn(async (id: string) => ({ ...SUMMARY, id })),
       restore: vi.fn(async () => undefined),
+      restoreIfOurs: vi.fn(async () => undefined),
     };
     TestBed.configureTestingModule({ providers: [{ provide: AnnotationService, useValue: svc }] });
     fixture = TestBed.createComponent(HostComponent);
@@ -109,7 +110,7 @@ describe('TextEditorSheet', () => {
     const toast = TestBed.inject(ToastService);
     await vi.waitFor(() => expect(toast.current()?.message).toBe(COPY.annotations.deleted));
     toast.undo();
-    expect(svc.restore).toHaveBeenCalledWith(expect.objectContaining({ id: 's1' }));
+    expect(svc.restoreIfOurs).toHaveBeenCalledWith(expect.objectContaining({ id: 's1' }));
   });
 
   describe('a draft that is not stored yet', () => {
