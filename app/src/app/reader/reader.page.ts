@@ -15,16 +15,13 @@ import {
 } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { buildAnchor } from '../annotations/anchor';
-import { AnnotationService, type HighlightColor } from '../annotations/annotation.service';
+import { AnnotationService } from '../annotations/annotation.service';
 import { NoteSheetComponent } from '../annotations/note-sheet.component';
 import { TextEditorSheet } from '../annotations/text-editor.sheet';
-import { findSummary } from '../annotations/summary-scope';
 import { tagSuggestionsFrom } from '../annotations/tag-input.component';
 import { CLOCK } from '../core/clock';
 import { DB } from '../core/db';
-import { newId } from '../core/ids';
-import type { Annotation, Book, Rect, SummaryScope } from '../core/models';
+import type { Annotation, Book } from '../core/models';
 import { Repo } from '../core/repo';
 import { SettingsService } from '../core/settings.service';
 import { ReadMarkService } from '../progress/read-mark.service';
@@ -40,6 +37,7 @@ import { chapterTitleAt, sectionTitleAt } from './outline';
 import { BookPanelDrawerComponent, type PanelTab } from './book-panel.drawer';
 import { PagerComponent } from './pager.component';
 import { PdfSession, ReaderOpenError, type PageRenderer, type PdfSource } from './pdf-session';
+import { ReaderActions } from './reader-actions';
 import { PositionService } from './position.service';
 import { ReaderState } from './reader.state';
 import { SessionService, type ReaderSessionHandle } from './session.service';
@@ -50,8 +48,8 @@ import { ShortcutHelpComponent } from './shortcut-help.component';
 import { shortcutFor, type ShortcutAction } from './shortcuts';
 import { ReflowViewComponent } from './reflow-view.component';
 import { ScrollerComponent } from './scroller.component';
-import { SelectionService, type PendingSelection } from './selection.service';
-import { SelectionToolbarComponent, type PendingArea } from './selection-toolbar.component';
+import { SelectionService } from './selection.service';
+import { SelectionToolbarComponent } from './selection-toolbar.component';
 import { ZoomGesturesDirective } from './zoom-gestures.directive';
 import { zoomIn, zoomOut } from './zoom';
 
@@ -65,7 +63,6 @@ export const PDF_OPENER = new InjectionToken<(src: PdfSource) => Promise<ReaderS
 type Status = 'loading' | 'ready' | { error: string };
 
 const SYNC_TOAST_MS = 8000;
-const AREA_HINT_MS = 4000;
 /** A jump to an annotation lands a little above it. */
 const ANNOTATION_JUMP_MARGIN = 0.05;
 const FINISH_TOAST_MS = 8000;
@@ -73,7 +70,7 @@ const FINISH_TOAST_MS = 8000;
 @Component({
   selector: 'iqra-reader-page',
   imports: [RouterLink, ReaderHeaderComponent, ReaderToolbarComponent, ShortcutHelpComponent, BookPanelDrawerComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective, SelectionToolbarComponent, NoteSheetComponent, TextEditorSheet],
-  providers: [SelectionService],
+  providers: [SelectionService, ReaderActions],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @switch (statusKind()) {
@@ -124,7 +121,7 @@ const FINISH_TOAST_MS = 8000;
                 (showPage)="showPage()"
                 [annotations]="annotations()"
                 [flashId]="s.flash()"
-                (annotationTap)="onAnnotationTap($event)"
+                (annotationTap)="actions.onAnnotationTap($event)"
               />
             } @else if (b.pageMode === 'scroll') {
               <iqra-scroller
@@ -135,10 +132,10 @@ const FINISH_TOAST_MS = 8000;
                 [annotations]="annotations()"
                 [flashId]="s.flash()"
                 [tool]="s.tool()"
-                (areaDrawn)="onAreaDrawn($event)"
+                (areaDrawn)="actions.onAreaDrawn($event)"
                 (placeChange)="s.placeChange($event)"
                 (zoomChange)="s.setZoom($event)"
-                (annotationTap)="onAnnotationTap($event)"
+                (annotationTap)="actions.onAnnotationTap($event)"
               />
             } @else {
               <div
@@ -159,10 +156,10 @@ const FINISH_TOAST_MS = 8000;
                   [annotations]="annotations()"
                   [flashId]="s.flash()"
                   [tool]="s.tool()"
-                  (areaDrawn)="onAreaDrawn($event)"
+                  (areaDrawn)="actions.onAreaDrawn($event)"
                   (pageChange)="s.pageChange($event)"
                   (zoomChange)="s.setZoom($event)"
-                  (annotationTap)="onAnnotationTap($event)"
+                  (annotationTap)="actions.onAnnotationTap($event)"
                 />
               </div>
             }
@@ -172,7 +169,7 @@ const FINISH_TOAST_MS = 8000;
             class="r-tools"
             [view]="s.view()"
             [tool]="s.tool()"
-            [bookmarked]="!!bookmark()"
+            [bookmarked]="!!actions.bookmark()"
             [progressMode]="b.progressMode"
             [pageMarked]="pageMarked()"
             [fullscreen]="fullscreen()"
@@ -183,10 +180,10 @@ const FINISH_TOAST_MS = 8000;
 
           <div class="overlays">
             <iqra-selection-toolbar
-              [selection]="toolbarTarget()"
-              (color)="highlight($event)"
-              (note)="addNote()"
-              (copy)="copySelection()"
+              [selection]="actions.toolbarTarget()"
+              (color)="actions.highlight($event)"
+              (note)="actions.addNote()"
+              (copy)="actions.copySelection()"
             />
 
             <div class="zoompair">
@@ -205,26 +202,26 @@ const FINISH_TOAST_MS = 8000;
               (closed)="panel.set(null)"
               (tabChange)="panel.set($event)"
               (jump)="jump($event)"
-              (summary)="editSummary($event)"
-              (edit)="editText($event)"
-              (note)="noteTarget.set($event)"
-              (sideNote)="startSideNote($event)"
+              (summary)="actions.editSummary($event)"
+              (edit)="actions.editText($event)"
+              (note)="actions.noteTarget.set($event)"
+              (sideNote)="actions.startSideNote($event)"
               (flash)="s.flashAnnotation($event)"
             />
             <iqra-shortcut-help [open]="helpOpen()" (closed)="helpOpen.set(false)" />
             <iqra-text-editor-sheet
-              [annotation]="textTarget()"
-              [draft]="textIsDraft()"
-              [isNew]="textTarget()?.id === newSideNoteId()"
+              [annotation]="actions.textTarget()"
+              [draft]="actions.textIsDraft()"
+              [isNew]="actions.textTarget()?.id === actions.newSideNoteId()"
               [pageCount]="r.numPages"
               [tagSuggestions]="tagSuggestions()"
-              (closed)="closeText($event.empty)"
+              (closed)="actions.closeText($event.empty)"
             />
             <iqra-note-sheet
-              [annotation]="noteTarget()"
-              [isNew]="noteTarget()?.id === newNoteId()"
+              [annotation]="actions.noteTarget()"
+              [isNew]="actions.noteTarget()?.id === actions.newNoteId()"
               [tagSuggestions]="tagSuggestions()"
-              (closed)="noteTarget.set(null)"
+              (closed)="actions.noteTarget.set(null)"
             />
             <iqra-reading-settings-sheet
               [open]="settingsOpen()"
@@ -294,6 +291,7 @@ export class ReaderPage implements OnDestroy {
   private readonly annotationService = inject(AnnotationService);
   private readonly repo = inject(Repo);
   protected readonly selection = inject(SelectionService);
+  protected readonly actions = inject(ReaderActions);
   private readonly scroller = viewChild(ScrollerComponent);
 
   protected readonly status = signal<Status>('loading');
@@ -319,33 +317,13 @@ export class ReaderPage implements OnDestroy {
   private readonly annotationSource = signal<Signal<Annotation[] | undefined> | null>(null);
   /** This book's live annotations. */
   protected readonly annotations = computed(() => this.annotationSource()?.() ?? []);
-  /** The annotation the note sheet edits: a tapped highlight, or a freshly created note. */
-  protected readonly noteTarget = signal<Annotation | null>(null);
-  /** The note created by the Note action in this open session; only it is removed if closed empty. */
-  protected readonly newNoteId = signal<string | null>(null);
-  /** The side note or summary the text editor sheet edits. */
-  protected readonly textTarget = signal<Annotation | null>(null);
-  protected readonly textIsDraft = signal(false);
-  /** The live bookmark on the current page, if any. */
-  protected readonly bookmark = computed(() => {
-    const page = this.state()?.page();
-    return this.annotations().find((a) => a.type === 'bookmark' && a.page === page);
-  });
   /** How many notes, highlights, areas and side notes are on the current page (bookmarks do not count). */
   protected readonly pageNoteCount = computed(() => {
     const page = this.state()?.page();
     return this.annotations().filter((a) => a.type !== 'bookmark' && a.page === page).length;
   });
-  /** The side note the panel just created in this open session; closed empty, it is removed. */
-  protected readonly newSideNoteId = signal<string | null>(null);
-  private bookmarkBusy = false;
-  private readonly addedBookmarks = new Map<number, string>();
-  private readonly removedBookmarks = new Set<string>();
   private readonly allAnnotations = this.annotationService.all();
   protected readonly tagSuggestions = computed(() => tagSuggestionsFrom(this.allAnnotations()));
-  /** A rectangle just drawn with the area tool, waiting for a color or a note. */
-  private readonly pendingArea = signal<PendingArea | null>(null);
-  protected readonly toolbarTarget = computed(() => this.pendingArea() ?? this.selection.pending());
   protected readonly session = signal<ReaderSession | null>(null);
   protected readonly state = signal<ReaderState | null>(null);
   protected readonly panel = signal<PanelTab | null>(null);
@@ -401,6 +379,13 @@ export class ReaderPage implements OnDestroy {
       for (const type of ['pointerdown', 'wheel', 'keydown', 'touchmove', 'scroll']) root.removeEventListener(type, activity, { capture: true });
       document.removeEventListener('selectionchange', activity);
     };
+    this.actions.attach({
+      state: this.state,
+      book: this.book,
+      session: this.session,
+      annotations: this.annotations,
+      pageBox: (page) => this.host.nativeElement.querySelector(`.text-layer[data-page="${page}"]`)?.getBoundingClientRect(),
+    });
     void this.load();
   }
 
@@ -533,182 +518,12 @@ export class ReaderPage implements OnDestroy {
     this.panel.set(which);
   }
 
-  /** A tap on a highlight opens its note sheet. */
-  protected onAnnotationTap(a: Annotation): void {
-    this.noteTarget.set(a);
-  }
-
-  protected async toggleBookmark(): Promise<void> {
-    const s = this.state();
-    const book = this.book();
-    if (!s || !book || this.bookmarkBusy) return;
-    const page = s.page();
-    const live = this.bookmark();
-    // The live query can lag a tap behind, so what this page itself just added or removed wins.
-    const existingId = live && !this.removedBookmarks.has(live.id) ? live.id : this.addedBookmarks.get(page);
-    this.bookmarkBusy = true;
-    try {
-      if (existingId) {
-        this.removedBookmarks.add(existingId);
-        this.addedBookmarks.delete(page);
-        const rec = await this.annotationService.remove(existingId);
-        if (rec) {
-          this.toast.show(COPY.annotations.deleted, {
-            undo: () => {
-              this.removedBookmarks.delete(rec.id);
-              this.addedBookmarks.set(page, rec.id);
-              void this.annotationService.restore(rec);
-            },
-          });
-        }
-      } else {
-        const created = await this.annotationService.create({ bookId: book.id, type: 'bookmark', page });
-        this.addedBookmarks.set(page, created.id);
-        this.toast.show(COPY.annotations.bookmarkAdded);
-      }
-    } catch (err) {
-      console.warn('Could not change the bookmark', err);
-      this.toast.show(COPY.annotations.saveFailed);
-    } finally {
-      this.bookmarkBusy = false;
-    }
-  }
-
-  /** Opens the summary editor on a scope: the stored summary, or an unsaved draft that is created on the first non-empty text. */
-  protected editSummary(scope: SummaryScope): void {
-    const book = this.book();
-    if (!book) return;
-    const existing = findSummary(this.annotations(), scope);
-    this.textIsDraft.set(!existing);
-    this.textTarget.set(
-      existing ?? { id: newId(), bookId: book.id, deviceId: '', updatedAt: 0, type: 'summary', scope, tags: [], createdAt: 0 },
-    );
-  }
-
-  protected editText(a: Annotation): void {
-    this.textIsDraft.set(false);
-    this.textTarget.set(a);
-  }
-
-  protected startSideNote(a: Annotation): void {
-    this.newSideNoteId.set(a.id);
-    this.editText(a);
-  }
-
-  /** Closing the text editor drops a side note made just now and left empty. */
-  protected closeText(empty: boolean): void {
-    const target = this.textTarget();
-    this.textTarget.set(null);
-    if (!target || target.id !== this.newSideNoteId()) return;
-    this.newSideNoteId.set(null);
-    if (empty) {
-      void this.annotationService.remove(target.id).catch((err) => console.warn('Could not drop the empty side note', err));
-    }
-  }
-
-  protected toggleArea(): void {
-    const s = this.state();
-    if (!s) return;
-    if (s.tool() === 'area') {
-      s.tool.set('none');
-      return;
-    }
-    this.selection.clear();
-    this.pendingArea.set(null);
-    s.tool.set('area');
-    this.toast.show(COPY.annotations.areaHint, { durationMs: AREA_HINT_MS });
-  }
-
-  /** A finished drag: the tool turns itself off and the toolbar offers a color or a note. */
-  protected onAreaDrawn(e: { page: number; rect: Rect }): void {
-    this.state()?.tool.set('none');
-    const box = this.host.nativeElement.querySelector(`.text-layer[data-page="${e.page}"]`)?.getBoundingClientRect();
-    const left = (box?.left ?? 0) + e.rect.x * (box?.width ?? 0);
-    const top = (box?.top ?? 0) + e.rect.y * (box?.height ?? 0);
-    const width = e.rect.w * (box?.width ?? 0);
-    const height = e.rect.h * (box?.height ?? 0);
-    const anchor = { left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) } as DOMRect;
-    this.pendingArea.set({ kind: 'area', page: e.page, rect: e.rect, anchor });
-  }
-
-  private async saveArea(area: PendingArea, color: HighlightColor, openNote: boolean): Promise<void> {
-    const book = this.book();
-    if (!book) return;
-    try {
-      const created = await this.annotationService.create({ bookId: book.id, type: 'area', page: area.page, rect: area.rect, color });
-      this.pendingArea.set(null);
-      if (openNote) {
-        this.noteTarget.set(created);
-      } else {
-        this.toast.show(COPY.annotations.highlightSaved, { undo: () => void this.annotationService.remove(created.id) });
-      }
-    } catch (err) {
-      console.warn('Could not save the area', err);
-      this.toast.show(COPY.annotations.saveFailed);
-    }
-  }
-
-  private async anchorOf(sel: PendingSelection) {
-    const session = this.session()!;
-    const [items, size] = await Promise.all([session.textItems(sel.page), session.pageSize(sel.page)]);
-    return { anchor: buildAnchor(items, sel.page, sel.start, sel.end, size), geometry: { items, size } };
-  }
-
-  protected async highlight(color: HighlightColor): Promise<void> {
-    const area = this.pendingArea();
-    if (area) return this.saveArea(area, color, false);
-    const sel = this.selection.pending();
-    const book = this.book();
-    if (!sel || !book || !this.session()) return;
-    try {
-      const { anchor, geometry } = await this.anchorOf(sel);
-      const result = await this.annotationService.addHighlight(book.id, anchor, color, geometry);
-      this.selection.clear();
-      this.toast.show(COPY.annotations.highlightSaved, {
-        undo: () => void this.annotationService.undoAddHighlight(result),
-      });
-    } catch (err) {
-      console.warn('Could not save the highlight', err);
-      this.toast.show(COPY.annotations.saveFailed);
-    }
-  }
-
-  protected async addNote(): Promise<void> {
-    const area = this.pendingArea();
-    if (area) return this.saveArea(area, 'yellow', true);
-    const sel = this.selection.pending();
-    const book = this.book();
-    if (!sel || !book || !this.session()) return;
-    try {
-      const { anchor } = await this.anchorOf(sel);
-      const note = await this.annotationService.create({ bookId: book.id, type: 'note', page: anchor.page, text: anchor });
-      this.selection.clear();
-      this.newNoteId.set(note.id);
-      this.noteTarget.set(note);
-    } catch (err) {
-      console.warn('Could not save the note', err);
-      this.toast.show(COPY.annotations.saveFailed);
-    }
-  }
-
-  protected async copySelection(): Promise<void> {
-    const sel = this.selection.pending();
-    if (!sel) return;
-    try {
-      await navigator.clipboard.writeText(sel.quote);
-      this.toast.show(COPY.annotations.copied);
-    } catch (err) {
-      console.warn('Could not copy the selection', err);
-      this.toast.show(COPY.annotations.copyFailed);
-    }
-  }
-
   @HostListener('document:keydown', ['$event'])
   protected onKey(e: KeyboardEvent): void {
     if (!this.state() || isReaderKeyIgnored(e)) return;
-    if (e.key === 'Escape' && (this.state()!.tool() !== 'none' || this.pendingArea())) {
+    if (e.key === 'Escape' && (this.state()!.tool() !== 'none' || this.actions.pendingArea())) {
       this.state()!.tool.set('none');
-      this.pendingArea.set(null);
+      this.actions.pendingArea.set(null);
       e.preventDefault();
       return;
     }
@@ -719,9 +534,9 @@ export class ReaderPage implements OnDestroy {
   /** Runs a shortcut; false when it does nothing here, so the key keeps its browser meaning. */
   private run(action: ShortcutAction): boolean {
     switch (action) {
-      case 'bookmark': void this.toggleBookmark(); return true;
+      case 'bookmark': void this.actions.toggleBookmark(); return true;
       case 'mark': void this.markPage(); return true;
-      case 'area': this.toggleArea(); return true;
+      case 'area': this.actions.toggleArea(); return true;
       case 'mode': this.toggleView(); return true;
       case 'search': this.openPanel('search'); return true;
       case 'contents': this.openPanel('contents'); return true;
@@ -740,9 +555,9 @@ export class ReaderPage implements OnDestroy {
     switch (action) {
       case 'contents': this.panel.set(this.panel() === null ? 'contents' : null); break;
       case 'search': this.openPanel('search'); break;
-      case 'bookmark': void this.toggleBookmark(); break;
+      case 'bookmark': void this.actions.toggleBookmark(); break;
       case 'mark': void this.markPage(); break;
-      case 'area': this.toggleArea(); break;
+      case 'area': this.actions.toggleArea(); break;
       case 'mode': this.toggleView(); break;
       case 'settings': this.settingsOpen.set(true); break;
       case 'fullscreen': this.toggleFullscreen(); break;
@@ -801,7 +616,7 @@ export class ReaderPage implements OnDestroy {
   /** A press anywhere but the toolbar abandons a drawn area (the toolbar stops its own presses). */
   @HostListener('document:pointerdown')
   protected onPointerDown(): void {
-    if (this.pendingArea()) this.pendingArea.set(null);
+    if (this.actions.pendingArea()) this.actions.pendingArea.set(null);
   }
 
   @HostListener('document:visibilitychange')

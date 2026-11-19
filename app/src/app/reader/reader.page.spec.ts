@@ -21,6 +21,7 @@ import { PagerComponent } from './pager.component';
 import { PageRenderer, PageSize, ReaderOpenError } from './pdf-session';
 import { PositionService, type RestoredPosition } from './position.service';
 import { PDF_OPENER, ReaderPage } from './reader.page';
+import { ReaderActions } from './reader-actions';
 import { ScrollerComponent } from './scroller.component';
 
 class FakeSession implements PageRenderer {
@@ -617,7 +618,7 @@ describe('ReaderPage', () => {
         source: 'page',
       });
       fakeSelection.clear.mockClear();
-      TestBed.overrideComponent(ReaderPage, { set: { providers: [{ provide: SelectionService, useValue: fakeSelection }] } });
+      TestBed.overrideComponent(ReaderPage, { set: { providers: [{ provide: SelectionService, useValue: fakeSelection }, ReaderActions] } });
     });
 
     const stored = () => db.annotations.toArray();
