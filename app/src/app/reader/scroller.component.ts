@@ -14,7 +14,7 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import type { Annotation } from '../core/models';
+import type { Annotation, Rect } from '../core/models';
 import type { Place } from './jump-history';
 import { PageViewComponent, type PageTheme } from './page-view.component';
 import type { PageRenderer } from './pdf-session';
@@ -40,6 +40,7 @@ const DEFAULT_RATIO = 1.414;
       [zoom]="zoom()"
       view="page"
       [lastCustomZoom]="lastCustomZoom()"
+      [suspended]="tool() !== 'none'"
       (zoomChange)="zoomChange.emit($event)"
       (scroll)="onScroll()"
       (pointerdown)="down($event)"
@@ -65,6 +66,8 @@ const DEFAULT_RATIO = 1.414;
                 [theme]="theme()"
                 [annotations]="onPage(box.index + 1)"
                 [flashId]="flashId()"
+                [areaTool]="tool() === 'area'"
+                (areaDrawn)="areaDrawn.emit($event)"
                 (annotationTap)="annotationTap.emit($event)"
                 (pageTap)="tap.emit()"
               />
@@ -91,6 +94,9 @@ export class ScrollerComponent implements OnDestroy {
   readonly annotations = input<Annotation[]>([]);
   readonly flashId = input<string | null>(null);
   readonly annotationTap = output<Annotation>();
+  /** The active drawing tool; anything but 'none' turns pinch and tap handling off. */
+  readonly tool = input<'none' | 'area'>('none');
+  readonly areaDrawn = output<{ page: number; rect: Rect }>();
   readonly tap = output<void>();
 
   private readonly byPage = computed(() => annotationsByPage(this.annotations()));
@@ -324,6 +330,10 @@ export class ScrollerComponent implements OnDestroy {
 
   protected down(e: PointerEvent): void {
     // A second finger (pinch) cancels the press so it cannot end as a tap.
+    if (this.tool() !== 'none') {
+      this.press = undefined;
+      return;
+    }
     this.press = this.press ? undefined : { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() };
   }
 

@@ -36,6 +36,7 @@ class FakeRenderer implements PageRenderer {
     (pageChange)="changes.push($event)"
     (zoomChange)="zooms.push($event)"
     (tap)="taps = taps + 1"
+    [tool]="tool()"
   />`,
 })
 class HostComponent {
@@ -43,6 +44,7 @@ class HostComponent {
   page = signal(5);
   zoom = signal(1);
   rtl = signal(false);
+  tool = signal<'none' | 'area'>('none');
   changes: number[] = [];
   zooms: number[] = [];
   taps = 0;
@@ -109,6 +111,19 @@ describe('PagerComponent', () => {
     await drag(120, 400);
     await settle();
     expect(host.changes).toEqual([4, 6]);
+  });
+
+  it('does not turn the page while the area tool is active', async () => {
+    host.tool.set('area');
+    fixture.detectChanges();
+    await drag(-120, 400);
+    await settle();
+    expect(host.changes).toEqual([]);
+    host.tool.set('none');
+    fixture.detectChanges();
+    await drag(-120, 400);
+    await settle();
+    expect(host.changes).toEqual([6]);
   });
 
   it('a short slow drag stays and the track returns to 0', async () => {

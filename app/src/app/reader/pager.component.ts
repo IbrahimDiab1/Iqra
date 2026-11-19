@@ -14,7 +14,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import type { Annotation } from '../core/models';
+import type { Annotation, Rect } from '../core/models';
 import { resolveSwipe } from './gestures';
 import { isReaderKeyIgnored } from './keys';
 import { PageViewComponent, type PageTheme } from './page-view.component';
@@ -58,6 +58,8 @@ interface Slot {
             [theme]="theme()"
             [annotations]="onPage(page())"
             [flashId]="flashId()"
+            [areaTool]="tool() === 'area'"
+            (areaDrawn)="areaDrawn.emit($event)"
             (annotationTap)="annotationTap.emit($event)"
             (pageTap)="tap.emit()"
           />
@@ -80,6 +82,8 @@ interface Slot {
                   [theme]="theme()"
                   [annotations]="onPage(slot.page)"
                   [flashId]="flashId()"
+                  [areaTool]="tool() === 'area'"
+                  (areaDrawn)="areaDrawn.emit($event)"
                   (annotationTap)="annotationTap.emit($event)"
                   (pageTap)="tap.emit()"
                 />
@@ -116,6 +120,9 @@ export class PagerComponent implements OnDestroy {
   readonly annotations = input<Annotation[]>([]);
   readonly flashId = input<string | null>(null);
   readonly annotationTap = output<Annotation>();
+  /** The active drawing tool; anything but 'none' turns the swipe off. */
+  readonly tool = input<'none' | 'area'>('none');
+  readonly areaDrawn = output<{ page: number; rect: Rect }>();
   readonly tap = output<void>();
 
   private readonly byPage = computed(() => annotationsByPage(this.annotations()));
@@ -211,6 +218,11 @@ export class PagerComponent implements OnDestroy {
       return;
     }
     this.primaryId = e.pointerId;
+    if (this.tool() !== 'none') {
+      this.start = undefined;
+      this.dragging = false;
+      return;
+    }
     // A drag that begins while text is selected, or a mouse drag that starts on text, selects; it never swipes.
     if (this.selection?.active() || (e.pointerType === 'mouse' && this.onText(e))) {
       this.start = undefined;

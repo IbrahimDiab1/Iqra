@@ -1,7 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { HIGHLIGHT_COLORS, type HighlightColor } from '../annotations/annotation.service';
+import type { Rect } from '../core/models';
 import { COPY } from '../ui/copy';
 import type { PendingSelection } from './selection.service';
+
+/** A drawn rectangle waiting for a color or a note. `anchor` is where it sits in the viewport, for placing the toolbar. */
+export interface PendingArea {
+  kind: 'area';
+  page: number;
+  rect: Rect;
+  anchor: DOMRect;
+}
 
 const WIDTH = 296;
 const HEIGHT = 48;
@@ -32,7 +41,9 @@ const MARGIN = 8;
           ></button>
         }
         <button type="button" class="note" (click)="note.emit()">{{ copy.note }}</button>
-        <button type="button" class="copy" (click)="copy_.emit()">{{ copy.copy }}</button>
+        @if (!isArea()) {
+          <button type="button" class="copy" (click)="copy_.emit()">{{ copy.copy }}</button>
+        }
       </div>
     }
   `,
@@ -50,7 +61,7 @@ const MARGIN = 8;
   `,
 })
 export class SelectionToolbarComponent {
-  readonly selection = input<PendingSelection | null>(null);
+  readonly selection = input<PendingSelection | PendingArea | null>(null);
   readonly color = output<HighlightColor>();
   readonly note = output<void>();
   /** Named `copy` for the parent's template; the property is `copy_` because `copy` is the copy-strings table. */
@@ -59,8 +70,10 @@ export class SelectionToolbarComponent {
   protected readonly copy = COPY.annotations;
   protected readonly colors = HIGHLIGHT_COLORS;
 
+  protected readonly isArea = computed(() => (this.selection() as PendingArea | null)?.kind === 'area');
   protected readonly pos = computed(() => {
-    const r = this.selection()?.rect;
+    const sel = this.selection();
+    const r = sel && 'anchor' in sel ? sel.anchor : (sel as PendingSelection | null)?.rect;
     if (!r) return { left: 0, top: 0 };
     const vw = typeof innerWidth === 'number' ? innerWidth : 1024;
     const vh = typeof innerHeight === 'number' ? innerHeight : 768;

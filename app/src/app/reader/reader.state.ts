@@ -21,6 +21,8 @@ export class ReaderState {
   readonly lastCustomZoom = signal(1);
   /** The annotation id whose rects pulse after a jump to it. */
   readonly flash = signal<string | null>(null);
+  /** The active drawing tool; while it is not 'none', swipe, scroll-drag and pinch gestures are off. */
+  readonly tool = signal<'none' | 'area'>('none');
 
   readonly place = computed<Place>(() => ({ page: this.page(), offset: this.offset() }));
 
@@ -95,6 +97,7 @@ export class ReaderState {
   /** Switches view, keeping the place and each view's own zoom. */
   setView(view: View): void {
     if (view === this.view()) return;
+    this.tool.set('none');
     const previous = this.zoom();
     this.zoom.set(this.inactiveZoom);
     this.inactiveZoom = previous;

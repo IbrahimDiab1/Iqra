@@ -64,6 +64,14 @@ describe('ReaderState', () => {
     expect(state.lastCustomZoom()).toBe(2);
   });
 
+  it('the area tool starts off and switching to reading mode turns it off', () => {
+    const { state } = setup();
+    expect(state.tool()).toBe('none');
+    state.tool.set('area');
+    state.setView('reflow');
+    expect(state.tool()).toBe('none');
+  });
+
   it('clamps zoom to the range of the view', () => {
     const { state } = setup();
     state.setZoom(9);

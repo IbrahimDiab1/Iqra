@@ -13,8 +13,9 @@ import {
   viewChild,
 } from '@angular/core';
 import { hitTest } from '../annotations/anchor';
-import type { Annotation } from '../core/models';
+import type { Annotation, Rect } from '../core/models';
 import { COPY } from '../ui/copy';
+import { AreaToolDirective } from './area-tool.directive';
 import { HighlightLayerComponent } from './highlight-layer.component';
 import { selectWordAt } from './selection.service';
 import type { PageRenderer } from './pdf-session';
@@ -32,16 +33,25 @@ const FILTERS: Record<PageTheme, string> = {
 
 @Component({
   selector: 'iqra-page-view',
-  imports: [HighlightLayerComponent],
+  imports: [HighlightLayerComponent, AreaToolDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="box" [class.shimmer]="!painted()" [style.width.px]="cssWidth()" [style.height.px]="cssHeight()">
+    <div
+      class="box"
+      iqraAreaTool
+      [enabled]="areaTool()"
+      [page]="page()"
+      (areaDrawn)="areaDrawn.emit($event)"
+      [class.shimmer]="!painted()"
+      [style.width.px]="cssWidth()"
+      [style.height.px]="cssHeight()"
+    >
       <canvas #canvas [style.filter]="filter()"></canvas>
       <iqra-highlight-layer [annotations]="annotations()" [flashId]="flashId()" />
       <div
         #textLayer
         class="text-layer"
-        [class.inert]="!interactive()"
+        [class.inert]="!interactive() || areaTool()"
         [attr.data-page]="page()"
         (click)="onClick($event)"
       ></div>
@@ -123,8 +133,11 @@ export class PageViewComponent implements OnDestroy {
   readonly annotations = input<Annotation[]>([]);
   readonly flashId = input<string | null>(null);
   readonly interactive = input(true);
+  /** The area tool is on: drags draw a rectangle and the text layer ignores the pointer. */
+  readonly areaTool = input(false);
   readonly rendered = output<number>();
   readonly annotationTap = output<Annotation>();
+  readonly areaDrawn = output<{ page: number; rect: Rect }>();
   readonly pageTap = output<void>();
 
   protected readonly copy = COPY.reader;

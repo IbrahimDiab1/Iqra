@@ -20,7 +20,7 @@ import { AnnotationService, type HighlightColor } from '../annotations/annotatio
 import { NoteSheetComponent } from '../annotations/note-sheet.component';
 import { tagSuggestionsFrom } from '../annotations/tag-input.component';
 import { DB } from '../core/db';
-import type { Annotation, Book } from '../core/models';
+import type { Annotation, Book, Rect } from '../core/models';
 import { SettingsService } from '../core/settings.service';
 import { DRIVE_ADAPTER } from '../sync/drive-adapter';
 import { COPY } from '../ui/copy';
@@ -38,7 +38,7 @@ import { ReadingSettingsSheetComponent } from './reading-settings.sheet';
 import { ReflowViewComponent } from './reflow-view.component';
 import { ScrollerComponent } from './scroller.component';
 import { SelectionService, type PendingSelection } from './selection.service';
-import { SelectionToolbarComponent } from './selection-toolbar.component';
+import { SelectionToolbarComponent, type PendingArea } from './selection-toolbar.component';
 import { ZoomGesturesDirective } from './zoom-gestures.directive';
 import { zoomIn, zoomOut } from './zoom';
 
@@ -52,6 +52,7 @@ export const PDF_OPENER = new InjectionToken<(src: PdfSource) => Promise<ReaderS
 type Status = 'loading' | 'ready' | { error: string };
 
 const SYNC_TOAST_MS = 8000;
+const AREA_HINT_MS = 4000;
 
 @Component({
   selector: 'iqra-reader-page',
@@ -105,6 +106,17 @@ const SYNC_TOAST_MS = 8000;
               (click)="s.setView(s.view() === 'page' ? 'reflow' : 'page')"
               [innerHTML]="ic(s.view() === 'page' ? 'reflow' : 'pageview')"
             ></button>
+            @if (s.view() === 'page') {
+              <button
+                type="button"
+                class="ib"
+                [attr.aria-label]="annCopy.area"
+                [attr.aria-pressed]="s.tool() === 'area'"
+                [class.on]="s.tool() === 'area'"
+                (click)="toggleArea()"
+                [innerHTML]="ic('areaSelect')"
+              ></button>
+            }
             <button type="button" class="ib" [attr.aria-label]="copy.search" (click)="openPanel('search')" [innerHTML]="ic('search')"></button>
             <button type="button" class="ib" [attr.aria-label]="copy.settings" (click)="settingsOpen.set(true)" [innerHTML]="ic('type')"></button>
           </header>
@@ -132,6 +144,8 @@ const SYNC_TOAST_MS = 8000;
                 [theme]="theme()"
                 [annotations]="annotations()"
                 [flashId]="s.flash()"
+                [tool]="s.tool()"
+                (areaDrawn)="onAreaDrawn($event)"
                 (placeChange)="s.placeChange($event)"
                 (zoomChange)="s.setZoom($event)"
                 (annotationTap)="onAnnotationTap($event)"
@@ -144,6 +158,7 @@ const SYNC_TOAST_MS = 8000;
                 view="page"
                 [zoom]="s.zoom()"
                 [lastCustomZoom]="s.lastCustomZoom()"
+                [suspended]="s.tool() !== 'none'"
                 (zoomChange)="s.setZoom($event)"
               >
                 <iqra-pager
@@ -154,6 +169,8 @@ const SYNC_TOAST_MS = 8000;
                   [theme]="theme()"
                   [annotations]="annotations()"
                   [flashId]="s.flash()"
+                  [tool]="s.tool()"
+                  (areaDrawn)="onAreaDrawn($event)"
                   (pageChange)="s.pageChange($event)"
                   (zoomChange)="s.setZoom($event)"
                   (annotationTap)="onAnnotationTap($event)"
@@ -164,7 +181,7 @@ const SYNC_TOAST_MS = 8000;
           </main>
 
           <iqra-selection-toolbar
-            [selection]="selection.pending()"
+            [selection]="toolbarTarget()"
             (color)="highlight($event)"
             (note)="addNote()"
             (copy)="copySelection()"
@@ -256,6 +273,7 @@ const SYNC_TOAST_MS = 8000;
     .ib { display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none; padding: 0; border: 0; border-radius: var(--radius-control); background: none; color: inherit; cursor: pointer; }
     .ib:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 8%, transparent); }
     .ib:disabled { opacity: 0.35; cursor: default; }
+    .ib.on { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
     .r-row { display: flex; align-items: center; gap: 6px; }
     .pg { flex: 1; min-width: 0; font-size: 13px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
     .pg span { color: color-mix(in srgb, var(--ink) 55%, transparent); }
@@ -272,6 +290,7 @@ const SYNC_TOAST_MS = 8000;
 })
 export class ReaderPage implements OnDestroy {
   protected readonly copy = COPY.reader;
+  protected readonly annCopy = COPY.annotations;
   protected readonly zoomIn = zoomIn;
   protected readonly zoomOut = zoomOut;
 
@@ -283,6 +302,7 @@ export class ReaderPage implements OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly open = inject(PDF_OPENER);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly annotationService = inject(AnnotationService);
   protected readonly selection = inject(SelectionService);
   private readonly scroller = viewChild(ScrollerComponent);
@@ -309,6 +329,9 @@ export class ReaderPage implements OnDestroy {
   protected readonly noteTarget = signal<Annotation | null>(null);
   private readonly allAnnotations = this.annotationService.all();
   protected readonly tagSuggestions = computed(() => tagSuggestionsFrom(this.allAnnotations()));
+  /** A rectangle just drawn with the area tool, waiting for a color or a note. */
+  private readonly pendingArea = signal<PendingArea | null>(null);
+  protected readonly toolbarTarget = computed(() => this.pendingArea() ?? this.selection.pending());
   protected readonly session = signal<ReaderSession | null>(null);
   protected readonly state = signal<ReaderState | null>(null);
   protected readonly preview = signal<number | null>(null);
@@ -456,6 +479,48 @@ export class ReaderPage implements OnDestroy {
     this.noteTarget.set(a);
   }
 
+  protected toggleArea(): void {
+    const s = this.state();
+    if (!s) return;
+    if (s.tool() === 'area') {
+      s.tool.set('none');
+      return;
+    }
+    this.selection.clear();
+    this.pendingArea.set(null);
+    s.tool.set('area');
+    this.toast.show(COPY.annotations.areaHint, { durationMs: AREA_HINT_MS });
+  }
+
+  /** A finished drag: the tool turns itself off and the toolbar offers a color or a note. */
+  protected onAreaDrawn(e: { page: number; rect: Rect }): void {
+    this.state()?.tool.set('none');
+    const box = this.host.nativeElement.querySelector(`.text-layer[data-page="${e.page}"]`)?.getBoundingClientRect();
+    const left = (box?.left ?? 0) + e.rect.x * (box?.width ?? 0);
+    const top = (box?.top ?? 0) + e.rect.y * (box?.height ?? 0);
+    const width = e.rect.w * (box?.width ?? 0);
+    const height = e.rect.h * (box?.height ?? 0);
+    const anchor = { left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) } as DOMRect;
+    this.pendingArea.set({ kind: 'area', page: e.page, rect: e.rect, anchor });
+  }
+
+  private async saveArea(area: PendingArea, color: HighlightColor, openNote: boolean): Promise<void> {
+    const book = this.book();
+    if (!book) return;
+    try {
+      const created = await this.annotationService.create({ bookId: book.id, type: 'area', page: area.page, rect: area.rect, color });
+      this.pendingArea.set(null);
+      if (openNote) {
+        this.noteTarget.set(created);
+      } else {
+        this.toast.show(COPY.annotations.highlightSaved, { undo: () => void this.annotationService.remove(created.id) });
+      }
+    } catch (err) {
+      console.warn('Could not save the area', err);
+      this.toast.show(COPY.annotations.saveFailed);
+    }
+  }
+
   private async anchorOf(sel: PendingSelection) {
     const session = this.session()!;
     const [items, size] = await Promise.all([session.textItems(sel.page), session.pageSize(sel.page)]);
@@ -463,6 +528,8 @@ export class ReaderPage implements OnDestroy {
   }
 
   protected async highlight(color: HighlightColor): Promise<void> {
+    const area = this.pendingArea();
+    if (area) return this.saveArea(area, color, false);
     const sel = this.selection.pending();
     const book = this.book();
     if (!sel || !book || !this.session()) return;
@@ -480,6 +547,8 @@ export class ReaderPage implements OnDestroy {
   }
 
   protected async addNote(): Promise<void> {
+    const area = this.pendingArea();
+    if (area) return this.saveArea(area, 'yellow', true);
     const sel = this.selection.pending();
     const book = this.book();
     if (!sel || !book || !this.session()) return;
@@ -518,6 +587,12 @@ export class ReaderPage implements OnDestroy {
   @HostListener('document:keydown', ['$event'])
   protected onKey(e: KeyboardEvent): void {
     if (!this.state() || isReaderKeyIgnored(e)) return;
+    if (e.key === 'Escape' && (this.state()!.tool() !== 'none' || this.pendingArea())) {
+      this.state()!.tool.set('none');
+      this.pendingArea.set(null);
+      e.preventDefault();
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'f') {
       this.openPanel('search');
       e.preventDefault();
@@ -531,6 +606,12 @@ export class ReaderPage implements OnDestroy {
       this.historyForward();
       e.preventDefault();
     }
+  }
+
+  /** A press anywhere but the toolbar abandons a drawn area (the toolbar stops its own presses). */
+  @HostListener('document:pointerdown')
+  protected onPointerDown(): void {
+    if (this.pendingArea()) this.pendingArea.set(null);
   }
 
   @HostListener('document:visibilitychange')

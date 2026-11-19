@@ -9,6 +9,7 @@ import { ZoomGesturesDirective } from './zoom-gestures.directive';
     [zoom]="zoom()"
     [view]="view()"
     [lastCustomZoom]="last()"
+    [suspended]="suspended()"
     (zoomChange)="zooms.push($event)"
   ><input /></div>`,
 })
@@ -16,6 +17,7 @@ class HostComponent {
   zoom = signal(1);
   view = signal<'page' | 'reflow'>('page');
   last = signal(1);
+  suspended = signal(false);
   zooms: number[] = [];
 }
 
@@ -51,6 +53,16 @@ describe('ZoomGesturesDirective', () => {
     box.dispatchEvent(ptr('pointermove', 2, 300));
     await frame();
     expect(host.zooms[host.zooms.length - 1]).toBe(2);
+  });
+
+  it('a pinch does nothing while a drawing tool is active', async () => {
+    host.suspended.set(true);
+    fixture.detectChanges();
+    box.dispatchEvent(ptr('pointerdown', 1, 100));
+    box.dispatchEvent(ptr('pointerdown', 2, 200));
+    box.dispatchEvent(ptr('pointermove', 2, 300));
+    await frame();
+    expect(host.zooms).toEqual([]);
   });
 
   it('ctrl+wheel up zooms in and prevents the browser zoom', () => {

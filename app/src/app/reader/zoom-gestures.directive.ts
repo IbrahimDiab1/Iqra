@@ -15,6 +15,8 @@ export class ZoomGesturesDirective implements OnDestroy {
   readonly zoom = input<number>(1);
   readonly view = input<View>('page');
   readonly lastCustomZoom = input<number>(1);
+  /** True while a drawing tool owns the pointer: no pinch and no double-tap zoom. */
+  readonly suspended = input(false);
   readonly zoomChange = output<number>();
 
   private readonly selection = inject(SelectionService, { optional: true });
@@ -55,7 +57,7 @@ export class ZoomGesturesDirective implements OnDestroy {
   @HostListener('pointerdown', ['$event'])
   protected down(e: PointerEvent): void {
     // While text is selected, touches belong to the selection (handles, taps): no pinch and no double-tap zoom.
-    if (this.selection?.active()) {
+    if (this.suspended() || this.selection?.active()) {
       this.press = undefined;
       this.lastTap = undefined;
       return;

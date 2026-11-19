@@ -346,6 +346,86 @@ describe('ReaderPage', () => {
     expect(label()).toContain(COPY.reader.pageOf(7, 50));
   });
 
+  describe('area tool', () => {
+    const area = () => el.querySelector<HTMLButtonElement>(`button[aria-label="${COPY.annotations.area}"]`);
+
+    it('the Area button toggles aria-pressed, shows a hint toast, and Escape turns it off', async () => {
+      await create();
+      expect(area()).not.toBeNull();
+      expect(area()!.getAttribute('aria-pressed')).toBe('false');
+      area()!.click();
+      fixture.detectChanges();
+      expect(area()!.getAttribute('aria-pressed')).toBe('true');
+      expect(TestBed.inject(ToastService).current()?.message).toBe(COPY.annotations.areaHint);
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      fixture.detectChanges();
+      expect(area()!.getAttribute('aria-pressed')).toBe('false');
+      area()!.click();
+      fixture.detectChanges();
+      area()!.click();
+      fixture.detectChanges();
+      expect(area()!.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('the button is absent in reading mode and switching to it turns the tool off', async () => {
+      await create();
+      area()!.click();
+      fixture.detectChanges();
+      el.querySelector<HTMLButtonElement>(`button[aria-label="${COPY.reader.readingMode}"]`)!.click();
+      fixture.detectChanges();
+      expect(area()).toBeNull();
+      el.querySelector<HTMLButtonElement>(`button[aria-label="${COPY.reader.pageView}"]`)!.click();
+      fixture.detectChanges();
+      expect(area()!.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    const draw = () => {
+      pager().areaDrawn.emit({ page: 7, rect: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 } });
+      fixture.detectChanges();
+    };
+    const stored = () => db.annotations.toArray();
+
+    it('a drawn area turns the tool off and offers colors; a color saves an area with Undo', async () => {
+      await create();
+      area()!.click();
+      fixture.detectChanges();
+      draw();
+      expect(area()!.getAttribute('aria-pressed')).toBe('false');
+      expect(el.querySelector('iqra-selection-toolbar [role="toolbar"]')).not.toBeNull();
+      expect(el.querySelector('iqra-selection-toolbar button.copy')).toBeNull();
+      el.querySelector<HTMLButtonElement>(`button[aria-label="${COPY.annotations.colors.blue}"]`)!.click();
+      await vi.waitFor(async () => expect(await stored()).toHaveLength(1));
+      expect((await stored())[0]).toMatchObject({ type: 'area', page: 7, color: 'blue', rect: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 } });
+      fixture.detectChanges();
+      expect(el.querySelector('iqra-selection-toolbar [role="toolbar"]')).toBeNull();
+      const toast = TestBed.inject(ToastService);
+      expect(toast.current()?.message).toBe(COPY.annotations.highlightSaved);
+      toast.undo();
+      await vi.waitFor(async () => expect((await stored()).filter((r) => !r.deleted)).toHaveLength(0));
+    });
+
+    it('Note on a drawn area saves a yellow area and opens the note sheet', async () => {
+      await create();
+      draw();
+      el.querySelector<HTMLButtonElement>('iqra-selection-toolbar button.note')!.click();
+      await vi.waitFor(async () => expect(await stored()).toHaveLength(1));
+      expect((await stored())[0]).toMatchObject({ type: 'area', color: 'yellow' });
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-note-sheet .panel.open')).not.toBeNull();
+      });
+    });
+
+    it('Escape dismisses a drawn area without saving', async () => {
+      await create();
+      draw();
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      fixture.detectChanges();
+      expect(el.querySelector('iqra-selection-toolbar [role="toolbar"]')).toBeNull();
+      expect(await stored()).toHaveLength(0);
+    });
+  });
+
   describe('highlighting a selection', () => {
     const fakeSelection = {
       pending: signal<PendingSelection | null>(null),
