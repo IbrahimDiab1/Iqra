@@ -59,8 +59,9 @@ describe('SettingsPage', () => {
       expect(el.querySelector('[data-section="account"] iqra-account-section')).not.toBeNull();
       expect(el.querySelector('[data-section="defaults"] iqra-defaults-section')).not.toBeNull();
       expect(el.querySelector('[data-section="storage"] iqra-storage-section')).not.toBeNull();
+      expect(el.querySelector('[data-section="data"] iqra-data-section')).not.toBeNull();
       expect(el.querySelector('[data-section="categories"] iqra-categories-section')).not.toBeNull();
     });
-    expect(Array.from(el.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(['Account', 'Categories', 'Reading defaults', 'Storage']);
+    expect(Array.from(el.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(['Account', 'Categories', 'Reading defaults', 'Storage', 'Your data']);
   });
 });
