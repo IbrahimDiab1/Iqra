@@ -160,7 +160,7 @@ describe('CategoriesSection', () => {
       expect((await db.books.get('b2'))!.categoryIds).toEqual([]);
       expect((await db.books.get('b3'))!.categoryIds).toEqual(['c1']);
     });
-    expect(names()).toEqual(['Fiqh', 'Tafsir']);
+    await settle(() => expect(names()).toEqual(['Fiqh', 'Tafsir']));
     expect(toast.current()?.undo).toBeTypeOf('function');
 
     toast.undo();
@@ -169,7 +169,7 @@ describe('CategoriesSection', () => {
       expect((await db.books.get('b1'))!.categoryIds).toEqual(['c1', 'c2']);
       expect((await db.books.get('b2'))!.categoryIds).toEqual(['c2']);
     });
-    expect(names()).toEqual(['Fiqh', 'History', 'Tafsir']);
+    await settle(() => expect(names()).toEqual(['Fiqh', 'History', 'Tafsir']));
   });
 
   it('delete leaves goals that point at the category untouched', async () => {
