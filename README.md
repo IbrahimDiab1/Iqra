@@ -2,7 +2,7 @@
 
 A personal PDF reader that runs in the browser and installs like an app on Android and Windows. Your books live in **your own Google Drive**, so there is no server to run and nothing to pay for. Your library, reading position, highlights and notes stay in sync across devices.
 
-> **Status: early development.** Plans 1 (foundation and library), 2 (the reader) and 3 (highlights, notes and the Notes hub) are built. Stats come in the next plans. See [Roadmap](#roadmap).
+> **Status: early development.** Plans 1 (foundation and library), 2 (the reader), 3 (highlights, notes and the Notes hub) and 4 (reading time, progress and stats) are built. See [Roadmap](#roadmap).
 
 ## What works today
 
@@ -19,6 +19,7 @@ A personal PDF reader that runs in the browser and installs like an app on Andro
 - Contents (the PDF's chapters) and search inside the book. Jumping to a chapter or search result keeps a Back and Forward history (Alt+arrows on the PC).
 - Books open where you left off, on every device. If another device read further, Iqra opens there and offers "Back to p. N" for the page you were on.
 - Highlights in four colors, notes, area highlights, side notes, summaries and bookmarks. They show in the book's Notes and Bookmarks tabs, and the Notes tab searches across all your books.
+- Reading time and pages read are tracked automatically. Chapter and book progress (by last page reached, or by pages you mark as read), a "Mark finished?" prompt at the end, per-book stats in the details sheet, and a Stats tab with weekly goals.
 
 ## Roadmap
 
@@ -26,8 +27,8 @@ A personal PDF reader that runs in the browser and installs like an app on Andro
 |---|---|
 | 1 (done) | Sign-in, Drive, sync, library, adding and removing books, book details |
 | 2 (done) | The reader: page view and reading mode, swipe and scroll, zoom, back/forward, opening at your last place, search in the book |
-| 3 | Highlights, notes, summaries, bookmarks, the Contents & notes panel, the Notes hub |
-| 4 | Reading time, progress and chapter progress, weekly goals, stats |
+| 3 (done) | Highlights, notes, summaries, bookmarks, the Contents & notes panel, the Notes hub |
+| 4 (done) | Reading time, progress and chapter progress, weekly goals, stats |
 | 5 | Settings, storage, managing downloads, export, reading reminders |
 | Later | Language notebook (translate to Arabic, flashcards), OCR, text-to-speech |
 

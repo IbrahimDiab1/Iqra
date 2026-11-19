@@ -62,3 +62,18 @@ Real-device checks for annotations that the automated tests cannot cover.
 - **Notes hub:** search in the Notes tab, including Arabic words. Tapping a result opens the book at that page and pulses the highlight.
 - **Sync:** highlight a passage on one device. It should show on the other device within about a minute.
 - **Scanned PDF:** a page with no text layer cannot be selected, but the area highlight and bookmarks still work.
+
+## 9. Progress and stats checks
+
+Real-device checks for reading time, progress and goals that the automated tests cannot cover (they would need real minutes and real devices).
+
+- **Idle pause:** read a page, then leave the book open and untouched for 2 minutes. The time read in the book's Stats tab must stop growing at about 2 minutes. Touching the screen resumes it.
+- **Background ends the session:** read for a minute, switch to another app or lock the phone, and come back. The earlier time is kept as one session and a new one starts when you read again.
+- **Killed app:** read for a minute, force-stop the browser, and reopen. The time read so far (to the last 30 second checkpoint) is still there.
+- **Sync:** time, pages and sessions read on one device appear in the Stats tab on the other device after a sync, and neither device loses the other's sessions.
+- **Saturday week start:** the week in Stats runs Saturday to Friday. The day-by-day chart starts on Saturday.
+- **Goals with a book in two categories:** put one book in two categories, set a pages goal for each, and read. The pages count toward both goals. A goal for all books counts every book once.
+- **Finish prompt:** in last-page mode, reach the last page. "Mark as finished?" appears once. The action sets the book to Finished with today as the finish date. In marked mode the prompt appears when the last unmarked page is marked, either with Mark read or with the check in Contents.
+- **Mark read:** in marked mode, the Mark read button toggles the current page, the library progress follows, and checking a chapter in Contents marks every page of it (unchecking clears them). Switching back to last-page mode keeps both sets of data.
+- **Very large PDF:** open a book of 600 or more pages with many chapters. Contents opens quickly and every chapter shows a progress bar.
+- **Clock and time zone change:** move the phone's clock back by an hour, or change its time zone, while reading. Time read never goes negative and the same page is not counted twice on one day.

@@ -6,7 +6,7 @@ import { FakeAuthService } from '../auth/fake-auth.service';
 import { CLOCK } from '../core/clock';
 import { DB, IqraDb } from '../core/db';
 import { DEVICE_ID } from '../core/ids';
-import type { Annotation, Book, Category, ID } from '../core/models';
+import type { Annotation, Book, Category, Goal, ID, ReadMark, ReadingSession } from '../core/models';
 import { Repo } from '../core/repo';
 import { UploadQueue } from '../books/upload-queue';
 import { DRIVE_ADAPTER, DriveAuthError } from './drive-adapter';
@@ -180,6 +180,48 @@ describe('SyncEngine', () => {
       expect((await live(device)).map((n) => n.id)).toEqual(['an-a']);
       expect((await device.db.annotations.get('an-b'))?.deleted).toBe(true);
     }
+  });
+
+  it('progress records converge: both devices keep both sessions, the newer goal and the newer read mark win', async () => {
+    a.clock.t = 1;
+    await a.repo.put<Book>('books', bookDraft('b1'));
+    await syncRounds(2);
+
+    // Two sessions written offline, one per device, never overwrite each other.
+    const session = (id: string, startedAt: number): Omit<ReadingSession, 'updatedAt' | 'deviceId'> => ({
+      id, bookId: 'b1', startedAt, endedAt: startedAt + 60_000, activeMs: 60_000, pagesRead: [1, 2],
+    });
+    a.clock.t = 10;
+    await a.repo.put<ReadingSession>('sessions', session('s-a', 5));
+    b.clock.t = 11;
+    await b.repo.put<ReadingSession>('sessions', session('s-b', 6));
+    await syncRounds(2);
+    for (const device of [a, b]) {
+      expect((await device.db.sessions.toArray()).map((s) => s.id).sort()).toEqual(['s-a', 's-b']);
+    }
+
+    // A goal edited on both converges to the newer edit.
+    a.clock.t = 20;
+    await a.repo.put<Goal>('goals', { id: 'g1', categoryId: null, measure: 'pages', target: 50 });
+    await syncRounds(2);
+    a.clock.t = 1000;
+    await a.repo.put<Goal>('goals', { ...(await a.db.goals.get('g1'))!, target: 60 });
+    b.clock.t = 2000;
+    await b.repo.put<Goal>('goals', { ...(await b.db.goals.get('g1'))!, target: 70 });
+    await syncRounds(2);
+    for (const device of [a, b]) expect((await device.db.goals.get('g1'))?.target).toBe(70);
+
+    // A read mark toggled on both converges by the newest updatedAt.
+    const mark = (read: boolean): Omit<ReadMark, 'updatedAt' | 'deviceId'> => ({ id: 'b1:4', bookId: 'b1', page: 4, read });
+    a.clock.t = 3000;
+    await a.repo.put<ReadMark>('readMarks', mark(true));
+    await syncRounds(2);
+    a.clock.t = 4000;
+    await a.repo.put<ReadMark>('readMarks', mark(false));
+    b.clock.t = 5000;
+    await b.repo.put<ReadMark>('readMarks', mark(true));
+    await syncRounds(2);
+    for (const device of [a, b]) expect((await device.db.readMarks.get('b1:4'))?.read).toBe(true);
   });
 
   it('pauses on a DriveAuthError during push, keeps dirty, and pushes after reconnecting', async () => {
