@@ -7,6 +7,7 @@ import {
   gridColumns,
   heatmapDays,
   intensityLevel,
+  neighbourDay,
   isCurrentPeriod,
   periodBounds,
   shiftPeriod,
@@ -339,5 +340,23 @@ describe('heatmapDays', () => {
     const [day] = heatmapDays(only, books, categories, range, 'pages');
     expect(day.value).toBe(0);
     expect(Number.isNaN(day.value)).toBe(false);
+  });
+});
+
+describe('neighbourDay', () => {
+  const nov = periodBounds('month', local(2026, 11, 10), 1);
+  it('steps a day forward and back', () => {
+    expect(neighbourDay('2026-11-10', 1, nov)).toBe('2026-11-11');
+    expect(neighbourDay('2026-11-10', -1, nov)).toBe('2026-11-09');
+  });
+  it('is null past the first or last day of the period', () => {
+    expect(neighbourDay('2026-11-01', -1, nov)).toBeNull();
+    expect(neighbourDay('2026-11-30', 1, nov)).toBeNull();
+    expect(neighbourDay('2026-11-30', -1, nov)).toBe('2026-11-29');
+  });
+  it('crosses a year edge only inside the period', () => {
+    const year = periodBounds('year', local(2026, 6, 1), 1);
+    expect(neighbourDay('2026-12-31', 1, year)).toBeNull();
+    expect(neighbourDay('2026-03-01', -1, year)).toBe('2026-02-28');
   });
 });

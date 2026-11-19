@@ -575,15 +575,8 @@ export class LibraryPage {
 
   protected readonly chips = computed<FilterChip[]>(() => {
     const s = this.effective();
-    const names = new Map(this.categories().map((c) => [c.id, c.name]));
     const chips: FilterChip[] = [];
-    for (const id of s.categoryIds) {
-      chips.push({
-        key: `category-${id}`,
-        label: id === UNCATEGORIZED ? COPY.categoryBar.uncategorized : (names.get(id) ?? ''),
-        remove: () => this.setState({ categoryIds: this.state().categoryIds.filter((x) => x !== id) }),
-      });
-    }
+    // Categories are not repeated here: the category bar above shows which are selected.
     for (const tag of s.tags) {
       chips.push({
         key: `tag-${tag}`,

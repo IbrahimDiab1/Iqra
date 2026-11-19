@@ -193,3 +193,10 @@ export function dayLabel(day: string, locale?: string): string {
   const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
   return `${part('weekday')} ${part('day')} ${part('month')}`;
 }
+
+/** The day `delta` days from `day` ('YYYY-MM-DD'), or null when that is outside the period. */
+export function neighbourDay(day: string, delta: number, bounds: PeriodBounds): string | null {
+  const [y, m, d] = day.split('-').map(Number);
+  const at = new Date(y, m - 1, d + delta).getTime();
+  return at >= bounds.from && at < bounds.to ? dayKey(at) : null;
+}

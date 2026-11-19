@@ -34,8 +34,8 @@
   --sel: rgba(30, 107, 100, .24);
 
   /* Heat map category hues, picked by category order modulo 8. Uncategorized uses --accent. */
-  --cat-1: #3A6FB0; --cat-2: #D1691F; --cat-3: #8A5BB5; --cat-4: #C2467F;
-  --cat-5: #B8890F; --cat-6: #4C9A3A; --cat-7: #2A9DB8; --cat-8: #8C6A4F;
+  --cat-1: #3A6FB0; --cat-2: #C25A10; --cat-3: #8A5BB5; --cat-4: #C2467F;
+  --cat-5: #A57B08; --cat-6: #3F8A2F; --cat-7: #1F8AA5; --cat-8: #8C6A4F;
 
   --paper-light: #FEFEFC;
   --ink-light: #1E1F1C;

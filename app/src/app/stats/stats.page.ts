@@ -24,6 +24,7 @@ import {
   heatmapDays,
   isCurrentPeriod,
   matchesFilter,
+  neighbourDay,
   periodBounds,
   shiftPeriod,
   type HeatFilter,
@@ -129,7 +130,11 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
             />
             @if (dayRows(); as rows) {
               <div class="day-detail" data-testid="day-detail">
-                <h3>{{ l.heat.readOn(selectedLabel()) }}</h3>
+                <div class="day-head">
+                  <button type="button" class="step" data-testid="day-prev" [attr.aria-label]="l.heat.prevDay" [disabled]="prevDay() === null" (click)="stepDay(-1)" [innerHTML]="prevIcon"></button>
+                  <h3>{{ l.heat.readOn(selectedLabel()) }}</h3>
+                  <button type="button" class="step" data-testid="day-next" [attr.aria-label]="l.heat.nextDay" [disabled]="nextDay() === null" (click)="stepDay(1)" [innerHTML]="nextIcon"></button>
+                </div>
                 @if (rows.length === 0) {
                   <p class="empty">{{ l.heat.noBooksThatDay }}</p>
                 }
@@ -178,7 +183,8 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
     .step:dir(rtl) svg { transform: scaleX(-1); }
     .today { flex: none; min-height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--accent); font: 600 13px var(--ui); cursor: pointer; }
     .day-detail { margin-top: 12px; }
-    .day-detail h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+    .day-head { display: flex; align-items: center; gap: 4px; }
+    .day-detail h3 { flex: 1; margin: 0; font-size: 14px; font-weight: 600; text-align: center; }
     .totals { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .tile { display: grid; gap: 2px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); }
     .k { font-size: 12px; color: var(--muted); }
@@ -389,6 +395,19 @@ export class StatsPage {
   /** Clicking the selected day again closes its list. */
   protected pickDay(day: string): void {
     this.selectedDay.set(this.selectedDay() === day ? null : day);
+  }
+
+  protected readonly prevDay = computed(() => this.neighbour(-1));
+  protected readonly nextDay = computed(() => this.neighbour(1));
+  private neighbour(delta: -1 | 1): string | null {
+    const day = this.selectedDay();
+    return day === null ? null : neighbourDay(day, delta, this.bounds());
+  }
+
+  /** Big previous/next buttons for touch, where the year's small blocks are hard to hit one by one. */
+  protected stepDay(delta: -1 | 1): void {
+    const next = this.neighbour(delta);
+    if (next !== null) this.selectedDay.set(next);
   }
 
   /** The books read on the selected day; null when no day is selected. */

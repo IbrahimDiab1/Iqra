@@ -77,6 +77,7 @@ interface CellView {
     :host { display: block; --cell: var(--accent); }
     .scroll { overflow-x: auto; padding: 3px; }
     .row { display: grid; justify-content: start; align-items: center; gap: ${GAP_PX}px; margin-bottom: ${GAP_PX}px; }
+    .wd { position: sticky; inset-inline-start: 0; z-index: 1; background: var(--bg); }
     .wd, .mlabel { color: var(--muted); font-size: 11px; line-height: 1; white-space: nowrap; }
     .mlabel { overflow: visible; padding-bottom: 4px; }
     .cellbox { min-width: 0; }
@@ -91,9 +92,9 @@ interface CellView {
       cursor: pointer;
     }
     .map.month .cell { border-radius: 8px; }
-    .cell[data-level='1'], .swatch[data-level='1'] { background: color-mix(in srgb, var(--cell) 30%, var(--surface-2)); }
-    .cell[data-level='2'], .swatch[data-level='2'] { background: color-mix(in srgb, var(--cell) 52%, var(--surface-2)); }
-    .cell[data-level='3'], .swatch[data-level='3'] { background: color-mix(in srgb, var(--cell) 76%, var(--surface-2)); }
+    .cell[data-level='1'], .swatch[data-level='1'] { background: color-mix(in srgb, var(--cell) 38%, var(--surface-2)); }
+    .cell[data-level='2'], .swatch[data-level='2'] { background: color-mix(in srgb, var(--cell) 60%, var(--surface-2)); }
+    .cell[data-level='3'], .swatch[data-level='3'] { background: color-mix(in srgb, var(--cell) 82%, var(--surface-2)); }
     .cell[data-level='4'], .swatch[data-level='4'] { background: var(--cell); }
     .cell:hover { outline: 1px solid var(--muted); }
     .cell.sel { outline: 2px solid var(--fg); outline-offset: 1px; }
@@ -175,6 +176,27 @@ export class HeatmapComponent {
   });
 
   constructor() {
+    // A day picked elsewhere (the page's previous/next-day buttons) is kept in view inside the scroll box.
+    effect(() => {
+      const day = this.selected();
+      if (!day) return;
+      afterNextRender(
+        () => {
+          const box = this.scroll().nativeElement;
+          const el = box.querySelector<HTMLElement>(`[data-day="${day}"]`);
+          if (!el) return;
+          const b = box.getBoundingClientRect();
+          const r = el.getBoundingClientRect();
+          // The sticky weekday column covers the start edge.
+          const rtl = getComputedStyle(box).direction === 'rtl';
+          const left = b.left + (rtl ? 8 : LABEL_COL_PX + 8);
+          const right = b.right - (rtl ? LABEL_COL_PX + 8 : 8);
+          if (r.left < left) box.scrollLeft -= left - r.left;
+          else if (r.right > right) box.scrollLeft += r.right - right;
+        },
+        { injector: this.injector },
+      );
+    });
     // Opens a current year at its latest weeks.
     effect(() => {
       this.period();

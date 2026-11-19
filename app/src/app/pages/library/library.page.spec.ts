@@ -160,20 +160,16 @@ describe('LibraryPage', () => {
     expect(barChip('all').getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('mirrors the selection in the active-filter chips, and removing one clears it', async () => {
+  it('does not repeat the selected categories as active-filter chips; the bar shows them', async () => {
     await seed([reading, loose, history], twoCats);
     await create();
     await waitFor(() => barChip('cat-2') !== null);
     barChip('cat-2').click();
-    await waitFor(() => el.querySelector('[aria-label="Remove filter History"]') !== null);
+    await waitFor(() => barChip('cat-2').getAttribute('aria-pressed') === 'true');
     barChip('uncategorized').dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
-    await waitFor(() => el.querySelector(`[aria-label="Remove filter ${COPY.categoryBar.uncategorized}"]`) !== null);
+    await waitFor(() => barChip('uncategorized').getAttribute('aria-pressed') === 'true');
     expect(JSON.parse(localStorage.getItem('iqra.library')!).categoryIds).toEqual(['cat-2', '__uncategorized__']);
-
-    el.querySelector<HTMLButtonElement>('[aria-label="Remove filter History"]')!.click();
-    await waitFor(() => el.querySelector('[aria-label="Remove filter History"]') === null);
-    expect(barChip('cat-2').getAttribute('aria-pressed')).toBe('false');
-    expect(barChip('uncategorized').getAttribute('aria-pressed')).toBe('true');
+    expect(el.querySelector('[aria-label^="Remove filter"]')).toBeNull();
   });
 
   it('does not count categories in the Filter button badge', async () => {

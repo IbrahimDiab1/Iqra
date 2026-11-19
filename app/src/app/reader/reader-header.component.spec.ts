@@ -85,6 +85,13 @@ describe('ReaderHeaderComponent', () => {
     expect(host.backs).toBe(1);
   });
 
+  it('the page indicator button name contains its visible text (label in name)', () => {
+    create();
+    const pg = el.querySelector<HTMLButtonElement>('.pg')!;
+    expect(pg.getAttribute('aria-label')).toBe('Go to page, p. 12 / 300');
+    expect(pg.getAttribute('aria-label')).toContain(pg.textContent!.trim());
+  });
+
   it('the indicator opens Go to page with the current page selected; Enter jumps, clamped; Escape closes', () => {
     create();
     el.querySelector<HTMLButtonElement>('.pg')!.click();

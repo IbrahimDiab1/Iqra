@@ -425,6 +425,24 @@ describe('StatsPage', () => {
       await settle(() => expect(el.querySelector('[data-testid="day-detail"]')).toBeNull());
     });
 
+    it('steps the selected day with large previous/next buttons, stopping at the period edges', async () => {
+      await db.sessions.put(session('s1', at(11, 3), range(2)));
+      await create();
+      period('month').click();
+      await settle(() => expect(cells()).toHaveLength(30));
+      cell('2026-11-01').click();
+      await settle(() => expect(el.querySelector('[data-testid="day-detail"]')).not.toBeNull());
+      const prev = () => el.querySelector<HTMLButtonElement>('[data-testid="day-prev"]')!;
+      const next = () => el.querySelector<HTMLButtonElement>('[data-testid="day-next"]')!;
+      expect(prev().disabled).toBe(true);
+      next().click();
+      await settle(() => expect(cell('2026-11-02').getAttribute('aria-pressed')).toBe('true'));
+      expect(el.querySelector('[data-testid="day-detail"] h3')!.textContent).toContain('Mon 2 Nov');
+      expect(prev().disabled).toBe(false);
+      prev().click();
+      await settle(() => expect(cell('2026-11-01').getAttribute('aria-pressed')).toBe('true'));
+    });
+
     it('changing period clears the selected day', async () => {
       await db.sessions.put(session('s1', at(11, 3), range(2)));
       await create();

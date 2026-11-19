@@ -46,7 +46,7 @@ import { CHROME_COPY } from './chrome-copy';
         <span class="of" dir="ltr">/ {{ numPages() }}</span>
       </form>
     } @else {
-      <button type="button" class="pg" dir="ltr" [attr.aria-label]="chrome.goToPage" data-shortcut="G" (click)="gotoOpen.set(true)">
+      <button type="button" class="pg" dir="ltr" [attr.aria-label]="chrome.goToPage + ', ' + chrome.pageIndicator(page(), numPages())" data-shortcut="G" (click)="gotoOpen.set(true)">
         {{ chrome.pageIndicator(page(), numPages()) }}
       </button>
     }
@@ -60,7 +60,7 @@ import { CHROME_COPY } from './chrome-copy';
     }
     .titles { flex: 1; min-width: 0; padding: 0 6px; }
     .t1 { font-size: 14px; font-weight: 600; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .t2 { font-size: 12px; line-height: 1.25; color: color-mix(in srgb, var(--ink) 62%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .t2 { font-size: 12px; line-height: 1.25; color: color-mix(in srgb, var(--ink) 74%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .sep { opacity: 0.7; }
     .chip { flex: none; max-width: 46%; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-size: 12px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     /* On a narrow header the chip takes the title's place while the area tool is on, so neither is squeezed to a stub. */
@@ -76,7 +76,7 @@ import { CHROME_COPY } from './chrome-copy';
     .pg:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
     .goto { display: flex; align-items: center; gap: 6px; flex: none; padding: 0 6px; font-size: 13px; }
     .goto input { box-sizing: border-box; width: 72px; min-height: 36px; padding: 0 8px; border: 1px solid color-mix(in srgb, var(--ink) 28%, transparent); border-radius: 10px; background: var(--paper); color: inherit; font: 16px var(--ui); font-variant-numeric: tabular-nums; }
-    .of { color: color-mix(in srgb, var(--ink) 62%, transparent); font-variant-numeric: tabular-nums; }
+    .of { color: color-mix(in srgb, var(--ink) 74%, transparent); font-variant-numeric: tabular-nums; }
   `,
 })
 export class ReaderHeaderComponent {

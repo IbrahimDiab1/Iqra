@@ -44,6 +44,8 @@ export const STATS_COPY = {
     pages: (n: number) => (n === 1 ? '1 page' : `${n} pages`),
     uncategorized: 'Uncategorized',
     readOn: (label: string) => `Read on ${label}`,
+    prevDay: 'Previous day',
+    nextDay: 'Next day',
     bookRow: (pages: number, time: string) => `${pages === 1 ? '1 page' : `${pages} pages`} · ${time}`,
     noBooksThatDay: 'No reading that day.',
   },
