@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Annotation, Book } from '../core/models';
-import { searchNotes, type NotesFilter } from './notes-search';
+import { booksInScope, searchNotes, type NotesFilter } from './notes-search';
 
 const NONE: NotesFilter = { query: '', types: [], tags: [] };
 
@@ -59,3 +59,30 @@ describe('searchNotes', () => {
     expect(items).toEqual([arabic]);
   });
 });
+
+describe('searchNotes bookmarks', () => {
+  it('lists bookmarks only when asked', () => {
+    const b = ann({ bookId: 'b1', type: 'bookmark', page: 4 });
+    const books = [book('b1', 'One')];
+    expect(searchNotes([b], books, NONE)).toEqual([]);
+    expect(searchNotes([b], books, { ...NONE, includeBookmarks: true })[0].items).toEqual([b]);
+  });
+});
+
+describe('booksInScope', () => {
+  const bs = [
+    { id: 'b1', categoryIds: ['c1'] },
+    { id: 'b2', categoryIds: ['c2'] },
+    { id: 'b3', categoryIds: [] },
+    { id: 'b4', categoryIds: ['gone'] },
+  ] as Book[];
+  const ids = (x: Book[]) => x.map((b) => b.id);
+  it('limits by book, by category (OR), by uncategorized, and combines with AND', () => {
+    expect(ids(booksInScope(bs, [], [], ['c1', 'c2'], 'U'))).toEqual(['b1', 'b2', 'b3', 'b4']);
+    expect(ids(booksInScope(bs, ['b1', 'b3'], [], ['c1', 'c2'], 'U'))).toEqual(['b1', 'b3']);
+    expect(ids(booksInScope(bs, [], ['c1', 'c2'], ['c1', 'c2'], 'U'))).toEqual(['b1', 'b2']);
+    expect(ids(booksInScope(bs, [], ['U'], ['c1', 'c2'], 'U'))).toEqual(['b3', 'b4']);
+    expect(ids(booksInScope(bs, ['b1', 'b2'], ['c2'], ['c1', 'c2'], 'U'))).toEqual(['b2']);
+  });
+});
+

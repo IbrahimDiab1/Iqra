@@ -1,7 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BookDetailsService } from '../books/details/book-details.service';
 import { CLOCK } from '../core/clock';
 import { DB, IqraDb } from '../core/db';
 import { newId } from '../core/ids';
@@ -168,20 +167,6 @@ describe('StatsPage', () => {
     expect(el.querySelectorAll('.week-chart text.lbl')).toHaveLength(7);
   });
 
-  it('lists books in progress and opens the details sheet on the Stats tab', async () => {
-    await db.books.put(makeBook('b3', { status: 'finished' }));
-    await db.books.put(makeBook('b1', { categoryIds: ['c1'], lastPageReached: 50 }));
-    await db.sessions.put(session('s1', at(11, 16), range(3), 3_900_000));
-    await create();
-    const rows = el.querySelectorAll<HTMLButtonElement>('.progress-row');
-    expect(rows).toHaveLength(1);
-    expect(rows[0].textContent!.replace(/\s+/g, ' ')).toContain('p. 50 of 200 · 25% · 1 h 05 min');
-    rows[0].click();
-    const details = TestBed.inject(BookDetailsService);
-    await vi.waitFor(() => expect(details.openBook()?.id).toBe('b1'));
-    expect(details.openTab()).toBe('stats');
-  });
-
   it('moves to the next week when the app comes back after the rollover', async () => {
     await create();
     expect(text()).toContain('This week · Nov 14 – 20');
@@ -208,11 +193,64 @@ describe('StatsPage', () => {
     }
   });
 
-  it('shows marked-mode progress as pages read, not a page number', async () => {
-    await db.books.put(makeBook('b1', { progressMode: 'marked', pageCount: 100 }));
-    for (const p of range(10)) await db.readMarks.put({ id: `b1:${p}`, deviceId: 'dev', updatedAt: 1, bookId: 'b1', page: p, read: true });
-    await create();
-    expect(el.querySelector('.progress-row')!.textContent!.replace(/\s+/g, ' ')).toContain('10 of 100 pages read · 10%');
+  describe('overview and all time', () => {
+    const tile = (sel: string) => el.querySelector<HTMLElement>(sel)!.textContent!.replace(/\s+/g, ' ');
+
+    it('no longer lists books in progress', async () => {
+      await create();
+      expect(el.querySelector('.progress-row')).toBeNull();
+      expect(text()).not.toContain('Books in progress');
+    });
+
+    it('shows today vs the daily goal (a seventh of the weekly goal), and both streaks', async () => {
+      await db.goals.put(goal('g1', { measure: 'pages', target: 21 }));
+      await db.goals.put(goal('g2', { measure: 'time', target: 140 }));
+      await db.sessions.bulkPut([
+        session('s0', at(11, 17), range(2)),
+        session('s1', at(11, 18), range(2)),
+        session('s2', at(11, 19, 9), range(2), 600_000),
+        session('s3', at(11, 1), range(2)),
+        session('s4', at(11, 2), range(2)),
+        session('s5', at(11, 3), range(2)),
+        session('s6', at(11, 4), range(2)),
+        session('s7', at(11, 5), range(2)),
+      ]);
+      await create();
+      expect(tile('[data-today="pages"]')).toContain('2');
+      expect(tile('[data-today="pages"]')).toContain('of 3 daily goal');
+      expect(tile('[data-today="time"]')).toContain('10 min');
+      expect(tile('[data-today="time"]')).toContain('of 20 min daily goal');
+      expect(el.querySelector('[data-today="pages"] [role=progressbar]')!.getAttribute('aria-valuenow')).toBe('67');
+      expect(tile('[data-streak="current"]')).toContain('3 days');
+      expect(tile('[data-streak="longest"]')).toContain('5 days');
+      expect(text()).toContain(STATS_COPY.overview.streakNote);
+    });
+
+    it('says there is no daily goal and draws no bar without a goal', async () => {
+      await create();
+      expect(tile('[data-today="pages"]')).toContain(STATS_COPY.overview.noGoal);
+      expect(el.querySelector('[data-today] [role=progressbar]')).toBeNull();
+      expect(tile('[data-streak="current"]')).toContain('0 days');
+    });
+
+    it('all time sums time, pages and finished / started books, and follows the book filter while streaks stay global', async () => {
+      await db.books.bulkPut([makeBook('b1', { status: 'finished', categoryIds: ['c1'] }), makeBook('b2', { title: 'Other', status: 'reading' }), makeBook('b3', { status: 'to-read' })]);
+      await db.sessions.bulkPut([session('s1', at(1, 5), range(4), 3_600_000, 'b1'), session('s2', at(11, 18), range(3), 1_800_000, 'b2')]);
+      await create();
+      expect(tile('[data-all="time"]')).toContain('1 h 30 min');
+      expect(tile('[data-all="pages"]')).toContain('7');
+      expect(tile('[data-all="books"]')).toContain('1 / 2');
+
+      el.querySelector<HTMLButtonElement>('[data-testid="book-picker"]')!.click();
+      fixture.detectChanges();
+      [...el.querySelectorAll<HTMLButtonElement>('[data-testid="book-option"]')].find((o) => o.textContent!.includes('Other'))!.click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(tile('[data-all="pages"]')).toContain('3');
+      });
+      expect(tile('[data-all="time"]')).toContain('30 min');
+      expect(tile('[data-streak="current"]')).toContain('1 day');
+    });
   });
 
   describe('periods, heat map and filters', () => {
@@ -373,8 +411,6 @@ describe('StatsPage', () => {
       option.click();
       await settle(() => expect(el.querySelector('[data-total="pages"] .v')!.textContent).toBe('3'));
       expect(el.querySelector('[data-testid="book-picker"]')!.textContent).toContain('كتاب حر');
-      // Books in progress follow the filter too.
-      expect([...el.querySelectorAll('.progress-row .bt')].map((b) => b.textContent)).toEqual(['كتاب حر']);
 
       el.querySelector<HTMLButtonElement>('[data-testid="book-clear"]')!.click();
       await settle(() => expect(el.querySelector('[data-total="pages"] .v')!.textContent).toBe('13'));

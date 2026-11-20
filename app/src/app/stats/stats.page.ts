@@ -4,13 +4,12 @@ import { UNCATEGORIZED } from '../books/library/library-query';
 import { BookDetailsService } from '../books/details/book-details.service';
 import { CLOCK } from '../core/clock';
 import { DB } from '../core/db';
-import type { Book, Goal, ID } from '../core/models';
+import type { Goal, ID } from '../core/models';
 import { Repo } from '../core/repo';
 import { SettingsService } from '../core/settings.service';
-import { bookProgress } from '../progress/book-progress';
 import { COPY } from '../ui/copy';
 import { icon } from '../ui/icons';
-import { booksOnDay, dayStats, goalProgress, perBook } from './aggregate';
+import { booksOnDay, dayStats, goalProgress } from './aggregate';
 import { ChartComponent, type ChartBar } from './chart.component';
 import { StatsFiltersComponent } from './filters.component';
 import { formatDuration, formatMinutes } from './format';
@@ -31,7 +30,8 @@ import {
   type Period,
 } from './heatmap';
 import { STATS_COPY } from './stats-copy';
-import { formatRange, weekRange } from './week';
+import { allTime, streaks } from './streaks';
+import { dayKey, formatRange, weekRange } from './week';
 
 type Measure = 'pages' | 'time';
 const L = STATS_COPY;
@@ -49,6 +49,40 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
     <section class="page" [attr.data-ready]="ready() ? '' : null">
       <h1>{{ title }}</h1>
       @if (ready()) {
+        <iqra-stats-filters
+          [categories]="categories()"
+          [books]="books()"
+          [categoryId]="categoryFilter()"
+          [bookId]="bookFilter()"
+          (categoryChange)="categoryFilter.set($event)"
+          (bookChange)="bookFilter.set($event)"
+        />
+
+        <h2>{{ l.overview.title }}</h2>
+        <div class="overview" data-testid="overview">
+          @for (t of todayTiles(); track t.key) {
+            <div class="tile" [attr.data-today]="t.key">
+              <span class="k">{{ t.label }}</span>
+              <span class="v">{{ t.value }}</span>
+              <span class="d">{{ t.sub }}</span>
+              @if (t.pct !== null) {
+                <span class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="t.pct" [attr.aria-label]="t.label + ', ' + t.sub">
+                  <span class="fill" [style.width.%]="t.pct"></span>
+                </span>
+              }
+            </div>
+          }
+          <div class="tile" data-streak="current">
+            <span class="k">{{ l.overview.current }}</span>
+            <span class="v">{{ l.overview.days(streak().current) }}</span>
+          </div>
+          <div class="tile" data-streak="longest">
+            <span class="k">{{ l.overview.longest }}</span>
+            <span class="v">{{ l.overview.days(streak().longest) }}</span>
+          </div>
+        </div>
+        <p class="note">{{ l.overview.streakNote }}</p>
+
         <div class="seg periods" role="group" [attr.aria-label]="l.period.label">
           @for (p of periods; track p) {
             <button type="button" [attr.data-period]="p" [attr.aria-pressed]="period() === p" (click)="setPeriod(p)">{{ l.period[p] }}</button>
@@ -63,14 +97,6 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
           }
         </div>
 
-        <iqra-stats-filters
-          [categories]="categories()"
-          [books]="books()"
-          [categoryId]="categoryFilter()"
-          [bookId]="bookFilter()"
-          (categoryChange)="categoryFilter.set($event)"
-          (bookChange)="bookFilter.set($event)"
-        />
 
         <div class="totals">
           <div class="tile" data-total="pages">
@@ -153,20 +179,12 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
           }
         }
 
-        <h2>{{ l.inProgress }}</h2>
-        @if (inProgress().length === 0) {
-          <p class="empty">{{ l.noneInProgress }}</p>
-        }
-        <ul class="plist">
-          @for (r of inProgress(); track r.book.id) {
-            <li>
-              <button type="button" class="progress-row" (click)="details.open(r.book.id, 'stats')">
-                <span class="bt" dir="auto">{{ r.book.title }}</span>
-                <span class="bs">{{ r.text }}</span>
-              </button>
-            </li>
-          }
-        </ul>
+        <h2>{{ l.allTime.title }}</h2>
+        <div class="overview" data-testid="all-time">
+          <div class="tile" data-all="time"><span class="k">{{ l.allTime.time }}</span><span class="v">{{ allTimeTime() }}</span></div>
+          <div class="tile" data-all="books"><span class="k">{{ l.allTime.books }}</span><span class="v">{{ allTimeBooks() }}</span></div>
+          <div class="tile" data-all="pages"><span class="k">{{ l.allTime.pages }}</span><span class="v">{{ all().pages }}</span></div>
+        </div>
       }
       <iqra-goal-editor-sheet [open]="editorOpen()" [goal]="editing()" [categories]="categories()" (closed)="editorOpen.set(false)" />
     </section>
@@ -185,6 +203,9 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
     .day-detail { margin-top: 12px; }
     .day-head { display: flex; align-items: center; gap: 4px; }
     .day-detail h3 { flex: 1; margin: 0; font-size: 14px; font-weight: 600; text-align: center; }
+    .overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+    .note { margin: 6px 2px 0; color: var(--muted); font-size: 12px; }
+    .tile .bar { margin-top: 6px; }
     .totals { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .tile { display: grid; gap: 2px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); }
     .k { font-size: 12px; color: var(--muted); }
@@ -228,11 +249,6 @@ export class StatsPage {
   private readonly sessionsRec = this.repo.live(() => this.db.sessions.filter((s) => !s.deleted).toArray());
   private readonly booksRec = this.repo.live(() => this.db.books.filter((b) => !b.deleted).toArray());
   private readonly categoriesRec = this.repo.live(() => this.db.categories.filter((c) => !c.deleted).sortBy('order'));
-  private readonly markedRec = this.repo.live(async () => {
-    const counts = new Map<ID, number>();
-    await this.db.readMarks.filter((m) => !m.deleted && m.read).each((m) => counts.set(m.bookId, (counts.get(m.bookId) ?? 0) + 1));
-    return counts;
-  });
 
   constructor() {
     const refresh = () => this.now.set(this.clock.now());
@@ -251,7 +267,7 @@ export class StatsPage {
   protected readonly books = computed(() => this.booksRec() ?? []);
 
   protected readonly ready = computed(
-    () => this.sessionsRec() !== undefined && this.booksRec() !== undefined && this.categoriesRec() !== undefined && this.goalService.goals()() !== undefined && this.markedRec() !== undefined,
+    () => this.sessionsRec() !== undefined && this.booksRec() !== undefined && this.categoriesRec() !== undefined && this.goalService.goals()() !== undefined,
   );
 
   /** Refreshed every minute and when the app comes back to the front, so a screen left open follows midnight and the week rollover. */
@@ -422,20 +438,35 @@ export class StatsPage {
     }));
   });
 
-  protected readonly inProgress = computed(() => {
-    const per = perBook(this.sessions());
-    const marked = this.markedRec() ?? new Map<ID, number>();
-    const filter = this.filter();
-    const categories = this.categories();
-    return (this.booksRec() ?? [])
-      .filter((b) => b.status === 'reading' && matchesFilter(b, categories, filter))
-      .sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0))
-      .map((book: Book) => {
-        const markedCount = marked.get(book.id) ?? 0;
-        const pct = Math.round(bookProgress(book, markedCount) * 100);
-        const time = formatDuration(per.get(book.id)?.ms ?? 0);
-        const text = book.progressMode === 'marked' ? L.progressRowMarked(markedCount, book.pageCount, pct, time) : L.progressRow(book.lastPageReached, book.pageCount, pct, time);
-        return { book, text };
-      });
+  // ---- overview and all time ----
+  private readonly today = computed(() => {
+    const d = new Date(this.now());
+    return { from: new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(), to: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() };
   });
+  private readonly todayTotal = computed(() => StatsPage.sum(dayStats(this.sessions(), this.today())));
+  /** A daily target is a seventh of the weekly goal over all books; none when there is no such goal. */
+  private dailyTarget(measure: Goal['measure']): number | null {
+    const g = (this.goalService.goals()() ?? []).find((x) => x.measure === measure && x.categoryId === null && x.target > 0);
+    return g ? Math.max(1, Math.ceil(g.target / 7)) : null;
+  }
+  protected readonly todayTiles = computed(() => {
+    const t = this.todayTotal();
+    const minutes = Math.floor(t.ms / 60_000);
+    const timeGoal = this.dailyTarget('time');
+    const pagesGoal = this.dailyTarget('pages');
+    const pct = (v: number, goal: number | null) => (goal === null ? null : Math.min(100, Math.round((v / goal) * 100)));
+    return [
+      { key: 'time', label: L.overview.todayTime, value: formatDuration(t.ms), sub: timeGoal === null ? L.overview.noGoal : L.overview.ofGoal(formatMinutes(timeGoal)), pct: pct(minutes, timeGoal) },
+      { key: 'pages', label: L.overview.todayPages, value: String(t.pages), sub: pagesGoal === null ? L.overview.noGoal : L.overview.ofGoal(String(pagesGoal)), pct: pct(t.pages, pagesGoal) },
+    ];
+  });
+  /** Streaks are global: they ignore the filters and the period. */
+  protected readonly streak = computed(() => streaks(this.sessionsRec() ?? [], this.now()));
+  protected readonly all = computed(() => {
+    const categories = this.categories();
+    const filter = this.filter();
+    return allTime(this.sessions(), this.books().filter((b) => matchesFilter(b, categories, filter)));
+  });
+  protected readonly allTimeTime = computed(() => formatDuration(this.all().ms));
+  protected readonly allTimeBooks = computed(() => L.allTime.booksValue(this.all().finished, this.all().started));
 }
