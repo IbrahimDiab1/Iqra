@@ -52,6 +52,7 @@ export class App {
     { path: '/library', label: COPY.nav.library, icon: 'library' },
     { path: '/notes', label: COPY.nav.notes, icon: 'notes' },
     { path: '/stats', label: COPY.nav.stats, icon: 'stats' },
+    { path: '/profile', label: COPY.nav.profile, icon: 'user' },
   ];
 
   private readonly url = toSignal(

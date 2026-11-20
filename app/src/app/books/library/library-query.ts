@@ -30,7 +30,7 @@ export interface LibraryCtx {
 }
 
 export const DEFAULT_LIBRARY_STATE: LibraryState = {
-  tab: 'reading',
+  tab: 'all',
   categoryIds: [],
   tags: [],
   minRating: null,
@@ -43,7 +43,7 @@ export const DEFAULT_LIBRARY_STATE: LibraryState = {
 export function statusLine(b: Book, progress: number): string {
   if (b.status === 'finished') return COPY.library.finished;
   if (b.status === 'to-read' && b.lastPageReached === 0) return `${COPY.library.notStarted} · ${b.pageCount} pages`;
-  return `p. ${b.lastPageReached} of ${b.pageCount} · ${Math.round(progress * 100)}%`;
+  return `p. ${Math.round(progress * b.pageCount)}/${b.pageCount} · ${Math.round(progress * 100)}%`;
 }
 
 export function tabCounts(books: Book[]): Record<LibraryTab, number> {
@@ -90,16 +90,12 @@ export function queryLibrary(
   }
 }
 
-/** The most recently opened in-progress book that passes the filters. Ignores the tab and the sort direction. */
-export function continueBook(books: Book[], s: LibraryState, ctx: LibraryCtx): Book | null {
-  const candidates = books.filter(
-    b =>
-      (b.status === 'reading' || b.status === 'paused') &&
-      b.lastOpenedAt !== undefined &&
-      matchesFilters(b, s, ctx),
-  );
-  candidates.sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0) || tieBreak(a, b));
-  return candidates[0] ?? null;
+/** The most recently opened in-progress books, newest first. Ignores the tab and the filters. */
+export function recentBooks(books: Book[], limit = 5): Book[] {
+  return books
+    .filter(b => !b.deleted && (b.status === 'reading' || b.status === 'paused') && b.lastOpenedAt !== undefined)
+    .sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0) || tieBreak(a, b))
+    .slice(0, limit);
 }
 
 export function activeFilterCount(s: LibraryState): number {

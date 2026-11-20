@@ -77,9 +77,7 @@ describe('AccountSection', () => {
     await db.delete();
   });
 
-  it('shows the name, email and sync state', () => {
-    expect(text()).toContain('Test User');
-    expect(text()).toContain('reader@example.test');
+  it('shows the sync state (the name and email are in the Profile header)', () => {
     expect(text()).toContain('Synced with Google Drive');
     expect(q('[data-testid="last-synced"]').textContent).toContain('Not synced yet');
     sync.lastSyncedAt.set(new Date(2026, 10, 19, 12).getTime());

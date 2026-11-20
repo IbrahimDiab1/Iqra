@@ -7,7 +7,7 @@ const SETTINGS_ID = 'settings';
 
 export const DEFAULT_SETTINGS: Omit<Settings, keyof SyncMeta> = {
   defaultProgressMode: 'last-page',
-  defaultPageMode: 'swipe',
+  defaultPageMode: 'scroll',
   defaultView: 'page',
   readerTheme: 'paper',
   weekStartsOn: 6,

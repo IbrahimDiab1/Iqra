@@ -23,7 +23,11 @@ export const COPY = {
     terms: 'Terms',
   },
   sync: { synced: 'Synced with Google Drive', saving: 'Saved on this device · syncing', offline: 'Offline · changes are saved on this device', paused: 'Sync paused · Tap to reconnect', reconnectBanner: 'Reconnect to keep syncing', reconnect: 'Reconnect', error: 'Sync failed · Tap to retry', unreadable: (name: string) => `${name} can't be read. It may have been made by a newer version of Iqra.`, driveFull: 'Your Google Drive is full. Free up space to keep syncing.', wrongAccount: (other: string, stored: string) => `You picked ${other}. Iqra is linked to ${stored}.` },
-  library: { title: 'Library', add: 'Add PDF', tabs: { reading: 'Reading', 'to-read': 'To read', finished: 'Finished', all: 'All' }, paused: 'Paused', upNext: 'Up next', continue: 'Continue reading', resume: 'Resume', filter: 'Filter', sort: 'Sort', emptyTitle: 'Your library is empty', emptyBody: 'Add a PDF and Iqra saves it to your Drive and opens it on every device.', addFirst: 'Add your first PDF', emptyDropHint: 'You can also drop PDF files anywhere on this page.', emptyFiltered: 'No books match these filters.', clearFilters: 'Clear filters', uploadingElsewhere: 'Uploading from another device', notStarted: 'Not started', finished: 'Finished', settings: 'Settings', search: 'Search library', searchPlaceholder: 'Title or author', notDownloaded: 'Not downloaded', reorder: 'Reorder', removeFilter: (name: string) => `Remove filter ${name}`, sortBy: 'Sort by', dropHint: 'Drop PDFs to add them to your library' },
+  library: { title: 'Library', add: 'Add PDF', tabs: { reading: 'Reading', 'to-read': 'To read', finished: 'Finished', all: 'All' }, paused: 'Paused', upNext: 'Up next', continue: 'Continue reading', resume: 'Resume',
+    welcome: (name: string) => `Welcome, ${name}`, welcomeAnon: 'Welcome',
+    streakDays: (n: number) => (n === 1 ? '1-day streak' : `${n}-day streak`), streakNone: 'No streak yet', streakHint: 'Read a little today to start one.',
+    timeRead: (t: string) => `${t} read`, finishedCount: (n: number) => (n === 1 ? '1 book finished' : `${n} books finished`),
+    section: 'Library', percentRead: (n: number) => `${n}% read`, openBook: (title: string) => `Open ${title}`, filter: 'Filter', sort: 'Sort', emptyTitle: 'Your library is empty', emptyBody: 'Add a PDF and Iqra saves it to your Drive and opens it on every device.', addFirst: 'Add your first PDF', emptyDropHint: 'You can also drop PDF files anywhere on this page.', emptyFiltered: 'No books match these filters.', clearFilters: 'Clear filters', uploadingElsewhere: 'Uploading from another device', notStarted: 'Not started', finished: 'Finished', search: 'Search library', searchPlaceholder: 'Title or author', notDownloaded: 'Not downloaded', reorder: 'Reorder', removeFilter: (name: string) => `Remove filter ${name}`, sortBy: 'Sort by', dropHint: 'Drop PDFs to add them to your library' },
   sort: { 'recent-read': 'Recently read', 'recent-added': 'Recently added', progress: 'Progress', priority: 'Priority', rating: 'Rating', title: 'Title' },
   filter: { title: 'Filter', tags: 'Tags', minRating: 'Minimum rating', downloadedOnly: 'Downloaded only', apply: 'Show books', reset: 'Reset', any: 'Any' },
   categoryBar: {
@@ -54,7 +58,7 @@ export const COPY = {
     pageColor: 'Page color', paper: 'Paper', sepia: 'Sepia', night: 'Night', saved: 'Saved',
   },
   // Added in Task 2 for the app shell and placeholder pages.
-  nav: { library: 'Library', notes: 'Notes', stats: 'Stats' },
+  nav: { library: 'Library', notes: 'Notes', stats: 'Stats', profile: 'Profile' },
   placeholder: { notesTitle: 'Notes' },
   annotations: {
     highlight: 'Highlight',

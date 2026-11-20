@@ -50,7 +50,7 @@ type Estimate = { usage?: number; quota?: number } | null;
         <li><span class="dot downloads"></span>{{ c.legend.downloads }} <span class="val">{{ fmt(0) }}</span></li>
       }
     </ul>
-    <a class="btn link" data-testid="manage-downloads" routerLink="/settings/downloads">{{ c.manage }}</a>
+    <a class="btn link" data-testid="manage-downloads" routerLink="/profile/downloads">{{ c.manage }}</a>
   `,
   styles: `
     :host { display: block; }

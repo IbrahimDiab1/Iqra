@@ -30,6 +30,7 @@ const ICON = {
   filter: '<path d="M4 6h16M7 12h10M10 18h4"/>',
   cloud: '<path d="M7.5 18.5a4.5 4.5 0 0 1-.4-8.98A6 6 0 0 1 18.4 10.6 3.9 3.9 0 0 1 17.5 18.5z"/>',
   wifiOff: '<path d="M3 3l18 18M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 3.2-2M19 12.9a10 10 0 0 0-6-2.8M2 8.8A15 15 0 0 1 7 5.7M22 8.8A15 15 0 0 0 12 5"/><path d="M12 20h.01"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   chevD: '<path d="M6 9l6 6 6-6"/>',
   zoomIn: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2M11 8v6M8 11h6"/>',

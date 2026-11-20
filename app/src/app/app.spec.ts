@@ -33,10 +33,10 @@ describe('App shell', () => {
     fixture.detectChanges();
   });
 
-  it('shows Library, Notes and Stats tabs with icons on the library route', async () => {
+  it('shows Library, Notes, Stats and Profile tabs with icons on the library route', async () => {
     await go('/library');
     const tabs = Array.from(el.querySelectorAll<HTMLElement>('nav.tabbar a.tab'));
-    expect(tabs.map((t) => t.textContent?.trim())).toEqual(['Library', 'Notes', 'Stats']);
+    expect(tabs.map((t) => t.textContent?.trim())).toEqual(['Library', 'Notes', 'Stats', 'Profile']);
     expect(tabs.every((t) => t.querySelector('svg'))).toBe(true);
   });
 

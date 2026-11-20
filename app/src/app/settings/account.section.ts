@@ -16,12 +16,6 @@ import { SETTINGS_COPY } from './settings-copy';
   imports: [SheetComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @let p = auth.profile();
-    <div class="row who">
-      <span class="name" dir="auto">{{ p?.name }}</span>
-      <span class="email" dir="auto">{{ p?.email }}</span>
-    </div>
-
     <div class="row">
       <div class="grow">
         <p class="status" role="status" data-testid="sync-status">{{ statusText() }}</p>
@@ -67,9 +61,7 @@ import { SETTINGS_COPY } from './settings-copy';
     :host { display: block; }
     .row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
     .row:first-child { border-top: 0; }
-    .who { flex-direction: column; align-items: flex-start; gap: 2px; }
-    .name { font-weight: 600; font-size: 16px; }
-    .email, .sub { display: block; font-size: 13px; color: var(--muted); margin: 0; }
+    .sub { display: block; font-size: 13px; color: var(--muted); margin: 0; }
     .err { color: var(--danger); }
     .status { margin: 0; font-size: 14px; }
     .grow { flex: 1; min-width: 0; }

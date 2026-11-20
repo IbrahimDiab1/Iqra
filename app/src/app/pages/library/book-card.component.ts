@@ -16,6 +16,8 @@ export interface BookView {
   downloaded: boolean;
   /** Upload fraction 0..1 while this book's PDF is going to Drive, otherwise null. */
   uploading: number | null;
+  /** The book's first live category and its palette slot (1 to 8, as on Stats), or null when it has none. */
+  category: { name: string; hue: number } | null;
 }
 
 /** The status line under a title. A book uploaded on another device has no local file to read yet. */
@@ -68,6 +70,12 @@ const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
       </span>
       <span class="bt" dir="auto">{{ view().book.title }}</span>
       <span class="bs">{{ line() }}</span>
+      @if (view().category; as cat) {
+        <span class="cat">
+          <i class="dot" aria-hidden="true" [style.background]="'var(--cat-' + cat.hue + ')'"></i>
+          <span class="cn" dir="auto">{{ cat.name }}</span>
+        </span>
+      }
       @if (showBar()) {
         <span class="bar" aria-hidden="true"><i [style.width.%]="barPercent()"></i></span>
       }
@@ -107,9 +115,9 @@ const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
     .ring-arc { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset 200ms linear; }
     .bt {
       display: -webkit-box;
-      margin-top: 8px;
+      margin-top: 6px;
       overflow: hidden;
-      font-size: 12.5px;
+      font-size: 12px;
       font-weight: 600;
       line-height: 1.25;
       -webkit-line-clamp: 2;
@@ -120,9 +128,12 @@ const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
       display: block;
       margin-top: 3px;
       color: var(--muted);
-      font-size: 11.5px;
+      font-size: 11px;
       font-variant-numeric: tabular-nums;
     }
+    .cat { display: flex; align-items: center; gap: 5px; margin-top: 4px; min-width: 0; color: var(--muted); font-size: 11px; }
+    .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+    .cn { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
     .bar {
       display: block;
       height: 3px;

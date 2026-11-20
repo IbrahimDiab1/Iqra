@@ -111,6 +111,7 @@ describe('LibraryPage', () => {
   it('shows reading books in the grid and paused books under Paused', async () => {
     await seed([reading, paused, toRead]);
     await create();
+    tab('Reading').click();
     await waitFor(() => mainCards().length === 1);
 
     expect(mainCards()[0].textContent).toContain('Reading Book');
@@ -262,6 +263,8 @@ describe('LibraryPage', () => {
   it('shows the filtered empty state with a way to clear the filters', async () => {
     await seed([reading, paused, toRead]);
     await create();
+    tab('Reading').click();
+    fixture.detectChanges();
 
     const nineOrMore = [...el.querySelectorAll<HTMLButtonElement>('iqra-filter-sheet .chip')].find(
       (c) => c.textContent?.trim() === '9+',
@@ -274,10 +277,60 @@ describe('LibraryPage', () => {
     await waitFor(() => mainCards().length === 1);
   });
 
-  it('has a Settings gear that links to /settings', async () => {
+  it('has no Settings gear: Settings live on the Profile page', async () => {
     await create();
-    const gear = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>(`a[aria-label="${COPY.library.settings}"]`)!;
-    expect(gear.getAttribute('href')).toBe('/settings');
+    expect(el.querySelector('a[href="/settings"]')).toBeNull();
+    expect(el.querySelector('[aria-label="Settings"]')).toBeNull();
+  });
+
+  it('orders the status tabs All, Reading, To read, Finished and starts on All', async () => {
+    await seed([reading, paused, toRead]);
+    await create();
+    expect([...el.querySelectorAll('[role="tab"]')].map((t) => t.textContent!.replace(/\s*\d+$/, '').trim())).toEqual([
+      'All',
+      'Reading',
+      'To read',
+      'Finished',
+    ]);
+    expect(tab('All').getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('greets by first name, falls back to Welcome, and shows streak and all-time reading time', async () => {
+    const auth = TestBed.inject(AuthApi) as FakeAuthService;
+    await db.sessions.put({
+      id: 's1', updatedAt: 1, deviceId: 'd', bookId: 'r', startedAt: 5000 - 1000, endedAt: 5000, activeMs: 90 * 60_000, pagesRead: [1, 2],
+    } as never);
+    await seed([reading]);
+    await create();
+    await waitFor(() => el.querySelector('[data-testid="welcome-stats"]')!.textContent!.includes('1 h 30 min read'));
+    const name = auth.profile()?.name ?? '';
+    const first = name.trim().split(/\s+/)[0];
+    expect(el.querySelector('[data-testid="welcome"]')!.textContent).toBe(first ? `Welcome, ${first}` : 'Welcome');
+    expect(el.querySelector('[data-testid="welcome-stats"]')!.textContent).toContain('1-day streak');
+  });
+
+  it('lists up to five recently read in-progress books in a Continue reading row, hidden when none', async () => {
+    await create();
+    expect(el.querySelector('[data-testid="recent"]')).toBeNull();
+    const many = Array.from({ length: 7 }, (_, i) =>
+      makeBook({ id: `m${i}`, title: `Book ${i}`, status: 'reading', lastPageReached: 50, lastOpenedAt: 100 + i }),
+    );
+    await db.books.bulkPut(many);
+    await waitFor(() => el.querySelector('[data-testid="recent"]') !== null);
+    const cards = [...el.querySelectorAll('[data-testid="recent"] iqra-recent-card')];
+    expect(cards.length).toBe(5);
+    expect(cards[0].textContent).toContain('Book 6');
+    expect(cards[0].textContent).toContain('50%');
+  });
+
+  it('shows a card with page progress and its category in the category colour', async () => {
+    await seed([{ ...reading, categoryIds: ['cat-2'] }], twoCats);
+    await create();
+    await waitFor(() => mainCards().length === 1);
+    const card = mainCards()[0];
+    expect(card.textContent).toContain('p. 40/100 · 40%');
+    expect(card.querySelector('.cn')!.textContent).toBe('History');
+    expect(card.querySelector<HTMLElement>('.dot')!.style.background).toContain('var(--cat-2)');
   });
 
   it('marks a book that is not downloaded', async () => {

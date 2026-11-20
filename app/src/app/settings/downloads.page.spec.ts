@@ -20,7 +20,7 @@ function book(id: string, sizeBytes: number, extra: Partial<Book> = {}): Book {
 
 describe('downloads route', () => {
   it('is lazy and behind the signed-in guard', () => {
-    const route = routes.find((r) => r.path === 'settings/downloads')!;
+    const route = routes.find((r) => r.path === 'profile/downloads')!;
     expect(route.component).toBeUndefined();
     expect(typeof route.loadComponent).toBe('function');
     expect(route.canActivate).toEqual([signedInGuard]);

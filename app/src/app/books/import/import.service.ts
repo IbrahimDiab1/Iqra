@@ -4,6 +4,7 @@ import { DB } from '../../core/db';
 import { newId } from '../../core/ids';
 import type { Book, ID, Settings } from '../../core/models';
 import { Repo } from '../../core/repo';
+import { DEFAULT_SETTINGS } from '../../core/settings.service';
 import { COPY } from '../../ui/copy';
 import { ToastService } from '../../ui/toast.service';
 import { UploadQueue } from '../upload-queue';
@@ -102,8 +103,8 @@ export class ImportService {
         status: 'to-read',
         categoryIds: [],
         tags: [],
-        progressMode: settings?.defaultProgressMode ?? 'last-page',
-        pageMode: settings?.defaultPageMode ?? 'swipe',
+        progressMode: settings?.defaultProgressMode ?? DEFAULT_SETTINGS.defaultProgressMode,
+        pageMode: settings?.defaultPageMode ?? DEFAULT_SETTINGS.defaultPageMode,
         lastPageReached: 0,
       });
       await this.db.pdfFiles.put({ bookId, blob: file, sizeBytes: file.size, savedAt: now });

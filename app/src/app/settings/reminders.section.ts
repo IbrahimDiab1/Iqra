@@ -10,11 +10,9 @@ import { describeCalendarError } from '../reminders/calendar-errors';
 import { SETTINGS_COPY } from './settings-copy';
 
 const DEBOUNCE_MS = 600;
-const MAX_LINES = 20;
-const MAX_LINE_CHARS = 120;
 type Day = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
-/** Reading reminders in Google Calendar: days, time, quotes, and a test. */
+/** Reading reminders in Google Calendar: days and time. The quote is always a built-in one. */
 @Component({
   selector: 'iqra-reminders-section',
   imports: [SheetComponent],
@@ -57,34 +55,8 @@ type Day = 0 | 1 | 2 | 3 | 4 | 5 | 6;
         <input type="time" class="timebox" data-testid="reminder-time" [value]="view().time" (change)="setTime($event)" />
       </label>
 
-      <span class="cap" id="rem-src">{{ c.quotes }}</span>
-      <div class="seg" role="group" aria-labelledby="rem-src" data-testid="quote-source">
-        @for (o of sources; track o.value) {
-          <button type="button" [attr.aria-pressed]="view().quoteSource === o.value" (click)="setSource(o.value)">{{ o.label }}</button>
-        }
-      </div>
-
-      <span class="cap">{{ c.custom }}</span>
-      <p class="sub">{{ c.customHint }}</p>
-      <ul class="lines">
-        @for (line of view().customQuotes; track $index) {
-          <li data-testid="custom-line">
-            <span class="grow" dir="auto">{{ line }}</span>
-            <button type="button" class="btn" data-testid="custom-remove" [attr.aria-label]="c.removeLine(line)" (click)="removeLine($index)">×</button>
-          </li>
-        }
-      </ul>
-      <div class="add">
-        <input type="text" class="textbox grow" dir="auto" data-testid="custom-input" [attr.aria-label]="c.customLabel" [placeholder]="c.customPlaceholder" [value]="draft()" (input)="draft.set($any($event.target).value)" />
-        <button type="button" class="btn" data-testid="custom-add" (click)="addLine()">{{ c.add }}</button>
-      </div>
-      @if (lineError(); as e) {
-        <p class="sub err" role="alert" data-testid="custom-error">{{ e }}</p>
-      }
-
       <div class="row">
         <p class="grow status" data-testid="next-reminder">{{ nextText() }}</p>
-        <button type="button" class="btn" data-testid="test-reminder" [disabled]="testing()" (click)="sendTest()">{{ c.test }}</button>
       </div>
     }
 
@@ -115,9 +87,6 @@ type Day = 0 | 1 | 2 | 3 | 4 | 5 | 6;
     .seg { display: flex; background: var(--surface-2); border-radius: var(--radius-control); padding: 3px; gap: 2px; }
     .seg button { flex: 1; min-height: 40px; border: 0; background: none; border-radius: 9px; font: 500 13px var(--ui); color: var(--muted); cursor: pointer; }
     .seg button[aria-pressed='true'] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
-    .lines { list-style: none; margin: 0 0 8px; padding: 0; }
-    .lines li { display: flex; align-items: center; gap: 8px; min-height: 40px; border-top: 1px solid var(--line); font-size: 14px; }
-    .add { display: flex; gap: 8px; }
     .btn { min-height: 40px; min-width: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--fg); font: 600 14px var(--ui); cursor: pointer; }
     .btn:disabled { opacity: .55; cursor: default; }
     .btn.solid { background: var(--danger); border-color: var(--danger); color: var(--accent-fg); }
@@ -133,20 +102,11 @@ export class RemindersSection implements OnDestroy {
   private readonly toast = inject(ToastService);
 
   protected readonly c = SETTINGS_COPY.reminders;
-  protected readonly sources = [
-    { value: 'highlights', label: this.c.highlights },
-    { value: 'builtin', label: this.c.builtin },
-    { value: 'both', label: this.c.both },
-  ] as const;
-
   protected readonly connecting = signal(false);
   protected readonly confirming = signal(false);
-  protected readonly testing = signal(false);
   protected readonly message = signal<string | null>(null);
   /** Google's status and reason for the message above, e.g. `403 accessNotConfigured`. */
   protected readonly detail = signal<string | null>(null);
-  protected readonly draft = signal('');
-  protected readonly lineError = signal<string | null>(null);
 
   /** Edits made in the last 600 ms, shown at once and saved together. */
   private readonly pending = signal<Partial<ReminderSettings>>({});
@@ -159,8 +119,6 @@ export class RemindersSection implements OnDestroy {
     return {
       days: r.days ?? REMINDER_DEFAULTS.days,
       time: r.time ?? REMINDER_DEFAULTS.time,
-      quoteSource: r.quoteSource ?? REMINDER_DEFAULTS.quoteSource,
-      customQuotes: r.customQuotes ?? [],
     };
   });
 
@@ -219,25 +177,6 @@ export class RemindersSection implements OnDestroy {
     if (time) this.change({ time });
   }
 
-  protected setSource(quoteSource: ReminderSettings['quoteSource']): void {
-    this.change({ quoteSource });
-  }
-
-  protected addLine(): void {
-    const line = this.draft().trim();
-    const lines = this.view().customQuotes;
-    const error = !line ? this.c.empty : line.length > MAX_LINE_CHARS ? this.c.tooLong : lines.length >= MAX_LINES ? this.c.tooMany : null;
-    this.lineError.set(error);
-    if (error) return;
-    this.draft.set('');
-    this.change({ customQuotes: [...lines, line] });
-  }
-
-  protected removeLine(index: number): void {
-    this.lineError.set(null);
-    this.change({ customQuotes: this.view().customQuotes.filter((_, i) => i !== index) });
-  }
-
   protected async reconnect(): Promise<void> {
     this.clearMessage();
     this.connecting.set(true);
@@ -247,19 +186,6 @@ export class RemindersSection implements OnDestroy {
       this.report(e);
     } finally {
       this.connecting.set(false);
-    }
-  }
-
-  protected async sendTest(): Promise<void> {
-    this.testing.set(true);
-    try {
-      const result = await this.service.sendTest();
-      if (result === 'ok') this.toast.show(this.c.testSent);
-    } catch (e) {
-      this.report(e);
-      this.toast.show(this.c.testFailed);
-    } finally {
-      this.testing.set(false);
     }
   }
 

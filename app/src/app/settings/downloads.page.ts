@@ -18,7 +18,7 @@ import { formatBytes } from './storage-math';
   template: `
     <section class="page">
       <header class="hdr">
-        <a class="back" iqraBack="/settings" [attr.aria-label]="c.back" [innerHTML]="backIcon"></a>
+        <a class="back" iqraBack="/profile" [attr.aria-label]="c.back" [innerHTML]="backIcon"></a>
         <h1>{{ c.title }}</h1>
       </header>
 
