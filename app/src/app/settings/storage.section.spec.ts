@@ -123,6 +123,6 @@ describe('StorageSection', () => {
     quota.mockResolvedValue({ limit: 100e6, usage: 10e6 });
     create();
     await settle(() => expect(q('a[data-testid="manage-downloads"]')).not.toBeNull());
-    expect(q('a[data-testid="manage-downloads"]')!.getAttribute('href')).toBe('/settings/downloads');
+    expect(q('a[data-testid="manage-downloads"]')!.getAttribute('href')).toBe('/profile/downloads');
   });
 });

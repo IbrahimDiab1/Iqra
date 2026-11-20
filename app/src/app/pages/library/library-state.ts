@@ -1,7 +1,7 @@
 import { DEFAULT_LIBRARY_STATE, type LibraryState, type LibraryTab, type SortKey } from '../../books/library/library-query';
 
 const STORAGE_KEY = 'iqra.library';
-const TABS: readonly LibraryTab[] = ['reading', 'to-read', 'finished', 'all'];
+const TABS: readonly LibraryTab[] = ['all', 'reading', 'to-read', 'finished'];
 export const SORTS: readonly SortKey[] = ['recent-read', 'recent-added', 'progress', 'priority', 'rating', 'title'];
 
 /** The filters the Filter sheet edits. Categories are chosen on the category bar instead. */

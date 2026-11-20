@@ -212,7 +212,7 @@ export class ReminderService {
       }
     }
     if (!wanted.size) return { created, removed };
-    const ctx = await this.context(r);
+    const ctx = await this.context();
     for (const [id, slot] of wanted) {
       const event = this.buildEvent(slot, ctx);
       const have = existing.get(id);
@@ -228,38 +228,11 @@ export class ReminderService {
     return { created, removed };
   }
 
-  /** Adds one event two minutes from now so the owner can see the popup. */
-  async sendTest(): Promise<'ok' | 'needs-permission'> {
-    const r = await this.current();
-    if (!(await this.token())) {
-      this.needsPermission.set(true);
-      return 'needs-permission';
-    }
-    try {
-      const calendarId = await this.calendar.ensureCalendar(r.calendarId);
-      if (calendarId !== r.calendarId) await this.save({ calendarId });
-      const start = new Date(this.clock.now() + 2 * 60_000);
-      const event = this.buildEvent(start, await this.context(r));
-      await this.calendar.insert(calendarId, { ...event, id: `iqratest${start.getTime()}` });
-      return 'ok';
-    } catch (e) {
-      await this.failed(e);
-      return 'needs-permission';
-    }
-  }
-
-  private async context(r: ReminderSettings) {
+  private async context() {
     const books = (await this.db.books.toArray()).filter((b) => !b.deleted);
     const reading = books.filter((b) => b.status === 'reading').sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0))[0];
-    const source = r.quoteSource ?? REMINDER_DEFAULTS.quoteSource;
-    let highlights: { quote: string; bookTitle: string; page: number }[] = [];
-    if (source !== 'builtin') {
-      const titles = new Map(books.map((b) => [b.id, b.title]));
-      highlights = (await this.db.annotations.toArray())
-        .filter((a) => !a.deleted && a.type === 'highlight' && a.text?.quote && titles.has(a.bookId))
-        .map((a) => ({ quote: a.text!.quote, bookTitle: titles.get(a.bookId)!, page: a.page ?? a.text!.page }));
-    }
-    return { reading, source, highlights, custom: r.customQuotes ?? [] };
+    // The quote is always a built-in one: the quote-source and own-lines settings are gone from the UI.
+    return { reading, source: 'builtin' as const, highlights: [], custom: [] };
   }
 
   private buildEvent(slot: Date, ctx: Awaited<ReturnType<ReminderService['context']>>): CalendarEvent {

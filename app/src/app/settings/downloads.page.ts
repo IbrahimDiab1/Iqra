@@ -6,6 +6,7 @@ import { DB } from '../core/db';
 import type { Book } from '../core/models';
 import { Repo } from '../core/repo';
 import { icon } from '../ui/icons';
+import { ToastService } from '../ui/toast.service';
 import { SheetComponent } from '../ui/sheet.component';
 import { SETTINGS_COPY } from './settings-copy';
 import { formatBytes } from './storage-math';
@@ -18,13 +19,14 @@ import { formatBytes } from './storage-math';
   template: `
     <section class="page">
       <header class="hdr">
-        <a class="back" iqraBack="/settings" [attr.aria-label]="c.back" [innerHTML]="backIcon"></a>
+        <a class="back" iqraBack="/profile" [attr.aria-label]="c.back" [innerHTML]="backIcon"></a>
         <h1>{{ c.title }}</h1>
       </header>
 
       @if (rows().length === 0) {
         <p class="empty" data-testid="dl-empty">{{ c.empty }}</p>
       } @else {
+        <p class="note" data-testid="dl-note">{{ c.saveCopyHint }}</p>
         <div class="total-row">
           <span class="total" data-testid="dl-total">{{ c.total(fmt(totalBytes())) }}</span>
           <button type="button" class="btn danger" data-testid="remove-all" (click)="confirming.set(true)">{{ c.removeAll }}</button>
@@ -36,7 +38,10 @@ import { formatBytes } from './storage-math';
                 <span class="title" dir="auto" data-testid="dl-title">{{ b.title }}</span>
                 <span class="meta"><span data-testid="dl-size">{{ fmt(b.sizeBytes) }}</span> · {{ opened(b) }}</span>
               </div>
+              <div class="acts">
+              <button type="button" class="btn" data-testid="dl-save" [attr.aria-label]="c.saveCopyOne(b.title)" (click)="saveCopy(b)">{{ c.saveCopy }}</button>
               <button type="button" class="btn" data-testid="dl-remove" [attr.aria-label]="c.removeOne(b.title)" (click)="remove(b)">{{ c.remove }}</button>
+              </div>
             </li>
           }
         </ul>
@@ -60,11 +65,14 @@ import { formatBytes } from './storage-math';
     .back:hover { background: var(--surface-2); }
     .back:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .empty { margin: 24px 0; font-size: 15px; color: var(--muted); }
+    .note { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+    .row { flex-wrap: wrap; }
+    .acts { display: flex; flex: none; gap: 8px; margin-inline-start: auto; }
     .total-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
     .total { font-size: 14px; color: var(--muted); }
     .list { list-style: none; margin: 0; padding: 0; }
     .row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 0; border-top: 1px solid var(--line); }
-    .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .info { flex: 1 1 160px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
     .title { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
     .meta { font-size: 13px; color: var(--muted); }
     .btn { min-height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--fg); font: 600 14px var(--ui); cursor: pointer; }
@@ -79,6 +87,7 @@ export class DownloadsPage {
   private readonly db = inject(DB);
   private readonly repo = inject(Repo);
   private readonly files = inject(FilesService);
+  private readonly toast = inject(ToastService);
 
   protected readonly c = SETTINGS_COPY.downloads;
   protected readonly fmt = formatBytes;
@@ -95,6 +104,27 @@ export class DownloadsPage {
 
   protected opened(b: Book): string {
     return b.lastOpenedAt ? this.c.lastOpened(new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(b.lastOpenedAt)) : this.c.neverOpened;
+  }
+
+  /**
+   * A PWA cannot open a file location, so the cached PDF is handed to the browser as a download: it lands in the
+   * device's Downloads folder.
+   */
+  protected async saveCopy(b: Book): Promise<void> {
+    const file = await this.db.pdfFiles.get(b.id);
+    if (!file) {
+      this.toast.show(this.c.saveCopyFailed);
+      return;
+    }
+    const url = URL.createObjectURL(file.blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = /\.pdf$/i.test(b.fileName) ? b.fileName : `${b.title || 'book'}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    this.toast.show(this.c.savedCopy(b.title));
   }
 
   /** FilesService keeps books that are still uploading and shows its own toast. */

@@ -139,57 +139,6 @@ describe('RemindersSection', () => {
     await vi.waitFor(() => expect(rebuild).toHaveBeenCalledTimes(1));
   });
 
-  it('chooses the quote source', async () => {
-    await create({ enabled: true, calendarId: 'c' });
-    vi.spyOn(svc, 'rebuild').mockResolvedValue({ created: 0, removed: 0 });
-    Array.from(el.querySelectorAll<HTMLButtonElement>('[data-testid="quote-source"] button')).find((b) => b.textContent!.trim() === 'Built-in quotes')!.click();
-    await vi.advanceTimersByTimeAsync(600);
-    await vi.waitFor(async () => expect((await stored())['quoteSource']).toBe('builtin'));
-  });
-
-  it('adds and removes custom lines, rejecting empty and too long ones', async () => {
-    await create({ enabled: true, calendarId: 'c' });
-    vi.spyOn(svc, 'rebuild').mockResolvedValue({ created: 0, removed: 0 });
-    const input = q<HTMLInputElement>('[data-testid="custom-input"]');
-    const add = () => q<HTMLButtonElement>('[data-testid="custom-add"]').click();
-
-    input.value = '   ';
-    input.dispatchEvent(new Event('input'));
-    add();
-    fixture.detectChanges();
-    expect(q('[data-testid="custom-error"]').textContent).toContain('Enter a line');
-
-    input.value = 'x'.repeat(121);
-    input.dispatchEvent(new Event('input'));
-    add();
-    fixture.detectChanges();
-    expect(q('[data-testid="custom-error"]').textContent).toContain('120');
-    expect(el.querySelectorAll('[data-testid="custom-line"]')).toHaveLength(0);
-
-    input.value = 'Read a page';
-    input.dispatchEvent(new Event('input'));
-    add();
-    fixture.detectChanges();
-    expect(el.querySelectorAll('[data-testid="custom-line"]')).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(600);
-    await vi.waitFor(async () => expect((await stored())['customQuotes']).toEqual(['Read a page']));
-
-    q<HTMLButtonElement>('[data-testid="custom-remove"]').click();
-    await vi.advanceTimersByTimeAsync(600);
-    await vi.waitFor(async () => expect((await stored())['customQuotes']).toEqual([]));
-  });
-
-  it('allows at most 20 custom lines', async () => {
-    await create({ enabled: true, calendarId: 'c', customQuotes: Array.from({ length: 20 }, (_, i) => `line ${i}`) });
-    const input = q<HTMLInputElement>('[data-testid="custom-input"]');
-    input.value = 'one more';
-    input.dispatchEvent(new Event('input'));
-    q<HTMLButtonElement>('[data-testid="custom-add"]').click();
-    fixture.detectChanges();
-    expect(el.querySelectorAll('[data-testid="custom-line"]')).toHaveLength(20);
-    expect(q('[data-testid="custom-error"]').textContent).toContain('20');
-  });
-
   it('turning off asks first; No keeps the events, Yes removes them', async () => {
     await create({ enabled: true, calendarId: 'c' });
     const disable = vi.spyOn(svc, 'disable').mockResolvedValue();
@@ -307,13 +256,11 @@ describe('RemindersSection', () => {
     });
   });
 
-  it('sends a test reminder', async () => {
+  it('has no quote source, own lines or test reminder controls', async () => {
     await create({ enabled: true, calendarId: 'c' });
-    await TestBed.inject(AuthApi).requestScope('https://www.googleapis.com/auth/calendar.app.created');
-    q<HTMLButtonElement>('[data-testid="test-reminder"]').click();
-    await vi.waitFor(() => expect(cal.live().length).toBe(1));
-    const ev = [...cal.events.values()][0];
-    expect(new Date(ev.startsAt).getTime()).toBe(NOW + 2 * 60_000);
+    expect(el.querySelector('[data-testid="quote-source"]')).toBeNull();
+    expect(el.querySelector('[data-testid="custom-input"]')).toBeNull();
+    expect(el.querySelector('[data-testid="test-reminder"]')).toBeNull();
   });
 
   it('mentions the Iqra calendar', async () => {

@@ -4,7 +4,7 @@ import {
   activeFilterCount,
   bookProgress,
   categoryCounts,
-  continueBook,
+  recentBooks,
   DEFAULT_LIBRARY_STATE,
   queryLibrary,
   statusLine,
@@ -66,7 +66,7 @@ function ids(list: Book[]): ID[] {
 describe('library query', () => {
   it('has the default state from the brief', () => {
     expect(DEFAULT_LIBRARY_STATE).toEqual({
-      tab: 'reading',
+      tab: 'all',
       categoryIds: [],
       tags: [],
       minRating: null,
@@ -218,19 +218,19 @@ describe('library query', () => {
       .toEqual(['b1', 'b2', 'b3', 'b5', 'b4']);
   });
 
-  it('returns the most recent in-progress book for continueBook, ignoring the tab', () => {
-    expect(continueBook(books, state({ tab: 'finished' }), ctx)?.id).toBe('b2');
-  });
-
-  it('applies filters to continueBook', () => {
-    expect(continueBook(books, state({ categoryIds: ['tech'] }), ctx)?.id).toBe('b2');
-    expect(continueBook(books, state({ categoryIds: ['general'] }), ctx)).toBeNull();
+  it('lists the most recently opened in-progress books, newest first, up to the limit, ignoring tab and filters', () => {
+    expect(ids(recentBooks(books))).toEqual(['b2', 'b1']);
+    expect(ids(recentBooks(books, 1))).toEqual(['b2']);
+    const many = Array.from({ length: 7 }, (_, i) => book({ id: `m${i}`, status: 'reading', lastOpenedAt: 100 + i }));
+    expect(ids(recentBooks(many))).toEqual(['m6', 'm5', 'm4', 'm3', 'm2']);
   });
 
   it('builds the three status lines exactly', () => {
     expect(statusLine(books[4]!, 1)).toBe('Finished');
     expect(statusLine(books[2]!, 0)).toBe('Not started · 300 pages');
-    expect(statusLine(books[0]!, 0.25)).toBe('p. 100 of 400 · 25%');
+    expect(statusLine(books[0]!, 0.25)).toBe('p. 100/400 · 25%');
+    // Marked mode reports the marked pages as read.
+    expect(statusLine(books[1]!, 0.05)).toBe('p. 25/500 · 5%');
   });
 
   it('computes progress by mode, clamped to 0..1, and 0 for no pages', () => {

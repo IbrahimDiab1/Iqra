@@ -20,7 +20,7 @@ function book(id: string, sizeBytes: number, extra: Partial<Book> = {}): Book {
 
 describe('downloads route', () => {
   it('is lazy and behind the signed-in guard', () => {
-    const route = routes.find((r) => r.path === 'settings/downloads')!;
+    const route = routes.find((r) => r.path === 'profile/downloads')!;
     expect(route.component).toBeUndefined();
     expect(typeof route.loadComponent).toBe('function');
     expect(route.canActivate).toEqual([signedInGuard]);
@@ -80,6 +80,24 @@ describe('DownloadsPage', () => {
     q<HTMLButtonElement>('[data-book="mid"] [data-testid="dl-remove"]').click();
     expect(removeLocal).toHaveBeenCalledTimes(1);
     expect(removeLocal.mock.calls[0][0].id).toBe('mid');
+  });
+
+  it('saves a copy of the cached PDF to the device with an anchor download, and says so', async () => {
+    await db.pdfFiles.put({ bookId: 'mid', blob: new Blob(['%PDF-1.4 mid']), sizeBytes: 12, savedAt: 1 });
+    await settle(() => expect(titles().length).toBe(4));
+    expect(el.textContent).toContain('Downloads folder');
+    const create = vi.fn(() => 'blob:mid');
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: create, revokeObjectURL: vi.fn() }));
+    let saved: { name: string; href: string } | null = null;
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      saved = { name: this.download, href: this.href };
+    });
+    q<HTMLButtonElement>('[data-book="mid"] [data-testid="dl-save"]').click();
+    await vi.waitFor(() => expect(click).toHaveBeenCalled());
+    expect(saved).toEqual({ name: 'mid.pdf', href: 'blob:mid' });
+    expect(removeLocal).not.toHaveBeenCalled();
+    click.mockRestore();
+    vi.unstubAllGlobals();
   });
 
   it('asks before removing all, then removes every uploaded download', async () => {

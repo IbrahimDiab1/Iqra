@@ -100,19 +100,6 @@ describe('ReminderService', () => {
     expect(cal.live()).toHaveLength(expectedCount());
   });
 
-  it('updates descriptions in place when the quote source changes', async () => {
-    await svc.fill();
-    const before = cal.live().map((e) => e.description);
-    await settings.update({ reminders: { ...(await reminders()), quoteSource: 'builtin', customQuotes: ['A very personal line'] } });
-    const inserts = cal.insertCalls;
-    const removes = cal.removeCalls;
-    await svc.rebuild();
-    expect(cal.insertCalls).toBe(inserts);
-    expect(cal.removeCalls).toBe(removes);
-    expect(cal.live().map((e) => e.description)).not.toEqual(before);
-    expect(cal.live().some((e) => e.description.includes('A very personal line'))).toBe(true);
-  });
-
   it('a second rebuild with nothing changed touches nothing', async () => {
     await svc.fill();
     const writes = cal.insertCalls + cal.updateCalls + cal.removeCalls;
@@ -188,7 +175,7 @@ describe('ReminderService', () => {
     expect(cal.live()[0].title).toBe('Time to read');
   });
 
-  it('puts the quote and its source in the description', async () => {
+  it('always uses a built-in quote, ignoring highlights and any stored own lines', async () => {
     const b = book({ title: 'Dune', status: 'reading', lastOpenedAt: 1 });
     await db.books.put(b);
     const a: Annotation = {
@@ -196,11 +183,12 @@ describe('ReminderService', () => {
       text: { page: 11, start: { item: 0, offset: 0 }, end: { item: 0, offset: 5 }, rects: [], quote: 'Fear is the mind-killer, so keep reading.' },
     };
     await db.annotations.put(a);
-    await settings.update({ reminders: { ...(await reminders()), quoteSource: 'highlights' } });
+    await settings.update({ reminders: { ...(await reminders()), quoteSource: 'highlights', customQuotes: ['A very personal line'] } });
     await svc.fill();
     const desc = cal.live()[0].description;
-    expect(desc).toContain('Fear is the mind-killer, so keep reading.');
-    expect(desc).toContain('Dune, p. 11');
+    expect(desc).not.toContain('Fear is the mind-killer');
+    expect(desc).not.toContain('A very personal line');
+    expect(desc.split('\n')[0].length).toBeGreaterThan(0);
   });
 
   it('enable saves the calendar and fills it', async () => {

@@ -8,8 +8,10 @@ export const routes: Routes = [
   { path: 'library', component: LibraryPage, canActivate: [signedInGuard] },
   { path: 'notes', loadComponent: () => import('./notes/notes.page').then((m) => m.NotesPage), canActivate: [signedInGuard] },
   { path: 'stats', loadComponent: () => import('./stats/stats.page').then((m) => m.StatsPage), canActivate: [signedInGuard] },
-  { path: 'settings', loadComponent: () => import('./settings/settings.page').then((m) => m.SettingsPage), canActivate: [signedInGuard] },
-  { path: 'settings/downloads', loadComponent: () => import('./settings/downloads.page').then((m) => m.DownloadsPage), canActivate: [signedInGuard] },
+  { path: 'profile', loadComponent: () => import('./profile/profile.page').then((m) => m.ProfilePage), canActivate: [signedInGuard] },
+  { path: 'settings', redirectTo: 'profile', pathMatch: 'full' },
+  { path: 'profile/downloads', loadComponent: () => import('./settings/downloads.page').then((m) => m.DownloadsPage), canActivate: [signedInGuard] },
+  { path: 'settings/downloads', redirectTo: 'profile/downloads', pathMatch: 'full' },
   { path: 'read/:bookId', loadComponent: () => import('./reader/reader.page').then((m) => m.ReaderPage), canActivate: [signedInGuard] },
   { path: '**', redirectTo: 'library' },
 ];

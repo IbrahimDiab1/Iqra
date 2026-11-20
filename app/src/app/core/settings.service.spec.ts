@@ -33,6 +33,10 @@ describe('SettingsService', () => {
     expect(await db.settings.get('settings')).toBeUndefined();
   });
 
+  it('has the owner defaults: week starts Saturday, scroll, last page, paper', () => {
+    expect(DEFAULT_SETTINGS).toMatchObject({ weekStartsOn: 6, defaultPageMode: 'scroll', defaultProgressMode: 'last-page', readerTheme: 'paper' });
+  });
+
   it('defaults the reader theme to night when the system prefers dark', () => {
     vi.stubGlobal('matchMedia', () => ({ matches: true }));
     const dark = TestBed.runInInjectionContext(() => new SettingsService());

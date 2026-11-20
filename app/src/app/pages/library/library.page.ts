@@ -13,7 +13,6 @@ import {
   viewChild,
 } from '@angular/core';
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
-import { RouterLink } from '@angular/router';
 import { CatalogService } from '../../books/catalog.service';
 import { FilesService } from '../../books/files.service';
 import { ImportService } from '../../books/import/import.service';
@@ -21,7 +20,7 @@ import {
   activeFilterCount,
   bookProgress,
   categoryCounts,
-  continueBook,
+  recentBooks,
   queryLibrary,
   tabCounts,
   UNCATEGORIZED,
@@ -34,18 +33,20 @@ import { UploadQueue } from '../../books/upload-queue';
 import { DB } from '../../core/db';
 import type { Book, ID } from '../../core/models';
 import { Repo } from '../../core/repo';
-import { SyncStatusComponent } from '../../sync/sync-status.component';
 import { COPY } from '../../ui/copy';
 import { icon, type IconName } from '../../ui/icons';
 import type { CategoryBarComponent } from '../../books/library/category-bar.component';
 import { BookCardComponent, type BookView } from './book-card.component';
-import { ContinueCardComponent } from './continue-card.component';
 import { FilterSheetComponent } from './filter-sheet.component';
 import { DEFAULT_DIR, loadLibraryState, saveLibraryState, sortHasDirection, type FilterValue } from './library-state';
 import { SortMenuComponent } from './sort-menu.component';
 import { UpNextComponent } from './up-next.component';
 
-const TABS: readonly LibraryTab[] = ['reading', 'to-read', 'finished', 'all'];
+const TABS: readonly LibraryTab[] = ['all', 'reading', 'to-read', 'finished'];
+const RECENT_LIMIT = 5;
+
+/** The palette slot (1 to 8) of a category, the same rule Stats uses (its `order` modulo eight), so colours match. */
+const categoryHue = (order: number): number => (((Math.trunc(order) % 8) + 8) % 8) + 1;
 
 type BarComponentType = typeof import('../../books/library/category-bar.component').CategoryBarComponent;
 
@@ -78,21 +79,18 @@ function isPdf(file: File): boolean {
 @Component({
   selector: 'f-library-page',
   imports: [
-    RouterLink,
-    SyncStatusComponent,
     BookCardComponent,
-    ContinueCardComponent,
     FilterSheetComponent,
     SortMenuComponent,
     UpNextComponent,
   ],
   template: `
     <section class="page">
-      <header class="hdr">
-        <div class="title">
-          <iqra-sync-status />
-          <h1>{{ copy.title }}</h1>
-        </div>
+      <!-- The greeting and Continue reading row load on demand (see mountTop), so their code stays out of the initial bundle. -->
+      <div class="top-slot"><ng-container #topHost /></div>
+
+      <div class="lib-head">
+        <h2 class="sec-h">{{ copy.section }}</h2>
         <div class="actions">
           <button
             type="button"
@@ -102,13 +100,12 @@ function isPdf(file: File): boolean {
             (click)="toggleSearch()"
             [innerHTML]="searchIcon"
           ></button>
-          <a class="icon-btn" routerLink="/settings" [attr.aria-label]="copy.settings" [innerHTML]="settingsIcon"></a>
           <button type="button" class="add" (click)="pickFiles()">
             <span [innerHTML]="uploadIcon"></span>{{ copy.add }}
           </button>
           <input #fileInput type="file" accept="application/pdf" multiple hidden (change)="onPicked($event)" />
         </div>
-      </header>
+      </div>
 
       @if (searchOpen()) {
         <label class="search">
@@ -138,33 +135,16 @@ function isPdf(file: File): boolean {
         }
       </div>
 
-      @if (showCategoryBar()) {
-        <!-- The bar's code loads on demand (see mountBar), so it stays out of the initial bundle. -->
-        <div class="bar-slot">
-          <ng-container #barHost />
-          @if (barFailed()) {
-            <p class="bar-failed" role="status" data-testid="bar-failed">
-              <span>{{ barCopy.loadFailed }}</span> ·
-              <button type="button" class="retry" data-testid="bar-retry" (click)="retryBar()">{{ barCopy.retry }}</button>
-            </p>
-          }
-        </div>
-      }
-
-      <div class="toolbar">
-        @if (chips().length > 0) {
-          <div class="chips">
-            @for (chip of chips(); track chip.key) {
-              <span class="fchip">
-                <span dir="auto">{{ chip.label }}</span>
-                <button
-                  type="button"
-                  class="x"
-                  [attr.aria-label]="removeLabel(chip.label)"
-                  (click)="chip.remove()"
-                  [innerHTML]="closeIcon"
-                ></button>
-              </span>
+      <div class="cat-row">
+        @if (showCategoryBar()) {
+          <!-- The bar's code loads on demand (see mountBar), so it stays out of the initial bundle. -->
+          <div class="bar-slot">
+            <ng-container #barHost />
+            @if (barFailed()) {
+              <p class="bar-failed" role="status" data-testid="bar-failed">
+                <span>{{ barCopy.loadFailed }}</span> ·
+                <button type="button" class="retry" data-testid="bar-retry" (click)="retryBar()">{{ barCopy.retry }}</button>
+              </p>
             }
           </div>
         }
@@ -184,8 +164,21 @@ function isPdf(file: File): boolean {
         </div>
       </div>
 
-      @if (continueView(); as cv) {
-        <iqra-continue-card [view]="cv" />
+      @if (chips().length > 0) {
+        <div class="chips">
+          @for (chip of chips(); track chip.key) {
+            <span class="fchip">
+              <span dir="auto">{{ chip.label }}</span>
+              <button
+                type="button"
+                class="x"
+                [attr.aria-label]="removeLabel(chip.label)"
+                (click)="chip.remove()"
+                [innerHTML]="closeIcon"
+              ></button>
+            </span>
+          }
+        </div>
       }
 
       @if (state().tab === 'to-read' && upNextViews().length > 0) {
@@ -262,15 +255,9 @@ function isPdf(file: File): boolean {
       margin: 0 auto;
       padding: 20px var(--gutter) 24px;
     }
-    h1 { margin: 2px 0 0; font-size: 28px; font-weight: 600; line-height: 1.1; letter-spacing: -0.02em; }
-    .hdr {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-    .title { min-width: 0; }
+    .top-slot { min-height: 74px; }
+    .sec-h { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+    .lib-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
     .actions { display: flex; align-items: center; gap: 2px; }
     .icon-btn {
       display: grid;
@@ -358,21 +345,18 @@ function isPdf(file: File): boolean {
 
     /* Holds the row's height while the bar's code loads. */
     .bar-slot { min-height: 52px; }
+    .bar-slot:empty { min-height: 0; }
     .bar-failed { display: flex; align-items: center; gap: 6px; min-height: 40px; margin: 0 0 12px; color: var(--muted); font-size: 13px; }
     .retry { min-height: 40px; padding: 0 8px; border: 0; background: none; color: var(--accent); font: 600 13px var(--ui); cursor: pointer; }
     .retry:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 14px;
-    }
+    .cat-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0 10px; }
+    .cat-row .bar-slot { flex: 1 1 260px; min-width: 0; }
+    .cat-row .tools { margin-top: 3px; }
     .chips {
       display: flex;
-      flex: 1 1 160px;
       gap: 6px;
       min-width: 0;
+      margin-bottom: 14px;
       overflow-x: auto;
       scrollbar-width: none;
     }
@@ -449,13 +433,14 @@ function isPdf(file: File): boolean {
     .grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 18px 12px;
+      gap: 16px 12px;
       margin: 0 0 24px;
       padding: 0;
       list-style: none;
     }
-    @media (min-width: 600px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-    @media (min-width: 900px) { .grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+    @media (min-width: 480px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    @media (min-width: 640px) { .grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+    @media (min-width: 900px) { .grid { grid-template-columns: repeat(7, minmax(0, 1fr)); } }
 
     .empty {
       padding: 40px 24px;
@@ -510,7 +495,6 @@ export class LibraryPage {
   private focusSearch = false;
 
   protected readonly searchIcon = this.svg('search', 22);
-  protected readonly settingsIcon = this.svg('gear', 22);
   protected readonly uploadIcon = this.svg('upload', 17);
   protected readonly filterIcon = this.svg('filter', 16);
   protected readonly closeIcon = this.svg('x', 14);
@@ -518,6 +502,7 @@ export class LibraryPage {
   private readonly fileInput = viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
   private readonly barHost = viewChild('barHost', { read: ViewContainerRef });
+  private readonly topHost = viewChild('topHost', { read: ViewContainerRef });
   /** The bar's code could not be loaded. */
   protected readonly barFailed = signal(false);
   /** A selected category chip is scrolled out of the bar's visible part. */
@@ -567,10 +552,8 @@ export class LibraryPage {
   /** The bar is for managing categories too, so it stays once any exist; with nothing at all there is nothing to filter. */
   protected readonly showCategoryBar = computed(() => this.books().length > 0 || this.categories().length > 0);
   private readonly result = computed(() => queryLibrary(this.books(), this.effective(), this.ctx()));
-  protected readonly continueView = computed<BookView | null>(() => {
-    const book = continueBook(this.books(), this.effective(), this.ctx());
-    return book ? this.viewOf(book) : null;
-  });
+  protected readonly recentViews = computed(() => recentBooks(this.books(), RECENT_LIMIT).map((b) => this.viewOf(b)));
+  protected readonly finishedCount = computed(() => this.books().filter((b) => b.status === 'finished').length);
   protected readonly mainViews = computed(() => this.result().main.map((b) => this.viewOf(b)));
   protected readonly pausedViews = computed(() => this.result().paused.map((b) => this.viewOf(b)));
 
@@ -637,6 +620,10 @@ export class LibraryPage {
   constructor() {
     inject(DestroyRef).onDestroy(() => (this.gone = true));
     effect(() => {
+      const host = this.topHost();
+      if (host && host.length === 0) void this.mountTop(host);
+    });
+    effect(() => {
       const host = this.barHost();
       if (host && host.length === 0) void this.mountBar(host);
     });
@@ -658,6 +645,26 @@ export class LibraryPage {
   protected retryBar(): void {
     const host = this.barHost();
     if (host && host.length === 0) void this.mountBar(host);
+  }
+
+  /** Loads the greeting and Continue reading row on first need and keeps its inputs in step with the page. */
+  private async mountTop(host: ViewContainerRef): Promise<void> {
+    let LibraryTopComponent: typeof import('./top.component').LibraryTopComponent;
+    try {
+      LibraryTopComponent = await import('./top.component').then((m) => m.LibraryTopComponent);
+    } catch {
+      return; // A stale deploy or no connection: the Library works without its greeting.
+    }
+    if (this.gone || host.length > 0 || this.topHost() !== host) return;
+    const ref = host.createComponent(LibraryTopComponent);
+    const inputs = effect(
+      () => {
+        ref.setInput('recent', this.recentViews());
+        ref.setInput('finished', this.finishedCount());
+      },
+      { injector: this.injector },
+    );
+    ref.onDestroy(() => inputs.destroy());
   }
 
   private async mountBar(host: ViewContainerRef): Promise<void> {
@@ -796,12 +803,18 @@ export class LibraryPage {
     this.sortOpen.set(false);
   }
 
+  private categoryOf(book: Book): BookView['category'] {
+    const cat = this.categories().find((c) => book.categoryIds.includes(c.id));
+    return cat ? { name: cat.name, hue: categoryHue(cat.order) } : null;
+  }
+
   private viewOf(book: Book): BookView {
     return {
       book,
       progress: bookProgress(book, this.markedCounts().get(book.id) ?? 0),
       downloaded: this.files.downloaded().has(book.id),
       uploading: this.uploads.progress().get(book.id) ?? null,
+      category: this.categoryOf(book),
     };
   }
 
