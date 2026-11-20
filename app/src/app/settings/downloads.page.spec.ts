@@ -82,6 +82,24 @@ describe('DownloadsPage', () => {
     expect(removeLocal.mock.calls[0][0].id).toBe('mid');
   });
 
+  it('saves a copy of the cached PDF to the device with an anchor download, and says so', async () => {
+    await db.pdfFiles.put({ bookId: 'mid', blob: new Blob(['%PDF-1.4 mid']), sizeBytes: 12, savedAt: 1 });
+    await settle(() => expect(titles().length).toBe(4));
+    expect(el.textContent).toContain('Downloads folder');
+    const create = vi.fn(() => 'blob:mid');
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: create, revokeObjectURL: vi.fn() }));
+    let saved: { name: string; href: string } | null = null;
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      saved = { name: this.download, href: this.href };
+    });
+    q<HTMLButtonElement>('[data-book="mid"] [data-testid="dl-save"]').click();
+    await vi.waitFor(() => expect(click).toHaveBeenCalled());
+    expect(saved).toEqual({ name: 'mid.pdf', href: 'blob:mid' });
+    expect(removeLocal).not.toHaveBeenCalled();
+    click.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
   it('asks before removing all, then removes every uploaded download', async () => {
     await settle(() => expect(titles().length).toBe(4));
     q<HTMLButtonElement>('[data-testid="remove-all"]').click();

@@ -32,25 +32,21 @@ import {
 import { UploadQueue } from '../../books/upload-queue';
 import { DB } from '../../core/db';
 import type { Book, ID } from '../../core/models';
-import { CLOCK } from '../../core/clock';
 import { Repo } from '../../core/repo';
-import { AuthApi } from '../../auth/auth.service';
-import { categoryHue } from '../../stats/heatmap';
-import { formatDuration } from '../../stats/format';
-import { SyncStatusComponent } from '../../sync/sync-status.component';
 import { COPY } from '../../ui/copy';
 import { icon, type IconName } from '../../ui/icons';
 import type { CategoryBarComponent } from '../../books/library/category-bar.component';
 import { BookCardComponent, type BookView } from './book-card.component';
 import { FilterSheetComponent } from './filter-sheet.component';
 import { DEFAULT_DIR, loadLibraryState, saveLibraryState, sortHasDirection, type FilterValue } from './library-state';
-import { firstName, welcomeStats } from './greeting';
-import { RecentCardComponent } from './recent-card.component';
 import { SortMenuComponent } from './sort-menu.component';
 import { UpNextComponent } from './up-next.component';
 
 const TABS: readonly LibraryTab[] = ['all', 'reading', 'to-read', 'finished'];
 const RECENT_LIMIT = 5;
+
+/** The palette slot (1 to 8) of a category, the same rule Stats uses (its `order` modulo eight), so colours match. */
+const categoryHue = (order: number): number => (((Math.trunc(order) % 8) + 8) % 8) + 1;
 
 type BarComponentType = typeof import('../../books/library/category-bar.component').CategoryBarComponent;
 
@@ -83,39 +79,15 @@ function isPdf(file: File): boolean {
 @Component({
   selector: 'f-library-page',
   imports: [
-    SyncStatusComponent,
     BookCardComponent,
-    RecentCardComponent,
     FilterSheetComponent,
     SortMenuComponent,
     UpNextComponent,
   ],
   template: `
     <section class="page">
-      <header class="hello">
-        <h1 data-testid="welcome">{{ welcomeText() }}</h1>
-        <p class="stats" data-testid="welcome-stats">
-          <span class="stat">{{ streakText() }}</span>
-          <span class="sep" aria-hidden="true">·</span>
-          <span class="stat">{{ timeText() }}</span>
-          @if (stats().finished > 0) {
-            <span class="sep" aria-hidden="true">·</span>
-            <span class="stat">{{ copy.finishedCount(stats().finished) }}</span>
-          }
-        </p>
-        <iqra-sync-status />
-      </header>
-
-      @if (recentViews().length > 0) {
-        <section class="recent" data-testid="recent" aria-labelledby="recent-h">
-          <h2 id="recent-h" class="sec-h">{{ copy.continue }}</h2>
-          <ul class="recent-row">
-            @for (v of recentViews(); track v.book.id) {
-              <li><iqra-recent-card [view]="v" /></li>
-            }
-          </ul>
-        </section>
-      }
+      <!-- The greeting and Continue reading row load on demand (see mountTop), so their code stays out of the initial bundle. -->
+      <div class="top-slot"><ng-container #topHost /></div>
 
       <div class="lib-head">
         <h2 class="sec-h">{{ copy.section }}</h2>
@@ -283,25 +255,8 @@ function isPdf(file: File): boolean {
       margin: 0 auto;
       padding: 20px var(--gutter) 24px;
     }
-    h1 { margin: 2px 0 0; font-size: 26px; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; overflow-wrap: anywhere; }
-    .hello { margin-bottom: 14px; }
-    .stats { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin: 6px 0 0; color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; }
-    .sep { opacity: 0.6; }
+    .top-slot { min-height: 74px; }
     .sec-h { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
-    .recent { margin-bottom: 18px; }
-    .recent .sec-h { margin-bottom: 10px; }
-    .recent-row {
-      display: flex;
-      gap: 12px;
-      margin: 0 calc(-1 * var(--gutter));
-      padding: 2px var(--gutter) 6px;
-      overflow-x: auto;
-      list-style: none;
-      scroll-snap-type: x proximity;
-      scroll-padding-inline: var(--gutter);
-      scrollbar-width: thin;
-    }
-    .recent-row li { flex: none; width: 92px; scroll-snap-align: start; }
     .lib-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
     .actions { display: flex; align-items: center; gap: 2px; }
     .icon-btn {
@@ -532,8 +487,6 @@ export class LibraryPage {
   private readonly catalog = inject(CatalogService);
   private readonly importer = inject(ImportService);
   private readonly uploads = inject(UploadQueue);
-  private readonly auth = inject(AuthApi);
-  private readonly clock = inject(CLOCK);
 
   protected readonly copy = COPY.library;
   protected readonly barCopy = COPY.categoryBar;
@@ -549,6 +502,7 @@ export class LibraryPage {
   private readonly fileInput = viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
   private readonly barHost = viewChild('barHost', { read: ViewContainerRef });
+  private readonly topHost = viewChild('topHost', { read: ViewContainerRef });
   /** The bar's code could not be loaded. */
   protected readonly barFailed = signal(false);
   /** A selected category chip is scrolled out of the bar's visible part. */
@@ -598,17 +552,8 @@ export class LibraryPage {
   /** The bar is for managing categories too, so it stays once any exist; with nothing at all there is nothing to filter. */
   protected readonly showCategoryBar = computed(() => this.books().length > 0 || this.categories().length > 0);
   private readonly result = computed(() => queryLibrary(this.books(), this.effective(), this.ctx()));
-  private readonly sessionsRec = this.repo.live(() => this.db.sessions.filter((s) => !s.deleted).toArray());
   protected readonly recentViews = computed(() => recentBooks(this.books(), RECENT_LIMIT).map((b) => this.viewOf(b)));
-  protected readonly stats = computed(() =>
-    welcomeStats(this.sessionsRec() ?? [], this.books().filter((b) => b.status === 'finished').length, this.clock.now()),
-  );
-  protected readonly welcomeText = computed(() => {
-    const name = firstName(this.auth.profile()?.name);
-    return name ? this.copy.welcome(name) : this.copy.welcomeAnon;
-  });
-  protected readonly streakText = computed(() => (this.stats().streak > 0 ? this.copy.streakDays(this.stats().streak) : this.copy.streakNone));
-  protected readonly timeText = computed(() => this.copy.timeRead(formatDuration(this.stats().ms)));
+  protected readonly finishedCount = computed(() => this.books().filter((b) => b.status === 'finished').length);
   protected readonly mainViews = computed(() => this.result().main.map((b) => this.viewOf(b)));
   protected readonly pausedViews = computed(() => this.result().paused.map((b) => this.viewOf(b)));
 
@@ -675,6 +620,10 @@ export class LibraryPage {
   constructor() {
     inject(DestroyRef).onDestroy(() => (this.gone = true));
     effect(() => {
+      const host = this.topHost();
+      if (host && host.length === 0) void this.mountTop(host);
+    });
+    effect(() => {
       const host = this.barHost();
       if (host && host.length === 0) void this.mountBar(host);
     });
@@ -696,6 +645,26 @@ export class LibraryPage {
   protected retryBar(): void {
     const host = this.barHost();
     if (host && host.length === 0) void this.mountBar(host);
+  }
+
+  /** Loads the greeting and Continue reading row on first need and keeps its inputs in step with the page. */
+  private async mountTop(host: ViewContainerRef): Promise<void> {
+    let LibraryTopComponent: typeof import('./top.component').LibraryTopComponent;
+    try {
+      LibraryTopComponent = await import('./top.component').then((m) => m.LibraryTopComponent);
+    } catch {
+      return; // A stale deploy or no connection: the Library works without its greeting.
+    }
+    if (this.gone || host.length > 0 || this.topHost() !== host) return;
+    const ref = host.createComponent(LibraryTopComponent);
+    const inputs = effect(
+      () => {
+        ref.setInput('recent', this.recentViews());
+        ref.setInput('finished', this.finishedCount());
+      },
+      { injector: this.injector },
+    );
+    ref.onDestroy(() => inputs.destroy());
   }
 
   private async mountBar(host: ViewContainerRef): Promise<void> {

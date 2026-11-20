@@ -1,8 +1,8 @@
 import { Component, inject, input } from '@angular/core';
 import { FilesService } from '../../books/files.service';
-import { COPY } from '../../ui/copy';
 import { BookCoverComponent } from './book-cover.component';
 import type { BookView } from './book-card.component';
+import { TOP_COPY } from './top-copy';
 
 /** A recently read book in the Continue reading row: cover, title and progress. Tap opens it. */
 @Component({
@@ -44,6 +44,6 @@ export class RecentCardComponent {
   }
 
   protected label(): string {
-    return `${COPY.library.openBook(this.view().book.title)}, ${COPY.library.percentRead(this.percent())}`;
+    return `${TOP_COPY.openBook(this.view().book.title)}, ${TOP_COPY.percentRead(this.percent())}`;
   }
 }

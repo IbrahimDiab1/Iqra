@@ -56,24 +56,23 @@ test.describe('back navigation', () => {
     await expect(page.locator('.r-top .pg')).toContainText('p. 1 / 12');
   });
 
-  test('Library -> book -> back arrow -> Settings -> browser Back returns to the Library, not the book', async () => {
+  test('Library -> book -> back arrow -> Profile -> browser Back returns to the Library, not the book', async () => {
     await openBook(page);
     await page.getByRole('link', { name: 'Back to library' }).click();
     await libraryShown(page);
-    await page.getByRole('link', { name: 'Settings' }).click();
-    await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Profile' }).click();
+    await expect(page.getByTestId('profile-name')).toBeVisible();
     await page.goBack();
     await libraryShown(page);
     expect(path(page)).toBe('/library');
   });
 
-  test("Settings' back arrow steps back too: Library -> Settings -> arrow -> browser Back leaves the app's pages behind", async () => {
-    const before = await page.evaluate(() => history.length);
-    await page.getByRole('link', { name: 'Settings' }).click();
-    await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
-    await page.getByRole('link', { name: 'Back to library' }).click();
-    await libraryShown(page);
-    expect(await page.evaluate(() => history.length)).toBe(before + 1);
+  test("Manage downloads' back arrow returns to the Profile page", async () => {
+    await page.getByRole('link', { name: 'Profile' }).click();
+    await page.getByTestId('manage-downloads').click();
+    await expect(page.getByTestId('dl-title')).toHaveText([TITLE]);
+    await page.getByRole('link', { name: 'Back to profile' }).click();
+    await expect(page.getByTestId('profile-name')).toBeVisible();
   });
 
   test('after a reload the reader has no history behind it: the arrow goes to the Library and replaces the entry', async () => {

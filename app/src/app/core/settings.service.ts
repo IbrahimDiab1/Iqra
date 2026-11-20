@@ -1,13 +1,14 @@
 import { Injectable, Signal, computed, inject } from '@angular/core';
 import { DB } from './db';
+import { DEFAULT_PAGE_MODE, DEFAULT_PROGRESS_MODE } from './defaults';
 import type { Settings, SyncMeta } from './models';
 import { Repo } from './repo';
 
 const SETTINGS_ID = 'settings';
 
 export const DEFAULT_SETTINGS: Omit<Settings, keyof SyncMeta> = {
-  defaultProgressMode: 'last-page',
-  defaultPageMode: 'scroll',
+  defaultProgressMode: DEFAULT_PROGRESS_MODE,
+  defaultPageMode: DEFAULT_PAGE_MODE,
   defaultView: 'page',
   readerTheme: 'paper',
   weekStartsOn: 6,

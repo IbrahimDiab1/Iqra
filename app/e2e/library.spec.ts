@@ -89,3 +89,22 @@ test('delete everywhere with undo', async ({ browser }) => {
     await context.close();
   }
 });
+
+test('the Library home and Profile never scroll sideways, at 320, 390 and 1280 px, in dark mode', async ({ browser }) => {
+  for (const width of [320, 390, 1280]) {
+    const context = await browser.newContext({ viewport: { width, height: 800 }, colorScheme: 'dark' });
+    try {
+      const page = await openDevice(context);
+      await page.locator('input[type="file"]').setInputFiles([SAMPLE]);
+      await expect(bookCard(page, 'Sample Book')).toBeVisible();
+      const fits = () => page.evaluate(() => document.querySelector('.view')!.scrollWidth <= document.querySelector('.view')!.clientWidth);
+      expect(await fits(), `library at ${width}px`).toBe(true);
+      await expect(page.getByTestId('welcome-stats')).toBeVisible();
+      await page.getByRole('link', { name: 'Profile' }).click();
+      await expect(page.getByTestId('profile-name')).toBeVisible();
+      expect(await fits(), `profile at ${width}px`).toBe(true);
+    } finally {
+      await context.close();
+    }
+  }
+});

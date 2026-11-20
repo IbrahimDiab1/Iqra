@@ -1,41 +1,29 @@
 import { expect, test, type BrowserContext, type Download, type Locator, type Page } from '@playwright/test';
 import { join } from 'node:path';
 
-test('the gear opens Settings; Monday is saved as the week start; sign out with clear wipes the device', async ({ page }) => {
+test('the Profile tab shows the account; sign out with clear wipes the device', async ({ page }) => {
   await page.goto('/library');
   await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Settings' }).click();
-  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
-  await expect(page.getByText('reader@example.test')).toBeVisible();
-
-  await page.locator('[data-group="weekStartsOn"]').getByRole('button', { name: 'Monday' }).click();
-  await expect(page.locator('[data-group="weekStartsOn"]').getByRole('button', { name: 'Monday' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('welcome')).toHaveText('Welcome, Test');
+  await expect(page.getByRole('link', { name: 'Settings' })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Profile' }).click();
+  await expect(page.getByTestId('profile-name')).toHaveText('Test User');
+  await expect(page.getByTestId('profile-email')).toHaveText('reader@example.test');
+  // The old sections are gone.
+  await expect(page.locator('[data-section="categories"], [data-section="defaults"]')).toHaveCount(0);
+  await expect(page.getByTestId('quote-source')).toHaveCount(0);
 
   await page.getByTestId('sign-out').click();
   await page.getByTestId('clear-device').check();
   await page.getByTestId('confirm-sign-out').click();
   // The e2e build signs in again on load, so the reload lands back in the library: with an empty database.
   await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Settings' }).click();
-  await expect(page.locator('[data-group="weekStartsOn"]').getByRole('button', { name: 'Saturday' })).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('categories can be added, reordered, deleted and restored with Undo', async ({ page }) => {
+test('/settings still opens the Profile page', async ({ page }) => {
   await page.goto('/settings');
-  const names = page.locator('[data-testid="cat-name"]');
-  for (const name of ['Fiqh', 'History']) {
-    await page.getByTestId('add-input').fill(name);
-    await page.getByTestId('add').click();
-  }
-  await expect(names).toHaveText(['Fiqh', 'History']);
-
-  await page.getByRole('button', { name: 'Move Fiqh down' }).click();
-  await expect(names).toHaveText(['History', 'Fiqh']);
-
-  await page.getByRole('button', { name: 'Delete History' }).click();
-  await expect(names).toHaveText(['Fiqh']);
-  await page.getByRole('button', { name: 'Undo' }).click();
-  await expect(names).toHaveText(['History', 'Fiqh']);
+  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page.getByTestId('profile-name')).toBeVisible();
 });
 
 /* ---- storage, downloads, your data, reminders ---- */
@@ -82,8 +70,8 @@ async function addHighlight(page: Page): Promise<void> {
 }
 
 async function openSettings(page: Page): Promise<void> {
-  await page.getByRole('link', { name: 'Settings' }).click();
-  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Profile' }).click();
+  await expect(page.getByTestId('profile-name')).toBeVisible();
 }
 
 async function readDownload(download: Download): Promise<Buffer> {
@@ -106,7 +94,7 @@ function zipNames(zip: Buffer): string[] {
 }
 
 test('storage shows the Drive and device bars and manage downloads removes a book from this device', async ({ browser }) => {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ acceptDownloads: true });
   try {
     const page = await openDevice(context);
     await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
@@ -122,6 +110,9 @@ test('storage shows the Drive and device bars and manage downloads removes a boo
     await storage.getByTestId('manage-downloads').click();
     await expect(page.getByTestId('dl-title')).toHaveText(['Sample Book']);
     await expect(page.getByTestId('dl-total')).toBeVisible();
+    const copy = page.waitForEvent('download');
+    await page.getByTestId('dl-save').click();
+    expect((await copy).suggestedFilename()).toMatch(/\.pdf$/);
     await page.getByTestId('dl-remove').click();
     await expect(page.getByTestId('dl-empty')).toBeVisible();
   } finally {
@@ -161,8 +152,8 @@ test('notes export is a zip with one Markdown file per annotated book, and backu
     expect(parsed.tables['annotations']).toHaveLength(1);
 
     // A fresh device with nothing in it: restoring brings the book back.
-    const b = await openDevice(contextB, '/settings');
-    await expect(b.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+    const b = await openDevice(contextB, '/profile');
+    await expect(b.getByTestId('profile-name')).toBeVisible();
     const input = b.locator('[data-section="data"]').getByTestId('restore-input');
 
     // Garbage changes nothing and says so.
@@ -182,7 +173,7 @@ test('notes export is a zip with one Markdown file per annotated book, and backu
     await input.setInputFiles({ name: 'iqra-backup.json', mimeType: 'application/json', buffer: backup });
     await b.getByTestId('confirm-restore').click();
     await expect(b.locator('.toast')).toBeVisible();
-    await b.getByRole('link', { name: 'Back to library' }).click();
+    await b.getByRole('link', { name: 'Library' }).click();
     await b.getByRole('tab', { name: /To read/ }).click();
     await expect(bookCard(b)).toBeVisible();
   } finally {
@@ -191,25 +182,11 @@ test('notes export is a zip with one Markdown file per annotated book, and backu
   }
 });
 
-test('reading defaults are still set after a reload', async ({ browser }) => {
-  const context = await browser.newContext();
-  try {
-    const page = await openDevice(context, '/settings');
-    const group = page.locator('[data-group="weekStartsOn"]');
-    await group.getByRole('button', { name: 'Sunday' }).click();
-    await expect(group.getByRole('button', { name: 'Sunday' })).toHaveAttribute('aria-pressed', 'true');
-    await page.reload();
-    await expect(page.locator('[data-group="weekStartsOn"]').getByRole('button', { name: 'Sunday' })).toHaveAttribute('aria-pressed', 'true');
-  } finally {
-    await context.close();
-  }
-});
-
 test('reminders: turning on fills the Iqra calendar for 14 days, changing the time rebuilds, turning off can remove them', async ({ browser }) => {
   const context = await browser.newContext();
   try {
-    const page = await openDevice(context, '/settings');
-    await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+    const page = await openDevice(context, '/profile');
+    await expect(page.getByTestId('profile-name')).toBeVisible();
     const live = () => page.evaluate(() => (window as unknown as E2eCalendar).__iqraCalendar?.live() ?? []);
 
     await page.getByTestId('reminders-switch').check();
