@@ -64,3 +64,6 @@ writeFileSync(join(here, 'broken.pdf'), 'not a pdf');
     ]),
   );
 }
+
+// ccitt.pdf: a scanned-style page (see ccitt-pdf.mjs).
+writeFileSync(join(here, 'ccitt.pdf'), await (await import('./ccitt-pdf.mjs')).buildCcittPdf());

@@ -96,12 +96,24 @@ export function loadPdfjs(): Promise<typeof import('pdfjs-dist')> {
 }
 
 /**
+ * Where pdf.js finds its wasm decoders (JBIG2 also decodes CCITT scans; JPX; ICC colour) and ICC profiles.
+ * Absolute, because the worker resolves relative URLs against its own script, and under the document's base href.
+ */
+export function pdfjsAssetOptions(): { wasmUrl: string; iccUrl: string } {
+  const base = typeof document === 'undefined' ? 'http://localhost/' : document.baseURI;
+  return {
+    wasmUrl: new URL('assets/pdfjs/wasm/', base).href,
+    iccUrl: new URL('assets/pdfjs/iccs/', base).href,
+  };
+}
+
+/**
  * Starts loading a PDF with pdf.js. Await `task.promise`, and call `task.destroy()` when done.
  */
 export async function openPdf(blob: Blob): Promise<PDFDocumentLoadingTask> {
   const { getDocument } = await loadPdfjs();
   const data = new Uint8Array(await blob.arrayBuffer());
-  return getDocument({ data });
+  return getDocument({ data, ...pdfjsAssetOptions() });
 }
 
 /** Reads page count, info title and author, outline and language from a PDF. Throws UnreadablePdfError. */

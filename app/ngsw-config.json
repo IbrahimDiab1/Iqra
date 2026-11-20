@@ -16,6 +16,12 @@
           "/**/*.woff2"
         ]
       }
+    },
+    {
+      "name": "pdfjs-decoders",
+      "installMode": "lazy",
+      "updateMode": "prefetch",
+      "resources": { "files": ["/assets/pdfjs/**"] }
     }
   ]
 }
