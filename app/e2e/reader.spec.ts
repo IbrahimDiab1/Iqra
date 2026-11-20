@@ -661,9 +661,9 @@ test.describe('annotations', () => {
 
     await page.goto('/notes');
     await page.getByRole('searchbox').fill('zebra');
-    const row = page.locator('.nrow').filter({ hasText: 'zebra crossing' });
+    const row = page.locator('li.card').filter({ hasText: 'zebra crossing' });
     await expect(row).toHaveCount(1);
-    await row.click();
+    await row.getByRole('button', { name: 'Open in book' }).click();
     await expectPage(page, 2);
     await expect(page.locator('iqra-highlight-layer .flash').first()).toBeVisible();
   });
@@ -679,7 +679,7 @@ test.describe('annotations', () => {
 
     await page.goto('/notes');
     await page.getByRole('searchbox').fill('keep my place');
-    await page.locator('.nrow').filter({ hasText: 'keep my place' }).click();
+    await page.locator('li.card').filter({ hasText: 'keep my place' }).getByRole('button', { name: 'Open in book' }).click();
     await expectPage(page, 2);
     // The open-at-annotation parameters are consumed and removed from the address.
     await expect(page).not.toHaveURL(/[?&](page|a)=/);
