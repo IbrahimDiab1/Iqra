@@ -121,7 +121,8 @@ const MIN_QUERY = 2;
     </iqra-drawer>
   `,
   styles: `
-    .tabs { display: flex; gap: 4px; padding: 3px; margin-bottom: 10px; border-radius: var(--radius-control); background: var(--surface-2); }
+    /* Sticky at the top of the drawer body: the lists scroll beneath it (the shadow fills the gap below the strip). */
+    .tabs { position: sticky; top: 0; z-index: 2; display: flex; gap: 4px; padding: 3px; margin-bottom: 10px; border-radius: var(--radius-control); background: var(--surface-2); box-shadow: 0 10px 0 0 var(--surface); }
     .tabs button { flex: 1 0 auto; padding: 0 8px; min-height: 40px; border: 0; border-radius: 10px; background: none; color: var(--muted); font: 600 14px var(--ui); cursor: pointer; }
     /* On the narrowest screens the four tabs are tighter and the strip scrolls rather than clipping a label. */
     .tabs { overflow-x: auto; scrollbar-width: none; }

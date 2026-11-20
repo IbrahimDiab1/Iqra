@@ -21,6 +21,10 @@ const ICON = {
   words: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 10h8"/>',
   stats: '<path d="M5 20V11M12 20V4M19 20v-6"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  // "Aa": a large A and a small a, for the reading settings.
+  textSettings: '<path d="M2.5 18L7.5 6l5 12M4.1 14.2h6.8"/><circle cx="17" cy="15.2" r="2.6"/><path d="M19.6 12.6V18"/>',
+  // An open book, for reading mode (reflowed text).
+  bookOpen: '<path d="M12 6.5C10.4 5.2 8 4.5 4 4.5v13c4 0 6.4.7 8 2 1.6-1.3 4-2 8-2v-13c-4 0-6.4.7-8 2zM12 6.5v13"/>',
   type: '<path d="M3 18L8 6l5 12M4.6 14.2h6.8M15 18l3-7 3 7M15.9 16h4.2"/>',
   upload: '<path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M5 20h14"/>',
   trash: '<path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13"/>',

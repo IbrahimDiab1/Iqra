@@ -1,5 +1,5 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
-import { loadPdfjs } from '../books/import/pdf-meta';
+import { loadPdfjs, pdfjsAssetOptions } from '../books/import/pdf-meta';
 import { toReadingOrder } from './arabic-text';
 import { alignSpans, applyReadingOrder } from './text-layer';
 import { pageTextOf, type TextItem } from './text';
@@ -94,12 +94,13 @@ export class PdfSession implements PageRenderer {
     try {
       task =
         src.kind === 'local'
-          ? getDocument({ data: new Uint8Array(await src.blob.arrayBuffer()) })
+          ? getDocument({ data: new Uint8Array(await src.blob.arrayBuffer()), ...pdfjsAssetOptions() })
           : getDocument({
               url: src.url,
               httpHeaders: src.httpHeaders,
               rangeChunkSize: 65536,
               disableAutoFetch: true,
+              ...pdfjsAssetOptions(),
             });
       return new PdfSession(await task.promise, task);
     } catch (err) {

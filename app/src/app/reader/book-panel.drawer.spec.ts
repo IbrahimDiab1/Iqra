@@ -156,6 +156,14 @@ describe('BookPanelDrawerComponent', () => {
     });
   });
 
+  it('the tab row is sticky at the top of the scrolling body', () => {
+    create();
+    const row = el.querySelector<HTMLElement>('[role=tablist]')!;
+    const css = getComputedStyle(row);
+    expect(css.position).toBe('sticky');
+    expect(css.top).toBe('0px');
+  });
+
   it('has four tabs, switching with a click', () => {
     create();
     const tabs = Array.from(el.querySelectorAll<HTMLElement>('[role=tab]'));

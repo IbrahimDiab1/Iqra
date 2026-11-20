@@ -66,7 +66,7 @@ export function placeToolbar(o: { rect: DOMRect; touch: boolean; vw: number; vh:
   `,
   styles: `
     .bar {
-      position: fixed; z-index: 20; display: flex; align-items: center; gap: 2px; height: 48px; padding: 0 4px;
+      position: fixed; z-index: 23; display: flex; align-items: center; gap: 2px; height: 48px; padding: 0 4px;
       border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--fg); box-shadow: var(--shadow);
     }
     button { min-width: 40px; min-height: 40px; border: 0; border-radius: var(--radius-control); background: none; color: inherit; font: 13px var(--ui); cursor: pointer; }

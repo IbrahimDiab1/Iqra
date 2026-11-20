@@ -56,10 +56,18 @@ describe('PdfSession', () => {
     expect(Array.from(arg.data)).toEqual([1, 2, 3]);
   });
 
+  it('points pdf.js at the shipped wasm decoders and ICC profiles (CCITT/JBIG2 images need them)', async () => {
+    const c = install();
+    await PdfSession.open(local());
+    const arg = c.getDocument.mock.calls[0][0];
+    expect(arg.wasmUrl).toMatch(/^https?:\/\/.+\/assets\/pdfjs\/wasm\/$/);
+    expect(arg.iccUrl).toMatch(/^https?:\/\/.+\/assets\/pdfjs\/iccs\/$/);
+  });
+
   it('opens a drive source with range options', async () => {
     const c = install();
     await PdfSession.open({ kind: 'drive', url: 'https://x/y', httpHeaders: { Authorization: 'Bearer t' } });
-    expect(c.getDocument.mock.calls[0][0]).toEqual({
+    expect(c.getDocument.mock.calls[0][0]).toMatchObject({
       url: 'https://x/y',
       httpHeaders: { Authorization: 'Bearer t' },
       rangeChunkSize: 65536,

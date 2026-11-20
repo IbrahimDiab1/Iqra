@@ -1,5 +1,6 @@
 import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { join } from 'node:path';
+import { showToolbar } from './toolbar';
 
 const OUTLINE = join(__dirname, 'fixtures', 'outline.pdf');
 const SAMPLE = join(__dirname, 'fixtures', 'sample.pdf');
@@ -68,6 +69,7 @@ async function sync(page: Page): Promise<void> {
 
 /** Opens the side drawer from the toolbar: Contents & notes, or Search. */
 async function openPanel(page: Page, name: 'Contents' | 'Search'): Promise<void> {
+  await showToolbar(page);
   await page.getByRole('button', { name: name === 'Contents' ? 'Contents & notes' : 'Search', exact: true }).click();
   await expect(page.locator('iqra-drawer .panel.open')).toBeVisible();
 }
@@ -140,37 +142,101 @@ test.describe('reader', () => {
     await expect(page.getByRole('button', { name: 'Contents & notes' })).toBeVisible();
   });
 
-  test('the toolbar is a strip at the right edge, centred, beside the page', async () => {
+  test('the toolbar is a horizontal strip centred at the bottom, with zoom in it and no right-edge bar or zoom pair', async () => {
     await openBook(page);
-    const bar = (await page.getByRole('toolbar', { name: 'Reader tools' }).boundingBox())!;
-    const stage = (await page.locator('main.stage').boundingBox())!;
-    const header = (await page.locator('.r-top').boundingBox())!;
-    const view = page.viewportSize()!;
-    expect(bar.x + bar.width).toBeCloseTo(view.width, 0);
-    expect(stage.x + stage.width).toBeLessThanOrEqual(bar.x + 1);
-    expect(stage.y).toBeGreaterThanOrEqual(header.y + header.height - 1);
-    expect(stage.y + stage.height).toBeCloseTo(view.height, 0);
+    await showToolbar(page);
+    const bar = page.getByRole('toolbar', { name: 'Reader tools' });
+    await expect(bar).toHaveAttribute('aria-orientation', 'horizontal');
+    await expect(bar).not.toHaveClass(/away/);
+    await expect(page.getByRole('button', { name: 'Progress mode' })).toHaveCount(0);
+    await expect(page.locator('.zoompair')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Zoom in' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Zoom out' })).toBeVisible();
+    const box = (await bar.boundingBox())!;
     const first = (await page.getByRole('button', { name: 'Contents & notes' }).boundingBox())!;
     const last = (await page.getByRole('button', { name: 'Full screen' }).boundingBox())!;
-    const middle = (first.y + last.y + last.height) / 2;
-    expect(Math.abs(middle - (header.y + header.height + view.height) / 2)).toBeLessThan(30);
+    const stage = (await page.locator('main.stage').boundingBox())!;
+    const view = page.viewportSize()!;
+    // Centred horizontally, hugging the bottom, in one row, and the page uses the full width.
+    await expect.poll(async () => Math.round(((await bar.boundingBox())!.y + (await bar.boundingBox())!.height))).toBeGreaterThan(view.height - 24);
+    expect(Math.abs(first.x + (last.x + last.width - first.x) / 2 - view.width / 2)).toBeLessThan(12);
+    expect(Math.abs(first.y - last.y)).toBeLessThan(2);
+    expect(box.y).toBeGreaterThan(view.height / 2);
+    expect(stage.x).toBeCloseTo(0, 0);
+    expect(stage.x + stage.width).toBeCloseTo(view.width, 0);
+    // Zoom lives in the bar.
+    await page.getByRole('button', { name: 'Zoom in' }).click();
+    await page.getByRole('button', { name: 'Zoom in' }).click();
+    await page.getByRole('button', { name: 'Reading settings' }).click();
+    await expect(page.locator('iqra-reading-settings-sheet .pct')).not.toHaveText('100%');
   });
 
-  test('the drawer sits left of the toolbar and below the header, and Escape closes it', async () => {
+  test('the toolbar hides 3 s after the mouse leaves the bottom edge and a mouse near the edge brings it back', async () => {
+    await openBook(page);
+    const bar = page.getByRole('toolbar', { name: 'Reader tools' });
+    await showToolbar(page);
+    await expect(bar).not.toHaveClass(/away/);
+    await page.waitForTimeout(3500);
+    await expect(bar).not.toHaveClass(/away/);
+    await page.mouse.move(400, 200);
+    await page.waitForTimeout(2000);
+    await expect(bar).not.toHaveClass(/away/);
+    await expect(bar).toHaveClass(/away/, { timeout: 3000 });
+    // The header stays.
+    await expect(page.locator('.r-top')).toBeVisible();
+    await showToolbar(page);
+    await expect(bar).not.toHaveClass(/away/);
+  });
+
+  test('the toolbar stays while a button has keyboard focus, but not the focus a click leaves', async () => {
+    await openBook(page);
+    const bar = page.getByRole('toolbar', { name: 'Reader tools' });
+    // A modifier key press makes the next focus a keyboard focus (:focus-visible), as Tab would.
+    await page.keyboard.press('Shift');
+    await page.getByRole('button', { name: 'Search', exact: true }).focus();
+    await page.waitForTimeout(3600);
+    await expect(bar).not.toHaveClass(/away/);
+    await page.getByRole('button', { name: 'Search', exact: true }).blur();
+    await expect(bar).toHaveClass(/away/, { timeout: 5000 });
+    await showToolbar(page);
+    await page.getByRole('button', { name: 'Zoom in' }).click();
+    await page.mouse.move(400, 200);
+    await expect(bar).toHaveClass(/away/, { timeout: 6000 });
+  });
+
+  test('touch: a tap on the page shows the toolbar, it hides after 3 s, and nothing scrolls sideways at 390 px', async ({ browser }) => {
+    const touch = await browser.newContext({ hasTouch: true, viewport: { width: 390, height: 780 } });
+    try {
+      const tp = await openDevice(touch);
+      await addBook(tp);
+      await bookCard(tp).tap();
+      await expectPage(tp, 1);
+      const bar = tp.getByRole('toolbar', { name: 'Reader tools' });
+      await expect(bar).toHaveClass(/away/, { timeout: 5000 });
+      const stage = (await tp.locator('main.stage').boundingBox())!;
+      await tp.touchscreen.tap(stage.x + stage.width / 2, stage.y + stage.height * 0.7);
+      await expect(bar).not.toHaveClass(/away/);
+      await expect(bar).toHaveClass(/away/, { timeout: 5000 });
+      expect(await tp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    } finally {
+      await touch.close();
+    }
+  });
+
+  test('the drawer opens below the header and Escape closes it', async () => {
     await openBook(page);
     await openPanel(page, 'Contents');
-    const bar = (await page.getByRole('toolbar', { name: 'Reader tools' }).boundingBox())!;
     const header = (await page.locator('.r-top').boundingBox())!;
-    // The panel slides in over 220 ms; measure where it comes to rest.
+    const view = page.viewportSize()!;
+    // The panel slides in over 220 ms; measure where it comes to rest at the right edge.
     await expect
       .poll(async () => {
         const b = (await page.locator('iqra-drawer .panel').boundingBox())!;
-        return b.x + b.width <= bar.x + 1;
+        return Math.round(b.x + b.width);
       })
-      .toBe(true);
+      .toBe(view.width);
     const drawer = (await page.locator('iqra-drawer .panel').boundingBox())!;
     expect(drawer.y).toBeGreaterThanOrEqual(header.y + header.height - 1);
-    await expect(page.getByRole('button', { name: 'Contents & notes' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.locator('iqra-drawer .panel.open')).toHaveCount(0);
   });
@@ -212,27 +278,32 @@ test.describe('reader', () => {
     await expect(help).toContainText('Bookmark this page');
   });
 
-  test('progress mode: the popover switches to marked mode, Mark page read then works, and the mark survives switching back', async () => {
+  test('progress mode: the reading settings switch to marked mode, Mark page read then works, and the mark survives switching back', async () => {
     await openBook(page);
     const mark = page.locator('button[data-tool="mark"]');
     await expect(mark).toHaveAttribute('aria-disabled', 'true');
-    await page.getByRole('button', { name: 'Progress mode' }).click();
-    await page.getByRole('menuitemradio', { name: 'Track by marked pages' }).click();
+    const setMode = async (name: string) => {
+      await showToolbar(page);
+      await page.getByRole('button', { name: 'Reading settings' }).click();
+      await page.getByRole('radio', { name }).click();
+      await page.getByRole('button', { name: 'Close' }).click();
+    };
+    await setMode('Pages I mark as read');
     await expect(page.locator('.toast')).toContainText('Now tracking by marked pages');
     await expect(mark).not.toHaveAttribute('aria-disabled', 'true');
+    await showToolbar(page);
     await mark.click();
     await expect(mark).toHaveAttribute('aria-pressed', 'true');
 
-    await page.getByRole('button', { name: 'Progress mode' }).click();
-    await page.getByRole('menuitemradio', { name: 'Track by last page' }).click();
+    await setMode('Last page reached');
     await expect(mark).toHaveAttribute('aria-disabled', 'true');
-    await page.getByRole('button', { name: 'Progress mode' }).click();
-    await page.getByRole('menuitemradio', { name: 'Track by marked pages' }).click();
+    await setMode('Pages I mark as read');
     await expect(mark).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('hovering an icon button shows its label and shortcut after a short delay', async () => {
     await openBook(page);
+    await showToolbar(page);
     await page.getByRole('button', { name: 'Bookmark this page' }).hover();
     const tip = page.getByRole('tooltip');
     await expect(tip).toBeVisible();
@@ -244,6 +315,7 @@ test.describe('reader', () => {
 
   test('scrolling mode updates the page label while scrolling', async () => {
     await openBook(page);
+    await showToolbar(page);
     await page.getByRole('button', { name: 'Reading settings' }).click();
     await page.getByRole('radio', { name: 'Scrolling' }).click();
     await page.getByRole('button', { name: 'Close' }).click();
@@ -311,8 +383,10 @@ test.describe('reader', () => {
     await page.locator('.row').filter({ hasText: 'Chapter 3' }).click();
     await expectPage(page, 9);
 
+    await showToolbar(page);
     await page.getByRole('button', { name: 'Reading mode' }).click();
     await expect(page.locator('iqra-reflow-view p').filter({ hasText: 'Chapter 3, page 9' })).toBeVisible();
+    await showToolbar(page);
     await page.getByRole('button', { name: 'Page view' }).click();
     await expect(page.locator('iqra-pager')).toBeVisible();
     await expectPage(page, 9);
@@ -570,6 +644,7 @@ test.describe('annotations', () => {
 
   test('reading mode: the saved highlight shows as a mark', async () => {
     await highlightFirstSpan(page, 'Green');
+    await showToolbar(page);
     await page.getByRole('button', { name: 'Reading mode' }).click();
     await expect(page.locator('iqra-reflow-view mark.hl-green')).toHaveCount(1);
   });
@@ -623,6 +698,7 @@ test.describe('annotations', () => {
 });
 
 async function useScrolling(page: Page): Promise<void> {
+  await showToolbar(page);
   await page.getByRole('button', { name: 'Reading settings' }).click();
   await page.getByRole('radio', { name: 'Scrolling' }).click();
   await page.getByRole('button', { name: 'Close' }).click();
@@ -757,6 +833,7 @@ test.describe('reader geometry', () => {
     await expect.poll(async () => (await target.boundingBox())!.y).toBeGreaterThanOrEqual(barBottom - 1);
     await expect.poll(async () => (await target.boundingBox())!.y).toBeLessThan(barBottom + 40);
 
+    await showToolbar(page);
     await page.getByRole('button', { name: 'Reading mode' }).click();
     const first = page.locator('iqra-reflow-view article p').first();
     await expect(first).toBeVisible();
