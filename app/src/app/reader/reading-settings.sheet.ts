@@ -48,6 +48,15 @@ interface Choice<T> {
       </section>
 
       <section class="group">
+        <h4 id="rs-progress">{{ details.progressMode }}</h4>
+        <div class="seg" role="radiogroup" aria-labelledby="rs-progress">
+          @for (c of progressModes; track c.value) {
+            <button type="button" role="radio" [attr.aria-checked]="book().progressMode === c.value" [class.on]="book().progressMode === c.value" (click)="pickProgress(c.value)">{{ c.label }}</button>
+          }
+        </div>
+      </section>
+
+      <section class="group">
         <h4 id="rs-zoom">{{ state().view() === 'page' ? copy.zoom : copy.textSize }}</h4>
         <div class="stepper" role="group" aria-labelledby="rs-zoom">
           <button type="button" data-step="out" [disabled]="!canOut()" (click)="state().setZoom(out())">A−</button>
@@ -77,8 +86,15 @@ export class ReadingSettingsSheetComponent {
   readonly closed = output<void>();
   /** Emits the saved book after the page mode changes. */
   readonly bookChange = output<Book>();
+  /** The reader switches how this book's progress is counted (and says so). */
+  readonly progressModeChange = output<Book['progressMode']>();
 
   protected readonly copy = COPY.reader;
+  protected readonly details = COPY.details;
+  protected readonly progressModes: Choice<Book['progressMode']>[] = [
+    { value: 'last-page', label: COPY.details.lastPage },
+    { value: 'marked', label: COPY.details.marked },
+  ];
   protected readonly views: Choice<'page' | 'reflow'>[] = [
     { value: 'page', label: COPY.reader.pageView },
     { value: 'reflow', label: COPY.reader.readingMode },
@@ -103,6 +119,10 @@ export class ReadingSettingsSheetComponent {
   protected readonly out = computed(() => zoomOut(this.state().zoom(), this.state().view()));
   protected readonly canIn = computed(() => this.next() !== this.state().zoom());
   protected readonly canOut = computed(() => this.out() !== this.state().zoom());
+
+  protected pickProgress(mode: Book['progressMode']): void {
+    if (mode !== this.book().progressMode) this.progressModeChange.emit(mode);
+  }
 
   protected setTheme(readerTheme: Theme): void {
     this.settings.update({ readerTheme }).catch((err) => console.warn('Could not save the page color', err));

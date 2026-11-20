@@ -13,7 +13,6 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { DomSanitizer } from '@angular/platform-browser';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AnnotationService } from '../annotations/annotation.service';
 import { NoteSheetComponent } from '../annotations/note-sheet.component';
@@ -31,7 +30,6 @@ import { BackLinkDirective } from '../ui/back-link.directive';
 import { COPY } from '../ui/copy';
 import { PROGRESS_COPY } from './progress-copy';
 import { CHROME_COPY } from './chrome-copy';
-import { icon, type IconName } from '../ui/icons';
 import { ToastService } from '../ui/toast.service';
 import type { Place } from './jump-history';
 import { isReaderKeyIgnored } from './keys';
@@ -136,6 +134,7 @@ const LONG_PRESS_SLOP_PX = 10;
                 [theme]="theme()"
                 (pageChange)="s.pageChange($event)"
                 (showPage)="showPage()"
+                (tap)="toolbar()?.reveal()"
                 [annotations]="annotations()"
                 [flashId]="s.flash()"
                 (annotationTap)="actions.onAnnotationTap($event)"
@@ -151,6 +150,7 @@ const LONG_PRESS_SLOP_PX = 10;
                 [tool]="s.tool()"
                 (areaDrawn)="actions.onAreaDrawn($event)"
                 (placeChange)="s.placeChange($event)"
+                (tap)="toolbar()?.reveal()"
                 (zoomChange)="s.setZoom($event)"
                 (annotationTap)="actions.onAnnotationTap($event)"
               />
@@ -175,6 +175,7 @@ const LONG_PRESS_SLOP_PX = 10;
                   [tool]="s.tool()"
                   (areaDrawn)="actions.onAreaDrawn($event)"
                   (pageChange)="s.pageChange($event)"
+                  (tap)="toolbar()?.reveal()"
                   (zoomChange)="s.setZoom($event)"
                   (annotationTap)="actions.onAnnotationTap($event)"
                 />
@@ -190,11 +191,12 @@ const LONG_PRESS_SLOP_PX = 10;
             [progressMode]="b.progressMode"
             [pageMarked]="pageMarked()"
             [fullscreen]="fullscreen()"
-            [noteCount]="pageNoteCount()"
+            [hold]="s.tool() === 'area' || menuAt() !== null"
+            [canZoomIn]="zoomIn(s.zoom(), s.view()) !== s.zoom()"
+            [canZoomOut]="zoomOut(s.zoom(), s.view()) !== s.zoom()"
             [canUndo]="actions.undoStack.canUndo()"
             [canRedo]="actions.undoStack.canRedo()"
             (action)="onToolbar($event)"
-            (progressModeChange)="setProgressMode($event)"
           />
 
           <div class="overlays">
@@ -204,11 +206,6 @@ const LONG_PRESS_SLOP_PX = 10;
               (note)="actions.addNote()"
               (copy)="actions.copySelection()"
             />
-
-            <div class="zoompair">
-              <button type="button" class="ib" [attr.aria-label]="copy.zoom + ' +'" (click)="s.setZoom(zoomIn(s.zoom(), s.view()))" [innerHTML]="ic('zoomIn')"></button>
-              <button type="button" class="ib" [attr.aria-label]="copy.zoom + ' −'" (click)="s.setZoom(zoomOut(s.zoom(), s.view()))" [innerHTML]="ic('zoomOut')"></button>
-            </div>
 
             <iqra-book-panel-drawer
               [open]="panel() !== null"
@@ -255,6 +252,7 @@ const LONG_PRESS_SLOP_PX = 10;
               [state]="s"
               (closed)="settingsOpen.set(false)"
               (bookChange)="book.set($event)"
+              (progressModeChange)="setProgressMode($event)"
             />
           </div>
         </section>
@@ -269,29 +267,22 @@ const LONG_PRESS_SLOP_PX = 10;
     .actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
     .btn { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; padding: 0 16px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--fg); font: 15px var(--ui); text-decoration: none; cursor: pointer; }
     .btn.link { color: var(--accent); }
-    .btn:focus-visible, .ib:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
     .reader {
       --paper: var(--paper-light); --ink: var(--ink-light);
-      --reader-header-h: calc(52px + env(safe-area-inset-top, 0px)); --reader-toolbar-w: 52px;
+      --reader-header-h: calc(52px + env(safe-area-inset-top, 0px)); --reader-toolbar-w: 0px;
       position: fixed; inset: 0; display: grid; color: var(--ink);
-      grid-template-columns: minmax(0, 1fr) var(--reader-toolbar-w); grid-template-rows: var(--reader-header-h) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--reader-header-h) minmax(0, 1fr);
       background: color-mix(in srgb, var(--ink) 7%, var(--paper));
     }
     .reader[data-rt='sepia'] { --paper: var(--paper-sepia); --ink: var(--ink-sepia); }
     .reader[data-rt='night'] { --paper: var(--paper-night); --ink: var(--ink-night); }
-    .r-top { grid-column: 1 / -1; grid-row: 1; }
+    .r-top { grid-column: 1; grid-row: 1; }
     .stage { grid-column: 1; grid-row: 2; position: relative; min-width: 0; min-height: 0; overflow: hidden; }
-    .r-tools { grid-column: 2; grid-row: 2; min-height: 0; }
     /* Sheets, the drawer and the floating toolbars position themselves; they take no grid cell. */
     .overlays { display: contents; }
     .zoomwrap { width: 100%; height: 100%; }
-    .ib { display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none; padding: 0; border: 0; border-radius: var(--radius-control); background: none; color: inherit; cursor: pointer; }
-    .ib:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 8%, transparent); }
-    .zoompair { display: none; }
-    @media (min-width: 900px) {
-      .zoompair { position: absolute; right: calc(var(--reader-toolbar-w) + 16px); bottom: 24px; z-index: 5; display: grid; gap: 6px; background: color-mix(in srgb, var(--paper) 94%, transparent); border-radius: var(--radius-control); box-shadow: var(--shadow); }
-    }
   `,
 })
 export class ReaderPage implements OnDestroy {
@@ -312,7 +303,6 @@ export class ReaderPage implements OnDestroy {
   private readonly sessions = inject(SessionService);
   private readonly readMarks = inject(ReadMarkService);
   private readonly open = inject(PDF_OPENER);
-  private readonly sanitizer = inject(DomSanitizer);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly annotationService = inject(AnnotationService);
   private readonly repo = inject(Repo);
@@ -320,6 +310,7 @@ export class ReaderPage implements OnDestroy {
   protected readonly selection = inject(SelectionService);
   protected readonly actions = inject(ReaderActions);
   private readonly scroller = viewChild(ScrollerComponent);
+  protected readonly toolbar = viewChild(ReaderToolbarComponent);
 
   protected readonly status = signal<Status>('loading');
   protected readonly statusKind = computed(() => {
@@ -344,11 +335,6 @@ export class ReaderPage implements OnDestroy {
   private readonly annotationSource = signal<Signal<Annotation[] | undefined> | null>(null);
   /** This book's live annotations. */
   protected readonly annotations = computed(() => this.annotationSource()?.() ?? []);
-  /** How many notes, highlights, areas and side notes are on the current page (bookmarks do not count). */
-  protected readonly pageNoteCount = computed(() => {
-    const page = this.state()?.page();
-    return this.annotations().filter((a) => a.type !== 'bookmark' && a.page === page).length;
-  });
   private readonly allAnnotations = this.annotationService.all();
   protected readonly tagSuggestions = computed(() => tagSuggestionsFrom(this.allAnnotations()));
   protected readonly session = signal<ReaderSession | null>(null);
@@ -429,10 +415,6 @@ export class ReaderPage implements OnDestroy {
       pageBox: (page) => this.host.nativeElement.querySelector(`.text-layer[data-page="${page}"]`)?.getBoundingClientRect(),
     });
     void this.load();
-  }
-
-  protected ic(name: IconName) {
-    return this.sanitizer.bypassSecurityTrustHtml(icon(name, 22));
   }
 
   async load(): Promise<void> {
@@ -606,7 +588,8 @@ export class ReaderPage implements OnDestroy {
       case 'undo': void this.actions.undo(); break;
       case 'redo': void this.actions.redo(); break;
       case 'fullscreen': this.toggleFullscreen(); break;
-      default: break;
+      case 'zoomIn': this.state()?.setZoom(zoomIn(this.state()!.zoom(), this.state()!.view())); break;
+      case 'zoomOut': this.state()?.setZoom(zoomOut(this.state()!.zoom(), this.state()!.view())); break;
     }
   }
 

@@ -10,17 +10,18 @@ import type { PositionService } from './position.service';
 import { ReaderState } from './reader.state';
 import { ReadingSettingsSheetComponent } from './reading-settings.sheet';
 
-const BOOK = { id: 'b1', pageCount: 10, pageMode: 'swipe', title: 'T', deviceId: 'd', updatedAt: 1 } as Book;
+const BOOK = { id: 'b1', pageCount: 10, pageMode: 'swipe', progressMode: 'last-page', title: 'T', deviceId: 'd', updatedAt: 1 } as Book;
 
 @Component({
   imports: [ReadingSettingsSheetComponent],
-  template: `<iqra-reading-settings-sheet [open]="true" [book]="book" [state]="state" (closed)="closes = closes + 1" (bookChange)="changed.push($event)" />`,
+  template: `<iqra-reading-settings-sheet [open]="true" [book]="book" [state]="state" (closed)="closes = closes + 1" (bookChange)="changed.push($event)" (progressModeChange)="modes.push($event)" />`,
 })
 class HostComponent {
   book = BOOK;
   state = new ReaderState(BOOK, { schedule: () => undefined, flush: async () => undefined } as unknown as PositionService);
   closes = 0;
   changed: Book[] = [];
+  modes: Book['progressMode'][] = [];
 }
 
 describe('ReadingSettingsSheetComponent', () => {
@@ -73,6 +74,16 @@ describe('ReadingSettingsSheetComponent', () => {
     radio(COPY.reader.scroll).click();
     await vi.waitFor(async () => expect((await db.books.get('b1'))!.pageMode).toBe('scroll'));
     expect(host.changed[0].pageMode).toBe('scroll');
+  });
+
+  it('Progress mode is a per-book choice here: it shows the book\u2019s mode and reports a change', () => {
+    expect(el.textContent).toContain(COPY.details.progressMode);
+    expect(radio(COPY.details.lastPage).getAttribute('aria-checked')).toBe('true');
+    expect(radio(COPY.details.marked).getAttribute('aria-checked')).toBe('false');
+    radio(COPY.details.lastPage).click();
+    expect(host.modes).toEqual([]);
+    radio(COPY.details.marked).click();
+    expect(host.modes).toEqual(['marked']);
   });
 
   it('Page color writes the reader theme setting', async () => {

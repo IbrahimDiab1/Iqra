@@ -1,5 +1,6 @@
 import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { join } from 'node:path';
+import { showToolbar } from './toolbar';
 
 const OUTLINE = join(__dirname, 'fixtures', 'outline.pdf');
 const TITLE = 'Outline Book';
@@ -112,9 +113,11 @@ test.describe('progress and stats', () => {
     await openBook(page);
     const mark = page.locator('button[data-tool="mark"]');
     await expect(mark).toHaveAttribute('aria-pressed', 'false');
+    await showToolbar(page);
     await mark.click();
     await expect(mark).toHaveAttribute('aria-pressed', 'true');
     await readTo(page, 1, 2);
+    await showToolbar(page);
     await mark.click();
     await expect(mark).toHaveAttribute('aria-pressed', 'true');
     await backToLibrary(page);
@@ -139,6 +142,7 @@ test.describe('progress and stats', () => {
   test('contents: chapter rings mark the range and "N of M chapters done" follows', async () => {
     await configureBook(page, { mode: 'Pages I mark as read' });
     await openBook(page);
+    await showToolbar(page);
     await page.getByRole('button', { name: 'Contents & notes', exact: true }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.getByText('0 of 3 chapters done')).toBeVisible();

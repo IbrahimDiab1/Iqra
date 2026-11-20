@@ -486,23 +486,18 @@ describe('ReaderPage', () => {
     });
   });
 
-  describe('notes tab and badge', () => {
+  describe('notes tab', () => {
     const hl = (id: string, page: number) => TestBed.inject(AnnotationService).create({
       bookId: 'book-1', type: 'highlight', page, color: 'green', tags: [],
       text: { page, start: { item: 0, offset: 0 }, end: { item: 0, offset: 5 }, rects: [{ x: 0.1, y: 0.5, w: 0.2, h: 0.02 }], quote: `quote ${id}` },
     });
 
-    it('the Contents button shows how many notes the current page has, and hides at zero; bookmarks do not count', async () => {
+    it('the Contents button carries no notes-count badge', async () => {
       await create();
-      const pill = () => tool('contents')!;
-      expect(pill().querySelector('.badge')).toBeNull();
-      const svc = TestBed.inject(AnnotationService);
-      await svc.create({ bookId: 'book-1', type: 'bookmark', page: 7 });
       await hl('a', 7);
-      await hl('b', 9);
       await vi.waitFor(() => {
         fixture.detectChanges();
-        expect(pill().querySelector('.badge')!.textContent!.trim()).toBe('1');
+        expect(tool('contents')!.querySelector('.badge')).toBeNull();
       });
     });
 
@@ -1073,10 +1068,12 @@ describe('ReaderPage', () => {
   });
 
   describe('progress mode switch', () => {
+    // Progress mode lives in the reading settings (per book), not on the toolbar.
     const choose = async (label: string) => {
-      tool('progress')!.click();
+      expect(tool('progress')).toBeNull();
+      tool('settings')!.click();
       fixture.detectChanges();
-      Array.from(el.querySelectorAll<HTMLButtonElement>('[role=menuitemradio]')).find((b) => b.textContent!.includes(label))!.click();
+      Array.from(el.querySelectorAll<HTMLButtonElement>('iqra-reading-settings-sheet [role=radio]')).find((b) => b.textContent!.includes(label))!.click();
     };
 
     it('switches to marked mode, keeps the data, and the Mark button becomes active', async () => {
@@ -1084,7 +1081,7 @@ describe('ReaderPage', () => {
       await db.readMarks.put({ id: 'book-1:3', bookId: 'book-1', page: 3, read: true, updatedAt: 1, deviceId: 'dev' });
       await create();
       expect(tool('mark')!.getAttribute('aria-disabled')).toBe('true');
-      await choose(CHROME_COPY.trackByMarked);
+      await choose(COPY.details.marked);
       await vi.waitFor(async () => {
         fixture.detectChanges();
         expect((await db.books.get('book-1'))!.progressMode).toBe('marked');
@@ -1098,7 +1095,7 @@ describe('ReaderPage', () => {
     it('switches back to last-page mode and says so', async () => {
       await db.books.put(makeBook({ progressMode: 'marked' }));
       await create();
-      await choose(CHROME_COPY.trackByLast);
+      await choose(COPY.details.lastPage);
       await vi.waitFor(async () => {
         fixture.detectChanges();
         expect((await db.books.get('book-1'))!.progressMode).toBe('last-page');

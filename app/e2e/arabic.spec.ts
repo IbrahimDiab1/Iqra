@@ -1,5 +1,6 @@
 import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { join } from 'node:path';
+import { showToolbar } from './toolbar';
 
 // arabic.pdf (see e2e/fixtures/arabic-pdf.mjs): page 1 presentation forms, page 2 base letters, page 3 diacritics and
 // Arabic-Indic digits, page 4 one text run per word written left to right. The book reads right to left.
@@ -19,6 +20,7 @@ async function openArabicBook(page: Page): Promise<void> {
 async function searchFor(page: Page, query: string): Promise<Locator> {
   const box = page.getByRole('searchbox');
   if (!(await box.isVisible())) {
+    await showToolbar(page);
     await page.getByRole('button', { name: 'Search', exact: true }).click();
   }
   await box.fill(query);
@@ -121,6 +123,7 @@ test.describe('arabic', () => {
     expect(union.top).toBeLessThanOrEqual(y);
     expect(union.bottom).toBeGreaterThanOrEqual(y);
 
+    await showToolbar(page);
     await page.getByRole('button', { name: 'Contents & notes' }).click();
     await page.getByRole('tab', { name: 'Notes' }).click();
     await expect(page.locator('iqra-drawer .prev').first()).toHaveText('القراءة غذاء العقل والروح');
@@ -143,6 +146,7 @@ test.describe('arabic', () => {
       document.dispatchEvent(new Event('selectionchange'));
     });
     await page.getByRole('toolbar', { name: 'Highlight' }).getByRole('button', { name: 'Green' }).click();
+    await showToolbar(page);
     await page.getByRole('button', { name: 'Contents & notes' }).click();
     await page.getByRole('tab', { name: 'Notes' }).click();
     await expect(page.locator('iqra-drawer .prev').first()).toHaveText('القراءة غذاء العقل والروح');
