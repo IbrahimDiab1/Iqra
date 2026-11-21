@@ -50,9 +50,9 @@ describe('zoom', () => {
     expect(canvasScale(1, 612, 792, 2)).toBe(2);
   });
 
-  it('canvasScale keeps the canvas area within 10 million pixels (40 MB of bitmap per page, and up to three pages are alive at once)', () => {
+  it('canvasScale keeps the canvas area within 6 million pixels (24 MB of bitmap per page, and up to three pages are alive at once; a bigger canvas made every page turn a long task on a dense page)', () => {
     const s = canvasScale(4, 2000, 3000, 2);
     expect(s).toBeGreaterThan(0);
-    expect(2000 * s * (3000 * s)).toBeLessThanOrEqual(10_000_000);
+    expect(2000 * s * (3000 * s)).toBeLessThanOrEqual(6_000_000);
   });
 });

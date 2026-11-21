@@ -6,15 +6,20 @@ import { SelectionService } from './selection.service';
 
 class FakeRenderer implements PageRenderer {
   numPages = 10;
+  /** When true, pages paint at once (so their text layers are asked for) and the pages given a text layer are recorded. */
+  paints = false;
+  textPages: number[] = [];
   async pageSize(): Promise<PageSize> {
     return { widthPt: 500, heightPt: 700 };
   }
   renderPage(_p: number, _c: HTMLCanvasElement, _w: number, signal: AbortSignal): Promise<void> {
+    if (this.paints) return Promise.resolve();
     return new Promise<void>((_, reject) =>
       signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))),
     );
   }
-  renderTextLayer(): Promise<void> {
+  renderTextLayer(page: number): Promise<void> {
+    this.textPages.push(page);
     return Promise.resolve();
   }
   async textItems() {
@@ -95,6 +100,18 @@ describe('PagerComponent', () => {
   });
 
   afterEach(() => vi.restoreAllMocks());
+
+  it('gives a text layer only to the current page: the two neighbours are pictures until they are turned to', async () => {
+    const fx = TestBed.createComponent(HostComponent);
+    fx.componentInstance.renderer.paints = true;
+    fx.detectChanges();
+    await fx.whenStable();
+    fx.detectChanges();
+    await vi.waitFor(() => expect(fx.componentInstance.renderer.textPages.length).toBeGreaterThan(0));
+    await settle();
+    expect(new Set(fx.componentInstance.renderer.textPages)).toEqual(new Set([5]));
+    fx.destroy();
+  });
 
   it('a long left drag goes to the next page', async () => {
     await drag(-120, 400);

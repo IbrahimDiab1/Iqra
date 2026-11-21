@@ -299,6 +299,65 @@ describe('PdfSession', () => {
     });
   });
 
+  describe('text layer', () => {
+    /** A page like a typeset Arabic book: a text item per word and one per space between words, 30 lines of 12 words. */
+    const denseItems = () => {
+      const items: object[] = [];
+      for (let line = 0; line < 30; line++) {
+        for (let w = 0; w < 12; w++) {
+          const x = 380 - w * 30;
+          items.push({ str: 'كلمة', transform: [10, 0, 0, 10, x, 800 - line * 14], width: 25, height: 10, fontName: 'f1', dir: 'rtl' });
+          items.push({ str: w === 11 ? '' : ' ', transform: [10, 0, 0, 10, x - 25, 800 - line * 14], width: 0.3, height: 10, fontName: 'f1', dir: 'ltr', hasEOL: w === 11 });
+        }
+      }
+      return items;
+    };
+
+    function installLayer(items: object[]) {
+      const c = install();
+      c.getTextContent.mockResolvedValue({ items, styles: { f1: { fontFamily: 'sans-serif' } }, lang: 'ar' });
+      const sources: { items: { str: string }[] }[] = [];
+      class FakeTextLayer {
+        textDivs: HTMLElement[] = [];
+        constructor(private readonly o: { textContentSource: { items: { str: string; hasEOL?: boolean }[] }; container: HTMLElement }) {
+          sources.push(o.textContentSource);
+        }
+        async render() {
+          for (const it of this.o.textContentSource.items) {
+            const span = document.createElement('span');
+            span.textContent = it.str;
+            this.textDivs.push(span);
+            if (it.str !== '') this.o.container.append(span);
+            if (it.hasEOL) this.o.container.append(document.createElement('br'));
+          }
+        }
+        cancel() {}
+      }
+      const getDocument = c.getDocument;
+      setPdfjsLoaderForTests(async () => ({ getDocument, TextLayer: FakeTextLayer }) as never);
+      return { c, sources };
+    }
+
+    it('gives the layer one span per word, not one per space, and tags each with its item', async () => {
+      const { c, sources } = installLayer(denseItems());
+      const s = await PdfSession.open(local());
+      const box = document.createElement('div');
+      await s.renderTextLayer(1, box, 600, new AbortController().signal);
+      const spans = Array.from(box.querySelectorAll('span'));
+      expect(spans).toHaveLength(30 * 12);
+      expect(spans.every((x) => x.textContent === 'كلمة')).toBe(true);
+      // The kept items are the words (even indexes) and the line-end items; spans point back at the page's item list.
+      expect(sources[0].items.length).toBeLessThan(30 * 24);
+      const tagged = spans.map((x) => Number(x.dataset['item']));
+      expect(tagged.slice(0, 3)).toEqual([0, 2, 4]);
+      expect(new Set(tagged).size).toBe(tagged.length);
+      // One extraction serves the layer, the selection and the search.
+      expect(c.getTextContent).toHaveBeenCalledTimes(1);
+      await s.textItems(1);
+      expect(c.getTextContent).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('destroy destroys the document', async () => {
     const c = install();
     const s = await PdfSession.open(local());

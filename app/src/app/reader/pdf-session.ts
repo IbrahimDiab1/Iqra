@@ -1,7 +1,7 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import { loadPdfjs, pdfjsAssetOptions } from '../books/import/pdf-meta';
 import { toReadingOrder } from './arabic-text';
-import { alignSpans, applyReadingOrder } from './text-layer';
+import { applyReadingOrder, tagSpans, textLayerSource, type PdfTextContent } from './text-layer';
 import { pageTextOf, type TextItem } from './text';
 import { canvasScale } from './zoom';
 
@@ -83,7 +83,7 @@ export class PdfSession implements PageRenderer {
   private readonly sizes = new Map<number, Promise<PageSize>>();
   private readonly texts = new Map<number, string>();
   /** Per page: items in pdf.js order and in reading order, computed once (selection and highlights ask on every change). */
-  private readonly raws = new Map<number, Promise<TextItem[]>>();
+  private readonly raws = new Map<number, Promise<PdfTextContent>>();
   private readonly ordered = new Map<number, Promise<TextItem[]>>();
   private destroyed = false;
   private active = 0;
@@ -255,12 +255,15 @@ export class PdfSession implements PageRenderer {
     try {
       const base = p.getViewport({ scale: 1 });
       const viewport = p.getViewport({ scale: cssWidthPx / base.width });
-      const raw = await this.rawTextItems(page);
+      // The same extraction the selection and search use: the page's text is read once, not once more for the layer.
+      const content = await this.rawContent(page);
       if (signal.aborted) throw abortError();
+      // Gaps between words (a space item each) are left out: they hold no letters, are invisible, and are half the spans of a page.
+      const source = textLayerSource(content);
       container.replaceChildren();
       // pdf.js's own viewer sets this on the layer; the text-layer CSS (page-view.component.ts) sizes the fonts from it.
       container.style.setProperty('--total-scale-factor', String(viewport.scale));
-      const layer = new TextLayer({ textContentSource: p.streamTextContent(), container, viewport });
+      const layer = new TextLayer({ textContentSource: source.content as unknown as ConstructorParameters<PdfjsModule['TextLayer']>[0]['textContentSource'], container, viewport });
       const onAbort = () => layer.cancel();
       signal.addEventListener('abort', onAbort, { once: true });
       try {
@@ -273,8 +276,8 @@ export class PdfSession implements PageRenderer {
       }
       if (signal.aborted) throw abortError();
       // Spans are tagged with pdf.js's item index first, then moved to reading order along with `textItems`.
-      alignSpans(raw, layer.textDivs);
-      applyReadingOrder(container, layer.textDivs, toReadingOrder(raw).order);
+      tagSpans(layer.textDivs, source.kept);
+      applyReadingOrder(container, layer.textDivs, toReadingOrder(content.items).order);
     } finally {
       p.cleanup();
     }
@@ -294,12 +297,17 @@ export class PdfSession implements PageRenderer {
 
   /** The items in the order pdf.js produced them (the order its text-layer spans are in). */
   private rawTextItems(page: number): Promise<TextItem[]> {
+    return this.rawContent(page).then((c) => c.items);
+  }
+
+  /** The page's text content as pdf.js produced it, read once and kept for the pages near the reader. */
+  private rawContent(page: number): Promise<PdfTextContent> {
     let raw = this.raws.get(page);
     if (!raw) {
-      raw = this.extractItems(page);
+      raw = this.extractContent(page);
       raw.catch(() => this.raws.delete(page));
       this.raws.set(page, raw);
-      this.trim(this.raws);
+      while (this.raws.size > ITEMS_CACHE_PAGES) this.raws.delete(this.raws.keys().next().value as number);
     }
     return raw;
   }
@@ -309,7 +317,7 @@ export class PdfSession implements PageRenderer {
     while (cache.size > ITEMS_CACHE_PAGES) cache.delete(cache.keys().next().value as number);
   }
 
-  private async extractItems(page: number): Promise<TextItem[]> {
+  private async extractContent(page: number): Promise<PdfTextContent> {
     const p = await this.doc.getPage(page);
     let content;
     try {
@@ -317,7 +325,9 @@ export class PdfSession implements PageRenderer {
     } finally {
       p.cleanup();
     }
-    return content.items.filter((i): i is typeof i & TextItem => 'str' in i) as unknown as TextItem[];
+    // Marked-content markers are dropped: the layer is a flat run of spans, and only text items carry a string.
+    const items = content.items.filter((i): i is typeof i & TextItem => 'str' in i) as unknown as TextItem[];
+    return { items, styles: content.styles as PdfTextContent['styles'], lang: content.lang };
   }
 
   async pageText(page: number): Promise<string> {

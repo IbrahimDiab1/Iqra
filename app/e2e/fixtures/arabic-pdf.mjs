@@ -261,9 +261,9 @@ export async function buildArabicPdf(pages) {
     const page = doc.addPage([420, 595]);
     const kind = p.mode === 'presentation' ? 'presentation' : 'base';
     page.node.setFontDictionary(PDFName.of('F1'), fonts[kind]);
-    const size = 22;
+    const size = p.size ?? 22;
     const gap = p.gap ?? DEFAULT_GAP;
-    let y = 520;
+    let y = p.top ?? 520;
     let content = 'BT\n';
     const advance = (glyphs) => glyphs.reduce((sum, g) => sum + widths.get(g.gid), 0) * (size / 1000);
     for (const runs of laid[i]) {
@@ -275,7 +275,7 @@ export async function buildArabicPdf(pages) {
         content += `/F1 ${size} Tf 1 0 0 1 ${x.toFixed(2)} ${y} Tm <${hex}> Tj\n`;
         x += advance(glyphs) + gap;
       }
-      y -= 40;
+      y -= p.leading ?? 40;
     }
     content += 'ET';
     page.node.set(PDFName.of('Contents'), context.register(context.flateStream(Buffer.from(content))));

@@ -1,7 +1,7 @@
 export const PAGE_ZOOM = { min: 0.5, max: 4, steps: [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4] } as const;
 export const TEXT_ZOOM = { min: 0.8, max: 2, step: 0.1 } as const;
 
-const MAX_CANVAS_AREA = 10_000_000;
+const MAX_CANVAS_AREA = 6_000_000;
 
 type View = 'page' | 'reflow';
 
@@ -47,7 +47,7 @@ export function fitScale(pageWidthPt: number, containerWidthPx: number): number 
 
 /**
  * Canvas pixels per page point: the CSS scale times the device pixel ratio (capped at 2),
- * reduced until the canvas area is at most 10 million pixels.
+ * reduced until the canvas area is at most 6 million pixels (a 1280 px wide page at 2x is 2060 px wide: still sharp, and far cheaper to draw and hold).
  */
 export function canvasScale(cssScale: number, pageWpt: number, pageHpt: number, dpr: number): number {
   let s = cssScale * Math.min(dpr, 2);

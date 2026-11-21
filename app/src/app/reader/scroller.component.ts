@@ -61,6 +61,7 @@ const DEFAULT_RATIO = 1.414;
               <iqra-page-view
                 [renderer]="renderer()"
                 [page]="box.index + 1"
+                [withText]="box.textual"
                 [fitWidthPx]="fitWidth()"
                 [zoom]="zoom()"
                 [theme]="theme()"
@@ -151,8 +152,19 @@ export class ScrollerComponent implements OnDestroy {
       overscanPx: this.viewportH(),
     }),
   );
+  /** Pages within half a viewport of the screen get a text layer; the rest of the render window is picture only. */
+  private readonly textRange = computed(() =>
+    visibleRange({
+      scrollTop: this.scrollTop(),
+      viewportH: this.viewportH(),
+      tops: this.tops(),
+      heights: this.heights(),
+      overscanPx: this.viewportH() / 2,
+    }),
+  );
   protected readonly boxes = computed(() => {
     const { first, last } = this.range();
+    const text = this.textRange();
     const tops = this.tops();
     const heights = this.heights();
     return heights.map((height, index) => ({
@@ -160,6 +172,7 @@ export class ScrollerComponent implements OnDestroy {
       top: tops[index],
       height,
       rendered: index >= first && index <= last,
+      textual: index >= text.first && index <= text.last,
     }));
   });
 

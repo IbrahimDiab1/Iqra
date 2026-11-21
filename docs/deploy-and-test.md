@@ -207,3 +207,10 @@ Real-device checks for the reader and library overhaul. Use an Android phone (Ch
 - B3: select text, tap the speaker button next to Translate. It reads aloud (Arabic voice for Arabic). Tap again to stop.
 - B4: on a laptop, Contents opens on the left. On a phone it still slides in from the right. For a right-to-left book it opens on the right.
 - B5: in the reader settings, "Text direction" offers Auto (detected), Right to left, Left to right. Pick one, reopen the book: the choice stays and page order, swipe direction and reading mode follow it.
+
+## Plan 9 checks (Group A: Arabic lag)
+
+- **Dense Arabic book, page by page:** open a typeset Arabic book with a lot of text per page (hundreds of pages, small type) in paged mode and swipe or press the arrow keys through 30 pages. Each turn should feel immediate and the tab should stay well under 1 GB (Chrome Task Manager, "Memory footprint"). Only the page on screen is selectable; the pages next to it are pictures until you turn to them, and their text appears a moment after the page lands.
+- **Selecting text in that book:** drag across a few lines in paged and in scrolling mode. The highlight should follow the pointer smoothly; tap a word to select it, then Highlight, Copy and Translate still work and the saved quote is the words you selected.
+- **Scrolling mode:** scroll quickly through 40 screens. Pages near the screen are selectable; pages further away are pictures only.
+- **Search and Contents:** search for a common word in the same book; hits and jumps are unchanged.

@@ -12,15 +12,20 @@ const GAP = 12;
 
 class FakeRenderer implements PageRenderer {
   numPages = 100;
+  /** When true, pages paint at once (so their text layers are asked for) and the pages given a text layer are recorded. */
+  paints = false;
+  textPages: number[] = [];
   async pageSize(): Promise<PageSize> {
     return { widthPt: 400, heightPt: 600 };
   }
   renderPage(_p: number, _c: HTMLCanvasElement, _w: number, signal: AbortSignal): Promise<void> {
+    if (this.paints) return Promise.resolve();
     return new Promise<void>((_, reject) =>
       signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))),
     );
   }
-  renderTextLayer(): Promise<void> {
+  renderTextLayer(page: number): Promise<void> {
+    this.textPages.push(page);
     return Promise.resolve();
   }
   async textItems() {
@@ -96,6 +101,25 @@ describe('ScrollerComponent', () => {
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(VIEW_H);
   });
   afterEach(() => vi.restoreAllMocks());
+
+  it('gives a text layer only to the pages at or near the screen, not to the whole render window', async () => {
+    TestBed.configureTestingModule({ imports: [HostComponent] });
+    fixture = TestBed.createComponent(HostComponent);
+    host = fixture.componentInstance;
+    host.renderer.paints = true;
+    el = fixture.nativeElement as HTMLElement;
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(el.querySelectorAll('.page[data-page]').length).toBe(100);
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(renderedPages()).toEqual([1, 2, 3]);
+    // The screen shows pages 1-2 (800 px of 612-px steps); a page that starts a full viewport below has no layer.
+    await vi.waitFor(() => expect(host.renderer.textPages.length).toBeGreaterThan(0));
+    expect(host.renderer.textPages).toContain(1);
+    expect(host.renderer.textPages).not.toContain(3);
+  });
 
   it('renders only the visible pages plus one viewport of overscan', async () => {
     await create();

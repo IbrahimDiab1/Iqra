@@ -77,6 +77,7 @@ interface Slot {
                 <iqra-page-view
                   [renderer]="renderer()"
                   [page]="slot.page"
+                  [withText]="slot.role === 'cur'"
                   [fitWidthPx]="width()"
                   [zoom]="zoom()"
                   [theme]="theme()"
