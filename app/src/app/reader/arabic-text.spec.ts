@@ -216,3 +216,33 @@ describe('mixed Arabic and Latin on one line', () => {
     expect(readingOrder(items)).toEqual([0, 1, 2, 3]);
   });
 });
+
+describe('the reader\'s own text direction overrides detection', () => {
+  const arabicLtr = () => [item('والروح', 68), item('العقل', 156), item('غذاء', 249), item('القراءة', 316)];
+  const latin = () => [item('one', 10), item('two', 60), item('three', 110)];
+  const digits = () => [item('1', 10), item('2', 60), item('3', 110)];
+
+  it('Auto (no choice) keeps today\'s detection', () => {
+    expect(readingOrder(arabicLtr())).toEqual([3, 2, 1, 0]);
+    expect(readingOrder(latin())).toEqual([0, 1, 2]);
+  });
+
+  it('Left to right keeps the PDF order even for an Arabic line', () => {
+    expect(readingOrder(arabicLtr(), 'ltr')).toEqual([0, 1, 2, 3]);
+    expect(toReadingOrder(arabicLtr(), 'ltr').items.map((i) => i.str)).toEqual(['والروح', 'العقل', 'غذاء', 'القراءة']);
+  });
+
+  it('Right to left reads a line with no letters (numbers) from the right, and keeps a Latin phrase in its own order', () => {
+    expect(readingOrder(digits(), 'rtl')).toEqual([2, 1, 0]);
+    expect(readingOrder(digits())).toEqual([0, 1, 2]);
+    expect(readingOrder(latin(), 'rtl')).toEqual([0, 1, 2]);
+  });
+
+  it('search: left to right never tries the reversed words, right to left tries them for any script', () => {
+    const text = 'بسم الله الرحمن';
+    expect(findMatches(text, 'الرحمن الله').length).toBe(1);
+    expect(findMatches(text, 'الرحمن الله', 10, 'ltr')).toEqual([]);
+    expect(findMatches('world hello', 'hello world')).toEqual([]);
+    expect(findMatches('world hello', 'hello world', 10, 'rtl')).toHaveLength(1);
+  });
+});

@@ -138,18 +138,27 @@ function scanDespaced(n: Normalized, original: string, needle: string, max: numb
  * For an Arabic query that finds nothing it also tries the query's words in reverse order (a page whose items were
  * written left to right) and then the query with spaces ignored (a word split across items).
  */
-export function findMatches(pageText: string, query: string, max = Number.POSITIVE_INFINITY): { index: number; length: number }[] {
+export function findMatches(
+  pageText: string,
+  query: string,
+  max = Number.POSITIVE_INFINITY,
+  choice?: DirectionChoice,
+): { index: number; length: number }[] {
   const needle = normalizeWithMap(query.trim()).text;
   if (needle.length < 2) return [];
   const normalized = normalizeWithMap(pageText);
   let hits = scan(normalized, pageText, needle, max);
-  if (hits.length > 0 || !ARABIC_LETTER.test(needle)) return hits;
+  // The reader's own choice wins over the script: left to right never tries reversed words, right to left tries them for any script.
+  if (hits.length > 0 || choice === 'ltr' || (choice !== 'rtl' && !ARABIC_LETTER.test(needle))) return hits;
   if (needle.includes(' ')) {
     hits = scan(normalized, pageText, reverseWords(needle), max);
     if (hits.length > 0) return hits;
   }
   return scanDespaced(normalized, pageText, needle, max);
 }
+
+/** The reader's own choice of text direction for the book; undefined means Auto (decided from the letters). */
+export type DirectionChoice = 'rtl' | 'ltr' | undefined;
 
 type Direction = 'rtl' | 'ltr' | 'neutral';
 
@@ -210,7 +219,7 @@ function isRtlRun(run: OrderedItem[]): boolean {
 }
 
 /** The reading order, plus which runs of positions (`[from, to)`) were rearranged. */
-function planOrder(items: readonly OrderedItem[]): { order: number[]; moved: [number, number][] } {
+function planOrder(items: readonly OrderedItem[], choice?: DirectionChoice): { order: number[]; moved: [number, number][] } {
   const order = items.map((_, i) => i);
   const moved: [number, number][] = [];
   let start = 0;
@@ -226,7 +235,8 @@ function planOrder(items: readonly OrderedItem[]): { order: number[]; moved: [nu
     }
     const slots: number[] = [];
     for (let i = start; i < end; i++) if (items[i].str !== '') slots.push(i);
-    if (upright(first) && slots.length > 1 && isRtlRun(slots.map((i) => items[i]))) {
+    const rtlLine = choice === 'rtl' || (choice === undefined && isRtlRun(slots.map((i) => items[i])));
+    if (upright(first) && slots.length > 1 && rtlLine) {
       const sorted = readRtlLine(slots, (i) => items[i].str, (i) => items[i].transform[4]);
       if (sorted.some((old, k) => old !== slots[k])) {
         slots.forEach((slot, k) => (order[slot] = sorted[k]));
@@ -244,16 +254,16 @@ function planOrder(items: readonly OrderedItem[]): { order: number[]; moved: [nu
  * right-to-left line arrives backwards. Each run of consecutive items on one baseline that is mostly right-to-left
  * text is put in right-to-left order (by x, stable); everything else, and the order of the lines, is left alone.
  */
-export function readingOrder(items: readonly OrderedItem[]): number[] {
-  return planOrder(items).order;
+export function readingOrder(items: readonly OrderedItem[], choice?: DirectionChoice): number[] {
+  return planOrder(items, choice).order;
 }
 
 /**
  * The items in reading order plus the permutation (`order[new] = old`). A line end moves to the new last item of its run,
  * so the page text still breaks the line in the right place. Items that do not change are the very same objects.
  */
-export function toReadingOrder<T extends OrderedItem>(items: readonly T[]): { items: T[]; order: number[] } {
-  const { order, moved } = planOrder(items);
+export function toReadingOrder<T extends OrderedItem>(items: readonly T[], choice?: DirectionChoice): { items: T[]; order: number[] } {
+  const { order, moved } = planOrder(items, choice);
   const out = order.map((old) => items[old]);
   for (const [from, to] of moved) {
     const hadEol = items.slice(from, to).some((it) => it.hasEOL);

@@ -119,6 +119,23 @@ describe('hasSelectableText', () => {
   });
 });
 
+describe('buildReflow with the reader\'s own direction', () => {
+  const arabicLine = () => [item('القراءة', 316, 700), item('غذاء', 249, 700), item('العقل', 156, 700)];
+
+  it('Auto reads an Arabic line right to left whatever the book says', () => {
+    expect(buildReflow(arabicLine(), { rtl: false })[0].text).toBe('القراءة غذاء العقل');
+  });
+
+  it('a chosen left to right wins even for an Arabic line', () => {
+    expect(buildReflow(arabicLine(), { rtl: false, forced: true })[0].text).toBe('العقل غذاء القراءة');
+  });
+
+  it('a chosen right to left wins for a line of numbers, and a Latin phrase keeps its own order', () => {
+    expect(buildReflow([item('1', 10, 700), item('2', 60, 700)], { rtl: true, forced: true })[0].text).toBe('2 1');
+    expect(buildReflow([item('Hello', 10, 700), item('world', 60, 700)], { rtl: true, forced: true })[0].text).toBe('Hello world');
+  });
+});
+
 describe('buildReflow', () => {
   it('returns no paragraphs for no items', () => {
     expect(buildReflow([], { rtl: false })).toEqual([]);

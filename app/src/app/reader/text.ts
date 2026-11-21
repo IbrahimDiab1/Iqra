@@ -71,7 +71,7 @@ interface Line {
   text: string;
 }
 
-function groupLines(items: TextItem[], rtl: boolean): Line[] {
+function groupLines(items: TextItem[], rtl: boolean, forced: boolean): Line[] {
   const sorted = [...items].sort((a, b) => b.transform[5] - a.transform[5]);
   const groups: { y: number; items: TextItem[] }[] = [];
   for (const it of sorted) {
@@ -88,7 +88,8 @@ function groupLines(items: TextItem[], rtl: boolean): Line[] {
     const xOf = (it: TextItem) => it.transform[4];
     // An Arabic line reads right to left whatever the book's direction says, keeping Latin phrases in their own order.
     // A line with no Arabic in a book marked rtl keeps the plain right-to-left order.
-    const arabic = isArabicParagraph(g.items.map((it) => it.str).join(' '));
+    // When the reader chose a direction for the book, that choice decides every line.
+    const arabic = forced ? rtl : isArabicParagraph(g.items.map((it) => it.str).join(' '));
     const ordered = arabic
       ? readRtlLine(g.items, (it) => it.str, xOf)
       : [...g.items].sort((a, b) => (rtl ? xOf(b) - xOf(a) : xOf(a) - xOf(b)));
@@ -122,8 +123,8 @@ export function isArabicParagraph(text: string): boolean {
 }
 
 /** Groups a page's text items into lines, then lines into paragraphs, in reading order. */
-export function buildReflow(items: TextItem[], opts: { rtl: boolean }): Paragraph[] {
-  const lines = groupLines(items.filter((it) => it.str.trim() !== ''), opts.rtl);
+export function buildReflow(items: TextItem[], opts: { rtl: boolean; forced?: boolean }): Paragraph[] {
+  const lines = groupLines(items.filter((it) => it.str.trim() !== ''), opts.rtl, opts.forced ?? false);
   if (lines.length === 0) return [];
 
   const gaps: number[] = [];

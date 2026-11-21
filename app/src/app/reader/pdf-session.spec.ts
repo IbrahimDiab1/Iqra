@@ -216,6 +216,21 @@ describe('PdfSession', () => {
     expect(await s.pageText(1)).toBe('القراءة غذاء العقل');
   });
 
+  it('the reader\'s own direction overrides detection in the items it hands out, and a change drops the old order', async () => {
+    const c = install();
+    const at = (str: string, x: number) => ({ str, transform: [22, 0, 0, 22, x, 500], width: 40, height: 22 });
+    c.getTextContent.mockResolvedValue({ items: [at('العقل', 10), at('غذاء', 60), at('القراءة', 110)] });
+    const s = await PdfSession.open(local());
+    expect((await s.textItems(1)).map((i) => i.str)).toEqual(['القراءة', 'غذاء', 'العقل']);
+    expect(await s.pageText(1)).toBe('القراءة غذاء العقل');
+    s.setDirectionChoice('ltr');
+    expect(s.orderChoice()).toBe('ltr');
+    expect((await s.textItems(1)).map((i) => i.str)).toEqual(['العقل', 'غذاء', 'القراءة']);
+    expect(await s.pageText(1)).toBe('العقل غذاء القراءة');
+    s.setDirectionChoice(undefined);
+    expect((await s.textItems(1)).map((i) => i.str)).toEqual(['القراءة', 'غذاء', 'العقل']);
+  });
+
   it('extracts a page text content once, however often its items are asked for (selection handlers ask on every change)', async () => {
     const c = install();
     const s = await PdfSession.open(local());

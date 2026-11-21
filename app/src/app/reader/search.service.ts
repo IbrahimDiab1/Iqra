@@ -41,7 +41,7 @@ export class SearchService {
         // A page whose text cannot be read is skipped.
       }
       if (o.signal.aborted) break;
-      for (const m of findMatches(text, query, max - found)) {
+      for (const m of findMatches(text, query, max - found, r.orderChoice?.())) {
         o.onHit({ page, ...snippet(text, m) });
         found++;
       }

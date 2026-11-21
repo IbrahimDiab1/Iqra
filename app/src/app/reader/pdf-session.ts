@@ -1,6 +1,7 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import { loadPdfjs, pdfjsAssetOptions } from '../books/import/pdf-meta';
-import { toReadingOrder } from './arabic-text';
+import { toReadingOrder, type DirectionChoice } from './arabic-text';
+import { signal } from '@angular/core';
 import { applyReadingOrder, tagSpans, textLayerSource, type PdfTextContent } from './text-layer';
 import { pageTextOf, type TextItem } from './text';
 import { canvasScale } from './zoom';
@@ -23,6 +24,11 @@ export interface PageRenderer {
   renderTextLayer(page: number, container: HTMLElement, cssWidthPx: number, signal: AbortSignal): Promise<void>;
   textItems(page: number): Promise<TextItem[]>;
   pageText(page: number): Promise<string>;
+  /**
+   * The reader's own text direction for the book ('rtl' or 'ltr'; undefined is Auto). Reading with it overrides what is detected;
+   * a page view reads it, so a change redraws the text layer in the new order.
+   */
+  readonly orderChoice?: () => DirectionChoice;
 }
 
 export type OpenFailure = 'corrupt' | 'password' | 'network';
@@ -85,6 +91,8 @@ export class PdfSession implements PageRenderer {
   /** Per page: items in pdf.js order and in reading order, computed once (selection and highlights ask on every change). */
   private readonly raws = new Map<number, Promise<PdfTextContent>>();
   private readonly ordered = new Map<number, Promise<TextItem[]>>();
+  private readonly choice = signal<DirectionChoice>(undefined);
+  readonly orderChoice = this.choice.asReadonly();
   private destroyed = false;
   private active = 0;
   private rendersSinceCleanup = 0;
@@ -119,6 +127,14 @@ export class PdfSession implements PageRenderer {
       void task?.destroy();
       throw new ReaderOpenError(failureReason(err, src.kind));
     }
+  }
+
+  /** Sets the reader's text direction choice (undefined = Auto). Orders and texts computed under the old choice are dropped. */
+  setDirectionChoice(choice: DirectionChoice): void {
+    if (this.choice() === choice) return;
+    this.ordered.clear();
+    this.texts.clear();
+    this.choice.set(choice);
   }
 
   pageSize(page: number): Promise<PageSize> {
@@ -277,7 +293,7 @@ export class PdfSession implements PageRenderer {
       if (signal.aborted) throw abortError();
       // Spans are tagged with pdf.js's item index first, then moved to reading order along with `textItems`.
       tagSpans(layer.textDivs, source.kept);
-      applyReadingOrder(container, layer.textDivs, toReadingOrder(content.items).order);
+      applyReadingOrder(container, layer.textDivs, toReadingOrder(content.items, this.choice()).order);
     } finally {
       p.cleanup();
     }
@@ -287,7 +303,7 @@ export class PdfSession implements PageRenderer {
   textItems(page: number): Promise<TextItem[]> {
     let items = this.ordered.get(page);
     if (!items) {
-      items = this.rawTextItems(page).then((raw) => toReadingOrder(raw).items);
+      items = this.rawTextItems(page).then((raw) => toReadingOrder(raw, this.choice()).items);
       items.catch(() => this.ordered.delete(page));
       this.ordered.set(page, items);
       this.trim(this.ordered);

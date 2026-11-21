@@ -178,6 +178,8 @@ export class PageViewComponent implements OnDestroy {
       const page = this.page();
       const width = this.cssWidth();
       const renderer = this.renderer();
+      // A new text direction choice changes the order of the text layer: draw it again.
+      renderer.orderChoice?.();
       untracked(() => {
         const pageChanged = page !== this.lastPage;
         this.lastPage = page;

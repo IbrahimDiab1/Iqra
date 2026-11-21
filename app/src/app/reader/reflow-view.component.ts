@@ -118,6 +118,8 @@ export class ReflowViewComponent {
   readonly page = input.required<number>();
   readonly zoom = input<number>(1);
   readonly rtl = input<boolean>(false);
+  /** The reader chose a direction for the book (rtl input is then that choice, not a guess). */
+  readonly forced = input<boolean>(false);
   readonly theme = input<PageTheme>('paper');
   readonly pageChange = output<number>();
   readonly showPage = output<void>();
@@ -172,6 +174,7 @@ export class ReflowViewComponent {
       const renderer = this.renderer();
       const page = this.page();
       const rtl = this.rtl();
+      const forced = this.forced();
       const generation = ++this.generation;
       untracked(() => {
         this.state.set({ kind: 'loading' });
@@ -181,7 +184,7 @@ export class ReflowViewComponent {
           (items) => {
             if (generation !== this.generation) return;
             this.state.set(
-              hasSelectableText(items) ? { kind: 'text', paragraphs: buildReflow(items, { rtl }), items } : { kind: 'empty' },
+              hasSelectableText(items) ? { kind: 'text', paragraphs: buildReflow(items, { rtl, forced }), items } : { kind: 'empty' },
             );
             el.scrollTop = 0;
           },

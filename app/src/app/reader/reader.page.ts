@@ -128,6 +128,7 @@ const FINISH_TOAST_MS = 8000;
                 [page]="s.page()"
                 [zoom]="s.zoom()"
                 [rtl]="rtl()"
+                [forced]="directionChoice() !== undefined"
                 [theme]="theme()"
                 (pageChange)="s.pageChange($event)"
                 (showPage)="showPage()"
@@ -363,6 +364,11 @@ export class ReaderPage implements OnDestroy {
 
   protected readonly theme = computed(() => this.settings.settings().readerTheme);
   protected readonly rtl = computed(() => isRtl(this.book()));
+  /** The reader's own text direction for this book; undefined is Auto (detected). */
+  protected readonly directionChoice = computed(() => {
+    const d = this.book()?.textDirection;
+    return d === 'rtl' || d === 'ltr' ? d : undefined;
+  });
   protected readonly chapter = computed(() => {
     const b = this.book();
     const s = this.state();
@@ -379,6 +385,11 @@ export class ReaderPage implements OnDestroy {
   private loadId = 0;
 
   constructor() {
+    // The reader's own text direction overrides detection in the text layer order, the selection quote and search.
+    effect(() => {
+      const choice = this.directionChoice();
+      (this.session() as { setDirectionChoice?: (c: 'rtl' | 'ltr' | undefined) => void } | null)?.setDirectionChoice?.(choice);
+    });
     effect(() => {
       const s = this.state();
       if (!s) return;
