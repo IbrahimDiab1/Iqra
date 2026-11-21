@@ -132,4 +132,70 @@ test.describe('review', () => {
     expect(await empty.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await fresh.close();
   });
+
+  test('a highlight can be added to Review from its toast, shows under Highlights and is practised whole', async () => {
+    const page = await openBook(context);
+    await selectFirstSpan(page);
+    await page.getByRole('toolbar', { name: 'Highlight' }).getByRole('button', { name: 'Yellow' }).click();
+    const toast = page.getByRole('status').filter({ hasText: 'Highlight saved' });
+    await expect(toast.getByRole('button', { name: 'Undo' })).toBeVisible();
+    await toast.getByRole('button', { name: 'Add to Review' }).click();
+    await expect(page.getByText('Added to Review')).toBeVisible();
+
+    // Tapping the highlight opens its popup, which now says In Review.
+    await page.locator('iqra-highlight-layer [data-id]').first().click({ force: true });
+    await expect(page.getByTestId('add-review')).toHaveText('In Review');
+    await expect(page.getByTestId('add-review')).toBeDisabled();
+    await page.getByRole('button', { name: 'Close' }).click();
+
+    await page.getByRole('link', { name: 'Back to library' }).click();
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Review/ }).click();
+    await expect(page.getByTestId('review-item')).toHaveCount(1);
+    await expect(page.getByRole('searchbox')).toHaveCount(0);
+    const chips = page.getByTestId('kind-chips');
+    await chips.getByRole('button', { name: 'Notes' }).click();
+    await expect(page.getByTestId('review-item')).toHaveCount(0);
+    await chips.getByRole('button', { name: 'Highlights' }).click();
+    await expect(page.getByTestId('review-item')).toHaveCount(1);
+    await chips.getByRole('button', { name: 'All' }).click();
+    await expect(chips.getByRole('button', { name: 'Notes' })).toHaveAttribute('aria-pressed', 'false');
+
+    await page.getByTestId('start-practice').click();
+    await expect(page.getByTestId('whole-text')).toBeVisible();
+    await expect(page.getByTestId('flip')).toHaveCount(0);
+    await page.keyboard.press('3');
+    await expect(page.getByTestId('finished')).toBeVisible();
+  });
+
+  test('a very long selection keeps Save, Listen and Close on screen', async ({ browser }) => {
+    await mockProviders(context);
+    const page = await openBook(context);
+    await page.setViewportSize({ width: 390, height: 600 });
+    // Select every text span of the page so the quoted text is long.
+    await expect(async () => {
+      await page.locator('[data-slot="cur"] .text-layer span[data-item]').first().waitFor();
+      await page.evaluate(() => {
+        const layer = document.querySelector('[data-slot="cur"] .text-layer')!;
+        const range = document.createRange();
+        range.selectNodeContents(layer);
+        const sel = window.getSelection()!;
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.dispatchEvent(new Event('selectionchange'));
+      });
+      await expect(page.getByRole('toolbar', { name: 'Highlight' })).toBeVisible({ timeout: 1000 });
+    }).toPass();
+    await page.getByRole('toolbar', { name: 'Highlight' }).getByRole('button', { name: 'Translate' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Translate' });
+    await expect(sheet.getByTestId('translation')).toBeVisible();
+    for (const id of ['save-review', 'close-translate']) {
+      const b = (await sheet.getByTestId(id).boundingBox())!;
+      expect(b.y).toBeGreaterThanOrEqual(0);
+      expect(b.y + b.height).toBeLessThanOrEqual(600);
+    }
+    const pop = (await sheet.boundingBox())!;
+    expect(pop.y + pop.height).toBeLessThanOrEqual(600);
+    await sheet.getByTestId('close-translate').click();
+    await expect(sheet).toBeHidden();
+  });
 });

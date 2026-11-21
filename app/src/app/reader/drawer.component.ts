@@ -65,7 +65,7 @@ let nextId = 0;
 export class DrawerComponent {
   readonly open = input(false);
   readonly title = input('');
-  /** A right-to-left book mirrors the docked panel to the right edge. */
+  /** Kept for callers; the docked panel is always on the left. */
   readonly rtl = input(false);
   readonly closed = output<void>();
 
@@ -74,7 +74,7 @@ export class DrawerComponent {
   protected readonly closeIcon = inject(DomSanitizer).bypassSecurityTrustHtml(icon('x', 20));
   protected readonly narrow = signal(window.innerWidth < DRAWER_DOCK_MIN_WIDTH);
 
-  protected readonly onLeft = computed(() => !this.narrow() && !this.rtl());
+  protected readonly onLeft = computed(() => !this.narrow());
 
   private readonly panel = viewChild.required<ElementRef<HTMLElement>>('panel');
   private readonly injector = inject(Injector);

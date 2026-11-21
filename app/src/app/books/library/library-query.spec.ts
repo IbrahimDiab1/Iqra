@@ -65,13 +65,14 @@ function ids(list: Book[]): ID[] {
 
 describe('library query', () => {
   it('has the default state from the brief', () => {
+    expect(DEFAULT_LIBRARY_STATE.sort).toBe('recent-added');
     expect(DEFAULT_LIBRARY_STATE).toEqual({
       tab: 'all',
       categoryIds: [],
       tags: [],
       minRating: null,
       downloadedOnly: false,
-      sort: 'recent-read',
+      sort: 'recent-added',
       dir: 'desc',
       query: '',
     });
@@ -198,8 +199,8 @@ describe('library query', () => {
     expect(ids(asc.main)).toEqual(['b4', 'b1', 'b2', 'b5', 'b3']);
   });
 
-  it('sorts by recent-read by default, newest first', () => {
-    expect(ids(queryLibrary(books, state({}), ctx).main)).toEqual(['b5', 'b2', 'b1', 'b4', 'b3']);
+  it('sorts by recent-read, newest first', () => {
+    expect(ids(queryLibrary(books, state({ sort: 'recent-read' }), ctx).main)).toEqual(['b5', 'b2', 'b1', 'b4', 'b3']);
   });
 
   it('sorts by progress, breaking ties by title', () => {

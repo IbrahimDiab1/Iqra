@@ -1,15 +1,24 @@
 import { Injectable, signal } from '@angular/core';
 
+/** A second button beside Undo. */
+export interface ToastExtra {
+  label: string;
+  run: () => void;
+}
+
 export interface ToastState {
   message: string;
   undo?: () => void;
   actionLabel?: string;
+  extra?: ToastExtra;
 }
 
 export interface ToastOptions {
   undo?: () => void;
   /** Text of the action button; defaults to Undo. */
   actionLabel?: string;
+  /** A second action next to Undo; the toast closes when it is pressed. */
+  extra?: ToastExtra;
   durationMs?: number;
 }
 
@@ -25,7 +34,7 @@ export class ToastService {
 
   show(message: string, opts: ToastOptions = {}): void {
     clearTimeout(this.timer);
-    this.state.set({ message, undo: opts.undo, actionLabel: opts.actionLabel });
+    this.state.set({ message, undo: opts.undo, actionLabel: opts.actionLabel, extra: opts.extra });
     this.timer = setTimeout(() => this.dismiss(), opts.durationMs ?? DEFAULT_DURATION_MS);
   }
 
@@ -33,6 +42,12 @@ export class ToastService {
     const toast = this.state();
     this.dismiss();
     toast?.undo?.();
+  }
+
+  runExtra(): void {
+    const toast = this.state();
+    this.dismiss();
+    toast?.extra?.run();
   }
 
   dismiss(): void {

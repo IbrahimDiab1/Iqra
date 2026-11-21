@@ -148,6 +148,19 @@ describe('TranslateSheet', () => {
     expect(fixture.componentInstance.target()).toBeNull();
   });
 
+  it('keeps the text in its own scroll area and the actions (Save, Close) outside it', async () => {
+    fixture.componentInstance.target.set({ text: 'hello '.repeat(400), page: 1, context: '' });
+    await settle();
+    const scroll = q('[data-testid="translate-scroll"]')!;
+    const actions = q('[data-testid="translate-actions"]')!;
+    expect(scroll.contains(q('[data-testid="source"]'))).toBe(true);
+    expect(scroll.contains(actions)).toBe(false);
+    expect(actions.contains(q('[data-testid="save-review"]'))).toBe(true);
+    q('[data-testid="close-translate"]')!.click();
+    await settle();
+    expect(fixture.componentInstance.target()).toBeNull();
+  });
+
   it('placePopup keeps it inside the viewport and flips above near the bottom', () => {
     const a = placePopup({ anchor: { left: 0, top: 700, right: 40, bottom: 720 }, vw: 390, vh: 740 });
     expect(a.left).toBeGreaterThanOrEqual(8);

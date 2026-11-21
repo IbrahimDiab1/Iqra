@@ -23,7 +23,6 @@ import { placeAtTop, visibleRange } from './virtualize';
 import { ZoomGesturesDirective } from './zoom-gestures.directive';
 
 const GAP_PX = 12;
-const PLACE_DEBOUNCE_MS = 100;
 const TAP_MAX_MOVE_PX = 6;
 const TAP_MAX_MS = 300;
 const DEFAULT_RATIO = 1.414;
@@ -178,12 +177,16 @@ export class ScrollerComponent implements OnDestroy {
 
   private observer: ResizeObserver | undefined;
   private frame: number | ReturnType<typeof setTimeout> | undefined;
-  private placeTimer: ReturnType<typeof setTimeout> | undefined;
   private started = false;
   private destroyed = false;
   /** The page under the viewport centre and the fraction down it; survives zoom and height changes. */
   private anchor: { index: number; frac: number } = { index: 0, frac: 0 };
   private lastZoom: number | undefined;
+  /**
+   * While the viewport width changes (resize, full screen, rotation) the pages are re-laid out; the place at the top
+   * of the content is held here, so it is put back afterwards instead of whatever the new layout happens to show.
+   */
+  private resizeAnchor: Place | undefined;
   private requested = new Set<number>();
   protected press: { id: number; x: number; y: number; t: number } | undefined;
 
@@ -191,7 +194,14 @@ export class ScrollerComponent implements OnDestroy {
     afterNextRender(() => {
       const el = this.viewport().nativeElement;
       const measure = () => {
-        this.fitWidth.set(el.clientWidth);
+        const width = el.clientWidth;
+        if (this.started && width !== untracked(() => this.fitWidth()) && this.resizeAnchor === undefined && untracked(() => this.heights().length) > 0) {
+          // Read the place from the layout that is still on screen, before the new width changes any page height.
+          const at = placeAtTop({ scrollTop: el.scrollTop, tops: untracked(() => this.tops()), heights: untracked(() => this.heights()) });
+          this.resizeAnchor = { page: at.index + 1, offset: at.offset };
+          afterNextRender(() => this.restoreResizeAnchor(), { injector: this.injector });
+        }
+        this.fitWidth.set(width);
         this.viewportH.set(el.clientHeight);
       };
       measure();
@@ -245,7 +255,6 @@ export class ScrollerComponent implements OnDestroy {
   ngOnDestroy(): void {
     this.destroyed = true;
     this.observer?.disconnect();
-    clearTimeout(this.placeTimer);
     if (this.frame !== undefined) {
       if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this.frame as number);
       clearTimeout(this.frame as ReturnType<typeof setTimeout>);
@@ -313,6 +322,12 @@ export class ScrollerComponent implements OnDestroy {
     this.sync();
   }
 
+  private restoreResizeAnchor(): void {
+    const place = this.resizeAnchor;
+    this.resizeAnchor = undefined;
+    if (place && !this.destroyed) this.scrollTo(place);
+  }
+
   protected onScroll(): void {
     if (this.frame !== undefined) return;
     const flush = () => {
@@ -329,16 +344,15 @@ export class ScrollerComponent implements OnDestroy {
     this.scrollTop.set(top);
     const tops = this.tops();
     const heights = this.heights();
-    if (tops.length === 0) return;
+    // A layout change is being undone: what is on screen now is not the reader's place.
+    if (tops.length === 0 || this.resizeAnchor !== undefined) return;
     // The page under the viewport centre, for keeping the view still while zooming.
     const centre = placeAtTop({ scrollTop: top + el.clientHeight / 2 - this.topPad(), tops, heights });
     this.anchor = { index: centre.index, frac: centre.offset };
-    clearTimeout(this.placeTimer);
-    this.placeTimer = setTimeout(() => {
-      // The reading line is the top of the content area, so the place is simply the content coordinate scrollTop.
-      const at = placeAtTop({ scrollTop: el.scrollTop, tops: this.tops(), heights: this.heights() });
-      this.placeChange.emit({ page: at.index + 1, offset: at.offset });
-    }, PLACE_DEBOUNCE_MS);
+    // The reading line is the top of the content area, so the place is simply the content coordinate scrollTop.
+    // Reported on every (animation-frame throttled) scroll, so the header follows the page while scrolling.
+    const at = placeAtTop({ scrollTop: top, tops, heights });
+    this.placeChange.emit({ page: at.index + 1, offset: at.offset });
   }
 
   protected down(e: PointerEvent): void {

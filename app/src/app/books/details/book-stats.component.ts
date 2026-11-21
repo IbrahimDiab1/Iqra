@@ -78,18 +78,31 @@ const NOTE_TYPES = [
       </div>
 
       @if (chapters().length > 0) {
-        <h4>{{ c.chapters }}</h4>
-        <ul class="chap">
-          @for (e of chapters(); track e.key) {
-            <li [style.padding-inline-start.px]="e.depth * 14">
-              <span class="ct" dir="auto">{{ e.title }}</span>
-              <span class="pct">{{ prog.chapterPct(e.pct) }}</span>
-              <span class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="e.pct" [attr.aria-label]="e.title">
-                <span class="fill" [style.width.%]="e.pct"></span>
-              </span>
-            </li>
-          }
-        </ul>
+        <h4 class="fold-h">
+          <button type="button" class="fold" data-testid="chapters-toggle" [attr.aria-expanded]="chaptersOpen()" (click)="chaptersOpen.set(!chaptersOpen())">
+            <span class="caret" aria-hidden="true">{{ chaptersOpen() ? '\u25be' : '\u25b8' }}</span>{{ c.chapters }}
+          </button>
+        </h4>
+        @if (chaptersOpen()) {
+          <ul class="chap" data-testid="chapter-list">
+            @for (e of visibleChapters(); track e.key) {
+              <li [style.padding-inline-start.px]="e.depth * 14">
+                <span class="ct" dir="auto">
+                  @if (e.hasChildren) {
+                    <button type="button" class="fold sub" [attr.aria-expanded]="openKeys().has(e.key)" [attr.aria-label]="(openKeys().has(e.key) ? c.collapseSections : c.expandSections) + ': ' + e.title" (click)="toggleKey(e.key)">
+                      <span class="caret" aria-hidden="true">{{ openKeys().has(e.key) ? '\u25be' : '\u25b8' }}</span>
+                    </button>
+                  }
+                  <span class="tt">{{ e.title }}</span>
+                </span>
+                <span class="pct">{{ prog.chapterPct(e.pct) }}</span>
+                <span class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="e.pct" [attr.aria-label]="e.title">
+                  <span class="fill" [style.width.%]="e.pct"></span>
+                </span>
+              </li>
+            }
+          </ul>
+        }
       }
     </div>
   `,
@@ -110,6 +123,11 @@ const NOTE_TYPES = [
     a.nrow:hover { background: var(--surface); }
     .n { font-variant-numeric: tabular-nums; color: var(--muted); }
     .rr p { margin: 0 0 6px; font-size: 14px; line-height: 1.5; }
+    .fold-h { margin: 18px 0 8px; }
+    .fold-h .fold { font: inherit; letter-spacing: inherit; text-transform: inherit; }
+    .fold { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 4px; margin-inline-start: -4px; border: 0; background: none; color: inherit; font-weight: inherit; cursor: pointer; }
+    .fold.sub { min-height: 28px; min-width: 28px; justify-content: center; color: var(--muted); }
+    .fold:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .chap { list-style: none; margin: 0; padding: 0; }
     .chap li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding-block: 6px; font-size: 14px; }
     .ct { min-width: 0; overflow-wrap: anywhere; }
@@ -212,9 +230,34 @@ export class BookStatsComponent {
     const marked = this.marked();
     return flattenOutline(book.outline).map(({ node, depth }) => {
       const { fraction } = chapterProgress(book, node, marked);
-      return { key: node.key, title: node.title, depth, pct: Math.round(fraction * 100) };
-    });
+      return { key: node.key, title: node.title, depth, pct: Math.round(fraction * 100), hasChildren: false };
+    }).map((e, i, all) => ({ ...e, hasChildren: (all[i + 1]?.depth ?? 0) > e.depth }));
   });
+
+  /** "Chapter progress" and every chapter's sections start collapsed. */
+  protected readonly chaptersOpen = signal(false);
+  protected readonly openKeys = signal<ReadonlySet<string>>(new Set());
+  protected readonly visibleChapters = computed(() => {
+    const open = this.openKeys();
+    const out: ReturnType<typeof this.chapters> = [];
+    // `hiddenBelow` is the depth of the nearest collapsed ancestor; deeper entries stay hidden until the depth comes back up.
+    let hiddenBelow = Infinity;
+    for (const e of this.chapters()) {
+      if (e.depth > hiddenBelow) continue;
+      hiddenBelow = Infinity;
+      out.push(e);
+      if (e.hasChildren && !open.has(e.key)) hiddenBelow = e.depth;
+    }
+    return out;
+  });
+
+  protected toggleKey(key: string): void {
+    this.openKeys.update((s) => {
+      const n = new Set(s);
+      if (!n.delete(key)) n.add(key);
+      return n;
+    });
+  }
 
   protected date(ms: number | undefined): string {
     if (ms === undefined || !Number.isFinite(ms)) return STATS_COPY.notYet;

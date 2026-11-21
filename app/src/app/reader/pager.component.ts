@@ -12,6 +12,7 @@ import {
   input,
   output,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import type { Annotation, Rect } from '../core/models';
@@ -186,7 +187,23 @@ export class PagerComponent implements OnDestroy {
     });
     afterNextRender(() => {
       const el = this.viewport().nativeElement;
-      const measure = () => this.width.set(el.clientWidth);
+      const measure = () => {
+        const w = el.clientWidth;
+        if (w === untracked(() => this.width())) return;
+        // A page taller than the window scrolls inside its slot; keep the same part of it in view when the width changes.
+        const cur = this.host.nativeElement.querySelector<HTMLElement>('.slot[data-slot="cur"]');
+        const frac = cur && cur.scrollHeight > cur.clientHeight ? cur.scrollTop / cur.scrollHeight : undefined;
+        this.width.set(w);
+        if (frac !== undefined) {
+          afterNextRender(
+            () => {
+              const now = this.host.nativeElement.querySelector<HTMLElement>('.slot[data-slot="cur"]');
+              if (now) now.scrollTop = frac * now.scrollHeight;
+            },
+            { injector: this.injector },
+          );
+        }
+      };
       measure();
       if (typeof ResizeObserver !== 'undefined') {
         this.observer = new ResizeObserver(measure);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ReviewItem } from '../core/models';
-import { contextSentence, daysUntilDue, detectLang, filterItems, frontBack, grade, kindFor, newSrs, normalizeSelection } from './review-logic';
+import { cardFor, chipOf, contextSentence, daysUntilDue, detectLang, filterItems, grade, isWholeCard, kindFor, newSrs, normalizeSelection } from './review-logic';
 
 const DAY = 86_400_000;
 
@@ -80,27 +80,36 @@ describe('SRS', () => {
   });
 });
 
-describe('frontBack', () => {
+describe('cardFor', () => {
   const item = (sourceLang: 'en' | 'ar'): ReviewItem => ({ id: 'i', text: 'src', translation: 'tr', sourceLang }) as ReviewItem;
-  it('puts the English side in front for en-ar and the Arabic side for ar-en', () => {
-    expect(frontBack(item('en'), 'en-ar')).toEqual({ front: 'src', back: 'tr', frontLang: 'en', backLang: 'ar' });
-    expect(frontBack(item('en'), 'ar-en')).toEqual({ front: 'tr', back: 'src', frontLang: 'ar', backLang: 'en' });
-    expect(frontBack(item('ar'), 'en-ar')).toEqual({ front: 'tr', back: 'src', frontLang: 'en', backLang: 'ar' });
-    expect(frontBack(item('ar'), 'ar-en')).toEqual({ front: 'src', back: 'tr', frontLang: 'ar', backLang: 'en' });
+  it('shows the saved text first and its translation behind it, whatever the language', () => {
+    expect(cardFor(item('en'))).toEqual({ front: 'src', back: 'tr', frontLang: 'en', backLang: 'ar' });
+    expect(cardFor(item('ar'))).toEqual({ front: 'src', back: 'tr', frontLang: 'ar', backLang: 'en' });
+  });
+});
+
+describe('chips', () => {
+  it('puts phrases with sentences and tells whole cards from flip cards', () => {
+    expect(chipOf({ kind: 'phrase' })).toBe('sentence');
+    expect(chipOf({ kind: 'word' })).toBe('word');
+    expect(chipOf({ kind: 'note' })).toBe('note');
+    expect(isWholeCard({ kind: 'highlight' })).toBe(true);
+    expect(isWholeCard({ kind: 'note' })).toBe(true);
+    expect(isWholeCard({ kind: 'sentence' })).toBe(false);
   });
 });
 
 describe('filterItems', () => {
   const mk = (id: string, o: Partial<ReviewItem>): ReviewItem => ({ id, text: id, translation: '', context: '', kind: 'word', bookId: 'b1', ...o }) as ReviewItem;
-  const items = [mk('apple', { translation: 'تفاحة' }), mk('break the ice', { kind: 'phrase', bookId: 'b2', note: 'idiom' }), mk('x', { context: 'An Apple a day.' })];
-  it('filters by text, translation, context and note, ignoring case', () => {
-    expect(filterItems(items, { query: 'APPLE', kind: 'all', bookId: null }).map((r) => r.id)).toEqual(['apple', 'x']);
-    expect(filterItems(items, { query: 'تفاحة', kind: 'all', bookId: null }).map((r) => r.id)).toEqual(['apple']);
-    expect(filterItems(items, { query: 'idiom', kind: 'all', bookId: null }).map((r) => r.id)).toEqual(['break the ice']);
+  const items = [mk('apple', {}), mk('break the ice', { kind: 'phrase', bookId: 'b2' }), mk('long one', { kind: 'sentence' }), mk('n1', { kind: 'note' }), mk('h1', { kind: 'highlight', bookId: 'b2' })];
+  it('shows everything when no chip is on', () => {
+    expect(filterItems(items, { chips: [], bookId: null })).toHaveLength(5);
   });
-  it('filters by kind and book', () => {
-    expect(filterItems(items, { query: '', kind: 'sentence', bookId: null }).map((r) => r.id)).toEqual(['break the ice']);
-    expect(filterItems(items, { query: '', kind: 'all', bookId: 'b1' })).toHaveLength(2);
+  it('combines several chips (any of them) and a book', () => {
+    expect(filterItems(items, { chips: ['sentence'], bookId: null }).map((r) => r.id)).toEqual(['break the ice', 'long one']);
+    expect(filterItems(items, { chips: ['note', 'highlight'], bookId: null }).map((r) => r.id)).toEqual(['n1', 'h1']);
+    expect(filterItems(items, { chips: ['word', 'highlight'], bookId: 'b2' }).map((r) => r.id)).toEqual(['h1']);
+    expect(filterItems(items, { chips: [], bookId: 'b1' })).toHaveLength(3);
   });
 });
 

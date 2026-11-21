@@ -5,18 +5,15 @@ import { CLOCK } from '../core/clock';
 import { DB } from '../core/db';
 import type { Book, ReviewItem } from '../core/models';
 import { Repo } from '../core/repo';
-import { SettingsService } from '../core/settings.service';
 import { icon } from '../ui/icons';
 import { SheetComponent } from '../ui/sheet.component';
 import { ToastService } from '../ui/toast.service';
 import { PracticeComponent } from './practice.component';
 import { REVIEW_COPY } from './review-copy';
-import { daysUntilDue, filterItems, type CardDirection } from './review-logic';
+import { REVIEW_CHIPS, daysUntilDue, filterItems, isWholeCard, type ReviewChip } from './review-logic';
 import { ReviewService } from './review.service';
 import { canSpeak, speak } from './translation';
 
-const KINDS = ['all', 'word', 'sentence'] as const;
-const DIRECTIONS: readonly CardDirection[] = ['en-ar', 'ar-en', 'mixed'];
 
 /** The language notebook: saved words, phrases and sentences, and flashcard practice. */
 @Component({
@@ -29,7 +26,7 @@ const DIRECTIONS: readonly CardDirection[] = ['en-ar', 'ar-en', 'mixed'];
       @if (items() === undefined) {
         <p class="empty" role="status"></p>
       } @else if (practice(); as cards) {
-        <iqra-practice [cards]="cards" [direction]="direction()" (exit)="practice.set(null)" />
+        <iqra-practice [cards]="cards" (exit)="practice.set(null)" />
       } @else if (all().length === 0) {
         <div class="empty" data-testid="review-empty">
           <h2>{{ e.title }}</h2>
@@ -43,18 +40,11 @@ const DIRECTIONS: readonly CardDirection[] = ['en-ar', 'ar-en', 'mixed'];
           @if (due().length === 0) {
             <p class="none">{{ e.practiceNone }}</p>
           }
-          <div class="dirs" role="radiogroup" [attr.aria-label]="p.direction">
-            @for (d of directions; track d) {
-              <button type="button" role="radio" class="chip" [attr.aria-checked]="direction() === d" [class.on]="direction() === d" (click)="setDirection(d)">{{ p.directions[d] }}</button>
-            }
-          </div>
         </div>
-        <label class="search">
-          <input type="search" dir="auto" autocomplete="off" [placeholder]="l.search" [attr.aria-label]="l.search" [value]="query()" (input)="onInput($event)" />
-        </label>
-        <div class="chips" role="group" aria-label="Type">
+        <div class="chips" role="group" [attr.aria-label]="l.kindsLabel" data-testid="kind-chips">
+          <button type="button" class="chip" data-chip="all" [class.on]="chips().length === 0" [attr.aria-pressed]="chips().length === 0" (click)="chips.set([])">{{ l.kinds.all }}</button>
           @for (k of kinds; track k) {
-            <button type="button" class="chip" [class.on]="kind() === k" [attr.aria-pressed]="kind() === k" (click)="kind.set(k)">{{ l.kinds[k] }}</button>
+            <button type="button" class="chip" [attr.data-chip]="k" [class.on]="chips().includes(k)" [attr.aria-pressed]="chips().includes(k)" (click)="toggleChip(k)">{{ l.kinds[k] }}</button>
           }
         </div>
         @if (books().length > 1) {
@@ -76,7 +66,9 @@ const DIRECTIONS: readonly CardDirection[] = ['en-ar', 'ar-en', 'mixed'];
             <li class="card" data-testid="review-item">
               <div class="main">
                 <p class="text" dir="auto" [attr.lang]="r.sourceLang">{{ r.text }}</p>
-                <p class="tr" dir="auto" [attr.lang]="r.sourceLang === 'en' ? 'ar' : 'en'">{{ r.translation }}</p>
+                @if (!whole(r)) {
+                  <p class="tr" dir="auto" [attr.lang]="r.sourceLang === 'en' ? 'ar' : 'en'">{{ r.translation }}</p>
+                }
               </div>
               @if (r.context) {
                 <p class="ctx" dir="auto">{{ r.context }}</p>
@@ -106,7 +98,9 @@ const DIRECTIONS: readonly CardDirection[] = ['en-ar', 'ar-en', 'mixed'];
       <f-sheet [open]="editing() !== null" [title]="l.edit" (closed)="editing.set(null)">
         @if (editing(); as r) {
           <label class="field">{{ l.textLabel }}<textarea #t dir="auto" rows="2" [value]="r.text" (input)="draft.text = t.value"></textarea></label>
-          <label class="field">{{ l.translationLabel }}<textarea #tr dir="auto" rows="2" [value]="r.translation" (input)="draft.translation = tr.value"></textarea></label>
+          @if (!whole(r)) {
+            <label class="field">{{ l.translationLabel }}<textarea #tr dir="auto" rows="2" [value]="r.translation" (input)="draft.translation = tr.value"></textarea></label>
+          }
           <label class="field">{{ l.noteLabel }}<textarea #n dir="auto" rows="2" [value]="r.note ?? ''" (input)="draft.note = n.value"></textarea></label>
           <div class="sheet-actions">
             <button type="button" class="act" (click)="editing.set(null)">{{ l.cancel }}</button>
@@ -126,12 +120,11 @@ const DIRECTIONS: readonly CardDirection[] = ['en-ar', 'ar-en', 'mixed'];
     .practice-row { display: grid; gap: 8px; margin-bottom: 12px; }
     .none { margin: 0; color: var(--muted); font-size: 13px; }
     .go { min-height: 48px; border: 0; border-radius: var(--radius-control); background: var(--accent); color: var(--accent-fg); font: 600 15px var(--ui); cursor: pointer; padding: 0 16px; }
-    .dirs, .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
     .chips { margin-bottom: 8px; }
     .chip { min-height: 40px; max-width: 100%; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg); font: 13px var(--ui); cursor: pointer; }
     .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
-    .search { display: block; margin-bottom: 10px; }
-    .search input, .book-filter select, .field textarea { box-sizing: border-box; width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--fg); font: 16px var(--ui); }
+    .book-filter select, .field textarea { box-sizing: border-box; width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--fg); font: 16px var(--ui); }
     .book-filter { display: block; margin-bottom: 8px; }
     .field { display: grid; gap: 4px; margin-bottom: 10px; color: var(--muted); font: 13px var(--ui); }
     .field textarea { padding: 8px 12px; resize: vertical; }
@@ -159,13 +152,11 @@ export class ReviewPage {
   protected readonly l = REVIEW_COPY.list;
   protected readonly e = REVIEW_COPY.empty;
   protected readonly p = REVIEW_COPY.practice;
-  protected readonly kinds = KINDS;
-  protected readonly directions = DIRECTIONS;
+  protected readonly kinds = REVIEW_CHIPS;
   protected readonly speech = canSpeak();
   protected readonly speakerIcon = inject(DomSanitizer).bypassSecurityTrustHtml(icon('speaker', 20));
 
   private readonly reviews = inject(ReviewService);
-  private readonly settings = inject(SettingsService);
   private readonly toast = inject(ToastService);
   private readonly files = inject(FilesService);
   private readonly clock = inject(CLOCK);
@@ -175,21 +166,20 @@ export class ReviewPage {
 
   protected readonly items = this.reviews.items();
   protected readonly all = computed(() => this.items() ?? []);
-  protected readonly query = signal('');
-  protected readonly kind = signal<(typeof KINDS)[number]>('all');
+  /** The chips that are on; empty is All. Several can be on at once. */
+  protected readonly chips = signal<ReviewChip[]>([]);
   protected readonly bookId = signal<string | null>(null);
   protected readonly practice = signal<ReviewItem[] | null>(null);
   protected readonly editing = signal<ReviewItem | null>(null);
   protected draft: { text?: string; translation?: string; note?: string } = {};
 
-  protected readonly direction = computed<CardDirection>(() => this.settings.settings().cardDirection);
   protected readonly due = computed(() => this.all().filter((r) => r.srs.due <= this.clock.now()));
   /** Books that have saved items, for the filter. */
   protected readonly books = computed(() => {
     const ids = new Set(this.all().map((r) => r.bookId));
     return (this.bookRecs() ?? []).filter((b) => ids.has(b.id)).sort((a, b) => a.title.localeCompare(b.title));
   });
-  protected readonly rows = computed(() => filterItems(this.all(), { query: this.query(), kind: this.kind(), bookId: this.bookId() }));
+  protected readonly rows = computed(() => filterItems(this.all(), { chips: this.chips(), bookId: this.bookId() }));
 
   protected titleOf(id: string): string {
     return this.bookOf(id)?.title ?? '';
@@ -203,16 +193,16 @@ export class ReviewPage {
     return daysUntilDue(r, this.clock.now());
   }
 
-  protected onInput(e: Event): void {
-    this.query.set((e.target as HTMLInputElement).value);
+  protected toggleChip(k: ReviewChip): void {
+    this.chips.update((on) => (on.includes(k) ? on.filter((x) => x !== k) : [...on, k]));
+  }
+
+  protected whole(r: ReviewItem): boolean {
+    return isWholeCard(r);
   }
 
   protected onBook(e: Event): void {
     this.bookId.set((e.target as HTMLSelectElement).value || null);
-  }
-
-  protected setDirection(d: CardDirection): void {
-    void this.settings.update({ cardDirection: d });
   }
 
   /** Starts a session with what is due, or with every item when nothing is due. */

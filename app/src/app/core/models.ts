@@ -144,7 +144,7 @@ export interface ReadingSession extends SyncMeta {
   pagesRead: number[]; // pages that counted as read in this session (see 9.2)
 }
 
-export type ReviewKind = 'word' | 'phrase' | 'sentence';
+export type ReviewKind = 'word' | 'phrase' | 'sentence' | 'highlight' | 'note';
 export type ReviewLang = 'en' | 'ar';
 
 /** Spaced-repetition state of a saved item, one schedule per direction is not kept: the item is one card. */
@@ -156,7 +156,7 @@ export interface ReviewSrs {
   lapses: number;
 }
 
-/** A word, phrase or sentence saved from a book to the language notebook. */
+/** A word, phrase or sentence saved from a book to the language notebook, or a highlight or note added to Review. */
 export interface ReviewItem extends SyncMeta {
   text: string; // as selected
   translation: string;
@@ -166,6 +166,8 @@ export interface ReviewItem extends SyncMeta {
   page: number;
   context: string; // the sentence it was selected in; '' when unknown
   note?: string;
+  /** The highlight or note this item was made from (kinds 'highlight' and 'note'). */
+  annotationId?: ID;
   srs: ReviewSrs;
   createdAt: number;
 }

@@ -15,6 +15,8 @@ export const TOP_COPY = {
   goalReached: 'Goal reached',
   pagesAll: (n: number) => (n === 1 ? '1 page read in total' : `${n} pages read in total`),
   timeAll: (t: string) => `${t} read in total`,
+  todaysQuote: 'Today\u2019s quote',
+  closeQuote: 'Close',
   continue: 'Continue reading',
   percentRead: (n: number) => `${n}% read`,
   openBook: (title: string) => `Open ${title}`,

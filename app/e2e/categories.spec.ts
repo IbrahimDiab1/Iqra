@@ -38,8 +38,8 @@ test('the library category bar adds, renames, reorders, deletes with Undo and fi
   // Ctrl-click adds History (OR): the book is back.
   await bar(page).locator('[data-chip]', { hasText: 'History' }).click({ modifiers: ['Control'] });
   await expect(card).toBeVisible();
-  await bar(page).locator('[data-chip="uncategorized"]').click();
-  await expect(card).toHaveCount(0);
+  // The book is in History now, so Uncategorized has no books and its chip is hidden.
+  await expect(bar(page).locator('[data-chip="uncategorized"]')).toHaveCount(0);
   await bar(page).locator('[data-chip="all"]').click();
   await expect(card).toBeVisible();
 

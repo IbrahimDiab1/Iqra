@@ -5,17 +5,15 @@ import { CLOCK } from '../core/clock';
 import { DB, IqraDb } from '../core/db';
 import { newId } from '../core/ids';
 import type { ReviewItem } from '../core/models';
-import type { CardDirection } from './review-logic';
 import { PracticeComponent } from './practice.component';
 import { ReviewService } from './review.service';
 
 @Component({
   imports: [PracticeComponent],
-  template: `<iqra-practice [cards]="cards()" [direction]="dir()" (exit)="exited = exited + 1" />`,
+  template: `<iqra-practice [cards]="cards()" (exit)="exited = exited + 1" />`,
 })
 class Host {
   cards = signal<ReviewItem[]>([]);
-  dir = signal<CardDirection>('en-ar');
   exited = 0;
 }
 
@@ -30,12 +28,11 @@ describe('PracticeComponent', () => {
     fixture.detectChanges();
   };
 
-  async function start(dir: CardDirection, items: Partial<ReviewItem>[]) {
+  async function start(items: Partial<ReviewItem>[]) {
     const saved: ReviewItem[] = [];
     for (const [i, o] of items.entries()) {
       saved.push((await reviews.add({ text: `w${i}`, translation: `t${i}`, sourceLang: 'en', bookId: 'b', page: 1, context: '', ...o })).item);
     }
-    fixture.componentInstance.dir.set(dir);
     fixture.componentInstance.cards.set(saved);
     fixture.detectChanges();
     return saved;
@@ -52,26 +49,40 @@ describe('PracticeComponent', () => {
     await db.delete();
   });
 
-  it('shows the English side first for en-ar and the Arabic side first for ar-en', async () => {
-    await start('en-ar', [{ text: 'book', translation: 'كتاب' }]);
+  it('shows the saved text first and the translation only after the flip, for any source language', async () => {
+    await start([{ text: 'book', translation: 'كتاب' }]);
     expect(q('[data-testid="front"]')?.textContent).toBe('book');
-  });
-
-  it('Arabic first for ar-en, answer hidden until flipped', async () => {
-    await start('ar-en', [{ text: 'book', translation: 'كتاب' }]);
-    expect(q('[data-testid="front"]')?.textContent).toBe('كتاب');
     expect(q('[data-testid="back"]')).toBeNull();
+    expect(q('[data-testid="flip"]')).not.toBeNull();
     key(' ');
-    expect(q('[data-testid="back"]')?.textContent).toBe('book');
+    expect(q('[data-testid="back"]')?.textContent).toBe('كتاب');
   });
 
-  it('a card from an Arabic source swaps sides to keep English in front', async () => {
-    await start('en-ar', [{ text: 'كتاب', translation: 'book', sourceLang: 'ar' }]);
-    expect(q('[data-testid="front"]')?.textContent).toBe('book');
+  it('an Arabic source keeps Arabic in front', async () => {
+    await start([{ text: 'كتاب', translation: 'book', sourceLang: 'ar' }]);
+    expect(q('[data-testid="front"]')?.textContent).toBe('كتاب');
+  });
+
+  it('highlights and notes show whole, with no flip, and are graded directly', async () => {
+    const note = await reviews.addAnnotation({
+      id: 'n1', bookId: 'b', type: 'note', page: 4, body: 'My thought', tags: [], createdAt: 1, updatedAt: 1, deviceId: 'd',
+      text: { page: 4, start: { item: 0, offset: 0 }, end: { item: 0, offset: 5 }, rects: [], quote: 'The quote' },
+    });
+    fixture.componentInstance.cards.set([note!.item]);
+    fixture.detectChanges();
+    expect(q('[data-testid="whole-text"]')?.textContent).toBe('The quote');
+    expect(q('[data-testid="whole-note"]')?.textContent).toBe('My thought');
+    expect(q('[data-testid="whole-source"]')?.textContent).toContain('p. 4');
+    expect(q('[data-testid="flip"]')).toBeNull();
+    expect(el().textContent).not.toContain('Show answer');
+    expect(el().querySelectorAll('.grade')).toHaveLength(4);
+    key('3');
+    await vi.waitFor(async () => expect((await db.review.get(note!.item.id))!.srs.reps).toBe(1));
+    expect(q('[data-testid="finished"]')).not.toBeNull();
   });
 
   it('keys 1-4 grade only after the flip; Good schedules the card and advances', async () => {
-    const [a, b] = await start('en-ar', [{}, {}]);
+    const [a, b] = await start([{}, {}]);
     key('3');
     expect(q('[data-testid="progress"]')?.textContent).toBe('0 of 2');
     key(' ');
@@ -86,7 +97,7 @@ describe('PracticeComponent', () => {
   });
 
   it('Again returns the card to the end of the session and counts a lapse', async () => {
-    const [a] = await start('en-ar', [{}, {}]);
+    const [a] = await start([{}, {}]);
     key(' ');
     key('1');
     await vi.waitFor(async () => expect((await db.review.get(a.id))!.srs.lapses).toBe(1));
@@ -101,7 +112,7 @@ describe('PracticeComponent', () => {
   });
 
   it('the grade buttons work with the pointer and the exit button emits exit', async () => {
-    await start('en-ar', [{}]);
+    await start([{}]);
     q('[data-testid="flip"]')!.click();
     fixture.detectChanges();
     expect(el().querySelectorAll('.grade')).toHaveLength(4);
@@ -109,14 +120,5 @@ describe('PracticeComponent', () => {
     fixture.detectChanges();
     q('[data-testid="exit-practice"]')!.click();
     expect(fixture.componentInstance.exited).toBe(1);
-  });
-
-  it('mixed picks a direction per card', async () => {
-    vi.spyOn(Math, 'random').mockReturnValueOnce(0.9).mockReturnValueOnce(0.1);
-    await start('mixed', [{ text: 'a', translation: 'أ' }, { text: 'b', translation: 'ب' }]);
-    expect(q('[data-testid="front"]')?.textContent).toBe('أ');
-    key(' ');
-    key('3');
-    expect(q('[data-testid="front"]')?.textContent).toBe('b');
   });
 });

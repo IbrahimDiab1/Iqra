@@ -129,6 +129,8 @@ export const STATS_COPY = {
     noRating: 'Not rated',
     noReview: 'No review yet.',
     chapters: 'Chapter progress',
+    expandSections: 'Show sections',
+    collapseSections: 'Hide sections',
     noSessions: 'No reading sessions yet. Open the book and read for a few seconds.',
   },
 } as const;
