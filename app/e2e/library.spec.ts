@@ -138,6 +138,22 @@ test('first-run intro: skippable, shown once, reachable again from Profile', asy
   }
 });
 
+test('the Today\u2019s quote button opens the quote and closes on Escape and on an outside click', async ({ page }) => {
+  await page.goto('/library');
+  await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
+  const btn = page.getByTestId('quote-btn');
+  await expect(btn).toHaveText(/Today.s quote/);
+  await expect(page.getByTestId('quote')).toHaveCount(0);
+  await btn.click();
+  await expect(page.getByTestId('quote')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('quote')).toHaveCount(0);
+  await btn.click();
+  await expect(page.getByTestId('quote')).toBeVisible();
+  await page.getByTestId('welcome').click();
+  await expect(page.getByTestId('quote')).toHaveCount(0);
+});
+
 test('Filter and Sort are borderless and the greeting stat line rotates', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 800 } });
   try {

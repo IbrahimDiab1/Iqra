@@ -50,6 +50,15 @@ test.describe('arabic', () => {
     await context.close();
   });
 
+  test('on a wide screen the Contents drawer opens on the left, also for a right-to-left book', async () => {
+    await showToolbar(page);
+    await page.getByRole('button', { name: 'Contents & notes', exact: true }).click();
+    const panel = page.locator('iqra-drawer .panel.open');
+    await expect(panel).toBeVisible();
+    const box = (await panel.boundingBox())!;
+    expect(box.x).toBeLessThan(10);
+  });
+
   test('search finds a word written in presentation forms and in base letters, and the hit jumps', async () => {
     const hits = await searchFor(page, 'العلم');
     await expect(hits).toHaveCount(2);

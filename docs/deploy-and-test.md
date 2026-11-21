@@ -214,3 +214,16 @@ Real-device checks for the reader and library overhaul. Use an Android phone (Ch
 - **Selecting text in that book:** drag across a few lines in paged and in scrolling mode. The highlight should follow the pointer smoothly; tap a word to select it, then Highlight, Copy and Translate still work and the saved quote is the words you selected.
 - **Scrolling mode:** scroll quickly through 40 screens. Pages near the screen are selectable; pages further away are pictures only.
 - **Search and Contents:** search for a common word in the same book; hits and jumps are unchanged.
+
+## Plan 10 checks (Group W: web fixes)
+
+- W1: on a laptop, Contents opens on the left for every book, including a right-to-left (Arabic) one. On a phone it still slides in from the right.
+- W2: in the reader settings the choice is called "Page direction" (Auto, Right to left, Left to right) and only shows when pages are turned by swiping. Switch to scrolling and back: your choice is still there.
+- W3: the Library greeting no longer shows a quote line. A small "Today's quote" button opens a card with the full quote. Esc, a click outside, or Close shuts it.
+- W4: a new profile sorts the Library by Recently added. If you picked another sort before, it is kept.
+- W5: open a book, turn to a middle page (or scroll to the middle of one), then enter and leave full screen, resize the window, or rotate the phone. The page number and the spot on the page do not move. Try it in swipe and scroll mode, and zoomed in.
+- W6: in scrolling mode the page number and the chapter or section name in the header change while you drag or wheel, not only when you stop.
+- W7: translate a very long selection on a phone. The text scrolls inside the card; Save to Review, Listen and Close stay on screen.
+- W8: highlight some text: the toast has Undo and "Add to Review". Tap a highlight or note: "Add to Review" sits next to Delete and becomes "In Review" once added (never twice). On Review, the chips All, Words, Sentences, Notes, Highlights can be combined (All clears the others); there is no search box and no direction choice. In Practice, words and sentences show the saved text and flip to the translation; notes and highlights show the quote, your note and the book and page at once, with only Again, Hard, Good, Easy.
+- W9: Book details, Stats tab: "Chapter progress" starts closed, and each chapter's sections start closed too.
+- W10: the Library category bar hides "Uncategorized" while no book is uncategorized (it shows again as soon as one is, or while it is the chosen filter).
