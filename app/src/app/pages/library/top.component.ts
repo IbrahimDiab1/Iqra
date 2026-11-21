@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, computed, inject, input, signal } from '@angular/core';
+import { DomSanitizer } from '@angular/platform-browser';
+import { icon } from '../../ui/icons';
 import { AuthApi } from '../../auth/auth.service';
 import { CLOCK } from '../../core/clock';
 import { DB } from '../../core/db';
@@ -8,7 +10,7 @@ import { SettingsService } from '../../core/settings.service';
 import { SyncStatusComponent } from '../../sync/sync-status.component';
 import type { BookView } from './book-card.component';
 import { firstName, statLines } from './greeting';
-import { quoteOfTheDay } from './quotes';
+import { fullQuoteOfTheDay } from './quotes';
 import { RecentCardComponent } from './recent-card.component';
 import { TOP_COPY } from './top-copy';
 
@@ -37,12 +39,31 @@ const ROTATE_MS = 3000;
         (focusin)="paused.set(true)"
         (focusout)="paused.set(false)"
       >
-        <span class="quote" dir="auto" data-testid="quote">{{ quote() }}</span>
-        <span class="dot" aria-hidden="true">·</span>
         @for (l of [line()]; track l) {
           <span class="line">{{ l }}</span>
         }
       </p>
+      <div class="quote-wrap">
+        <button
+          type="button"
+          class="quote-btn"
+          data-testid="quote-btn"
+          aria-haspopup="dialog"
+          [attr.aria-expanded]="quoteOpen()"
+          (click)="quoteOpen.set(!quoteOpen())"
+        >
+          <span class="qi" aria-hidden="true" [innerHTML]="quoteIcon"></span>{{ copy.todaysQuote }}
+        </button>
+        @if (quoteOpen()) {
+          <div class="quote-pop" role="dialog" [attr.aria-label]="copy.todaysQuote" data-testid="quote-pop">
+            <p class="q-text" dir="auto" data-testid="quote">{{ quote().text }}</p>
+            @if (quote().author) {
+              <p class="q-author" data-testid="quote-author">{{ quote().author }}</p>
+            }
+            <button type="button" class="q-close" data-testid="quote-close" (click)="closeQuote(true)">{{ copy.closeQuote }}</button>
+          </div>
+        }
+      </div>
       <iqra-sync-status />
     </header>
 
@@ -66,8 +87,15 @@ const ROTATE_MS = 3000;
     .card { padding: 14px 16px 16px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
     .hello { margin-bottom: 14px; }
     .stats { display: flex; align-items: baseline; gap: 6px; margin: 6px 0 0; min-height: 1.4em; color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; }
-    .quote { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; }
-    .dot { flex: none; }
+    .quote-wrap { position: relative; margin: 6px 0 4px; }
+    .quote-btn { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 2px 8px 2px 6px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; }
+    .quote-btn:hover { color: var(--fg); background: color-mix(in srgb, currentColor 8%, transparent); }
+    .quote-btn:focus-visible, .q-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .qi { display: inline-grid; place-items: center; }
+    .quote-pop { position: absolute; z-index: 5; top: calc(100% + 6px); inset-inline-start: 0; box-sizing: border-box; width: min(320px, calc(100vw - 2 * var(--gutter, 16px))); max-height: 60vh; overflow-y: auto; padding: 14px 16px 10px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
+    .q-text { margin: 0; font-size: 16px; font-style: italic; line-height: 1.5; overflow-wrap: anywhere; }
+    .q-author { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+    .q-close { display: block; margin: 10px 0 0 auto; padding: 4px 10px; border: 0; border-radius: var(--radius-control); background: none; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; }
     .line { flex: none; white-space: nowrap; display: inline-block; animation: line-in .4s ease; }
     @keyframes line-in { from { opacity: 0; } to { opacity: 1; } }
     @media (prefers-reduced-motion: reduce) { .line { animation: none; } }
@@ -128,7 +156,28 @@ export class LibraryTopComponent {
     return l[this.tick() % l.length];
   });
 
-  protected readonly quote = computed(() => quoteOfTheDay(this.now()));
+  protected readonly quote = computed(() => {
+    const [text, author] = fullQuoteOfTheDay(this.now()).split(/\s+\u2014\s+/);
+    return { text, author: author ?? '' };
+  });
+  protected readonly quoteIcon = inject(DomSanitizer).bypassSecurityTrustHtml(icon('quote', 16));
+  protected readonly quoteOpen = signal(false);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  protected closeQuote(refocus = false): void {
+    this.quoteOpen.set(false);
+    if (refocus) this.host.nativeElement.querySelector<HTMLElement>('.quote-btn')?.focus();
+  }
+
+  @HostListener('document:keydown.escape')
+  protected onEscape(): void {
+    if (this.quoteOpen()) this.closeQuote(true);
+  }
+
+  @HostListener('document:pointerdown', ['$event'])
+  protected onOutside(e: Event): void {
+    if (this.quoteOpen() && !(e.target as Element | null)?.closest('.quote-wrap')) this.quoteOpen.set(false);
+  }
 
   protected readonly welcomeText = computed(() => {
     const name = firstName(this.auth.profile()?.name);

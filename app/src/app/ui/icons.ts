@@ -23,6 +23,7 @@ const ICON = {
   speaker: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
   stats: '<path d="M5 20V11M12 20V4M19 20v-6"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  quote: '<path d="M10 7H6.5A2.5 2.5 0 0 0 4 9.5V13h4.5a1.5 1.5 0 0 0 1.5-1.5zM20 7h-3.5A2.5 2.5 0 0 0 14 9.5V13h4.5a1.5 1.5 0 0 0 1.5-1.5z"/><path d="M4 13c0 2.5 1 4 3 4.5M14 13c0 2.5 1 4 3 4.5"/>',
   // "Aa": a large A and a small a, for the reading settings.
   textSettings: '<path d="M2.5 18L7.5 6l5 12M4.1 14.2h6.8"/><circle cx="17" cy="15.2" r="2.6"/><path d="M19.6 12.6V18"/>',
   // An open book, for reading mode (reflowed text).

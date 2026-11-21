@@ -791,6 +791,56 @@ test.describe('reader geometry', () => {
     }
   });
 
+  test('swipe mode: the page stays put across resize, full screen and rotation sizes', async () => {
+    await openBook(page);
+    for (let p = 2; p <= 5; p++) {
+      await page.keyboard.press('ArrowRight');
+      await expectPageLabel(page, p);
+    }
+    for (const size of [{ width: 700, height: 900 }, { width: 900, height: 500 }, { width: 1920, height: 1080 }, { width: 1280, height: 600 }]) {
+      await page.setViewportSize(size);
+      await page.waitForTimeout(350);
+      await expectPageLabel(page, 5);
+    }
+    // And the real thing: into full screen and back out.
+    await showToolbar(page);
+    await page.getByRole('button', { name: 'Full screen' }).click();
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement !== null)).toBe(true);
+    await page.waitForTimeout(400);
+    await expectPageLabel(page, 5);
+    await page.evaluate(() => document.exitFullscreen());
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+    await page.waitForTimeout(400);
+    await expectPageLabel(page, 5);
+  });
+
+  test('scroll mode: the place stays anchored across resize, full screen and rotation sizes', async () => {
+    await openBook(page);
+    await useScrolling(page);
+    const viewport = page.locator('iqra-scroller .viewport');
+    const pageEl = page.locator('iqra-scroller .page[data-page="5"]');
+    await expect(pageEl).toBeAttached();
+    await viewport.evaluate((el) => {
+      const p = el.querySelector<HTMLElement>('.page[data-page="5"]')!;
+      el.scrollTop = p.offsetTop + p.offsetHeight * 0.4;
+    });
+    await expectPageLabel(page, 5);
+    await page.waitForTimeout(400);
+    const fraction = () =>
+      viewport.evaluate((el) => {
+        const p = el.querySelector<HTMLElement>('.page[data-page="5"]')!;
+        return (el.scrollTop - p.offsetTop) / p.offsetHeight;
+      });
+    const before = await fraction();
+    expect(before).toBeGreaterThan(0.3);
+    for (const size of [{ width: 700, height: 900 }, { width: 900, height: 500 }, { width: 1920, height: 1080 }, { width: 1280, height: 600 }]) {
+      await page.setViewportSize(size);
+      await page.waitForTimeout(500);
+      await expectPageLabel(page, 5);
+      expect(Math.abs((await fraction()) - before)).toBeLessThan(0.03);
+    }
+  });
+
   test('scroll mode: reopening without moving does not stamp a newer position', async () => {
     await openBook(page);
     await useScrolling(page);

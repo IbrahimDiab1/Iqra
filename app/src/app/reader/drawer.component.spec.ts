@@ -53,7 +53,7 @@ describe('DrawerComponent', () => {
     expect(panel().classList.contains('open')).toBe(false);
   });
 
-  it('docks on the left on wide screens, on the right in a right-to-left book and on phones', async () => {
+  it('docks on the left on wide screens, also in a right-to-left book, and on the right on phones', async () => {
     await create(1280);
     expect(panel().classList.contains('left')).toBe(true);
     el.remove();
@@ -61,10 +61,10 @@ describe('DrawerComponent', () => {
     expect(panel().classList.contains('left')).toBe(false);
   });
 
-  it('mirrors to the right edge for rtl', async () => {
+  it('stays on the left for a right-to-left book on wide screens', async () => {
     TestBed.overrideComponent(HostComponent, { set: { template: '<iqra-drawer [open]="true" [rtl]="true" title="Contents"><button>x</button></iqra-drawer>' } });
     await create(1280);
-    expect(panel().classList.contains('left')).toBe(false);
+    expect(panel().classList.contains('left')).toBe(true);
   });
 
   it('opens, moves focus inside, and Escape or Close asks to close', async () => {

@@ -111,6 +111,16 @@ describe('CategoryBarComponent', () => {
       expect(chip('+').getAttribute('aria-label')).toBe('Add category');
     });
 
+    it('hides Uncategorized while it has no books, unless it is the chosen filter', async () => {
+      await render();
+      fixture.componentRef.setInput('counts', { ...counts, uncategorized: 0 });
+      fixture.detectChanges();
+      expect(chipKeys()).toEqual(['all', 'c1', 'c2', 'c3', '+']);
+      fixture.componentRef.setInput('selected', ['__uncategorized__']);
+      fixture.detectChanges();
+      expect(chip('uncategorized')).not.toBeNull();
+    });
+
     it('shows names with dir="auto"', async () => {
       await render();
       expect(el.querySelector('.nm')!.getAttribute('dir')).toBe('auto');

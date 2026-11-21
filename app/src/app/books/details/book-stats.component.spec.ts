@@ -119,8 +119,28 @@ describe('BookStatsComponent', () => {
       { key: '1', title: 'Two', page: 51, children: [] },
     ];
     await create(makeBook({ outline, lastPageReached: 50 }));
+    expect(el.querySelector('.chap')).toBeNull();
+    el.querySelector<HTMLButtonElement>('[data-testid="chapters-toggle"]')!.click();
+    fixture.detectChanges();
     const bars = [...el.querySelectorAll('.chap [role=progressbar]')].map((b) => b.getAttribute('aria-valuenow'));
     expect(bars).toEqual(['100', '0']);
+  });
+
+  it('starts with Chapter progress collapsed and each chapter\u2019s sections collapsed', async () => {
+    const outline = [
+      { key: '0', title: 'One', page: 1, children: [{ key: '0.0', title: 'One A', page: 2, children: [] }] },
+      { key: '1', title: 'Two', page: 51, children: [] },
+    ];
+    await create(makeBook({ outline, lastPageReached: 50 }));
+    const toggle = el.querySelector<HTMLButtonElement>('[data-testid="chapters-toggle"]')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    toggle.click();
+    fixture.detectChanges();
+    const titles = () => [...el.querySelectorAll('.chap .tt')].map((t) => t.textContent!.trim());
+    expect(titles()).toEqual(['One', 'Two']);
+    el.querySelector<HTMLButtonElement>('.chap .fold.sub')!.click();
+    fixture.detectChanges();
+    expect(titles()).toEqual(['One', 'One A', 'Two']);
   });
 
   it('releases its read-mark live query when destroyed', async () => {

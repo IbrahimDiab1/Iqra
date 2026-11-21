@@ -77,12 +77,21 @@ describe('ReadingSettingsSheetComponent', () => {
     expect(host.changed[0].pageMode).toBe('scroll');
   });
 
-  it('Text direction starts on Auto and a choice is saved on the book', async () => {
+  it('Page direction starts on Auto and a choice is saved on the book', async () => {
     expect(radio(CHROME_COPY.dirAuto).getAttribute('aria-checked')).toBe('true');
     radio(CHROME_COPY.dirRtl).click();
     await vi.waitFor(async () => expect((await db.books.get('b1'))!.textDirection).toBe('rtl'));
     expect(host.changed.at(-1)!.textDirection).toBe('rtl');
     expect(host.changed.at(-1)!.pageMode).toBe('swipe');
+  });
+
+  it('Page direction is labelled so and only shown when pages are turned by swiping', async () => {
+    expect(el.querySelector('#rs-dir')!.textContent).toBe('Page direction');
+    const scrolling = TestBed.createComponent(HostComponent);
+    scrolling.componentInstance.book = { ...BOOK, pageMode: 'scroll' };
+    scrolling.detectChanges();
+    expect((scrolling.nativeElement as HTMLElement).querySelector('#rs-dir')).toBeNull();
+    expect((scrolling.nativeElement as HTMLElement).querySelector('#rs-mode')).not.toBeNull();
   });
 
   it('Progress mode is a per-book choice here: it shows the book\u2019s mode and reports a change', () => {

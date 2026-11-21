@@ -309,17 +309,23 @@ describe('LibraryPage', () => {
     expect(el.querySelector('[data-testid="welcome-stats"]')!.textContent).toContain('1 h 30 min read today');
   });
 
-  it('shows the brand, today\'s quote before the stat line, and sections as cards', async () => {
+  it('shows the brand and a Today\u2019s quote button that opens the quote and closes on Escape or outside click', async () => {
     await seed([reading]);
     await create();
     await waitFor(() => el.querySelector('[data-testid="welcome-stats"]') !== null);
     expect(el.querySelector('[data-testid="brand"]')!.textContent).toContain('Iqra');
-    const stats = el.querySelector('[data-testid="welcome-stats"]')!;
-    const quote = stats.querySelector('[data-testid="quote"]')!.textContent!;
-    expect(quote.length).toBeGreaterThan(0);
-    expect(quote.length).toBeLessThanOrEqual(60);
-    expect(stats.textContent!.indexOf(quote)).toBe(0);
-    expect(stats.textContent).toContain('·');
+    expect(el.querySelector('[data-testid="quote"]')).toBeNull();
+    const btn = el.querySelector<HTMLButtonElement>('[data-testid="quote-btn"]')!;
+    expect(btn.textContent).toContain('Today\u2019s quote');
+    btn.click();
+    await waitFor(() => el.querySelector('[data-testid="quote"]') !== null);
+    expect(el.querySelector('[data-testid="quote"]')!.textContent!.length).toBeGreaterThan(0);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await waitFor(() => el.querySelector('[data-testid="quote"]') === null);
+    btn.click();
+    await waitFor(() => el.querySelector('[data-testid="quote"]') !== null);
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await waitFor(() => el.querySelector('[data-testid="quote"]') === null);
     expect(el.querySelector('section.card')).not.toBeNull();
   });
 

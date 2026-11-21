@@ -39,6 +39,7 @@ interface Choice<T> {
         </div>
       </section>
 
+      @if (book().pageMode === 'swipe') {
       <section class="group">
         <h4 id="rs-dir">{{ chrome.textDirection }}</h4>
         <div class="seg" role="radiogroup" aria-labelledby="rs-dir">
@@ -48,6 +49,7 @@ interface Choice<T> {
         </div>
         <p class="hint">{{ chrome.textDirectionHint }}</p>
       </section>
+      }
 
       <section class="group">
         <h4 id="rs-theme">{{ copy.pageColor }}</h4>

@@ -36,9 +36,13 @@ export const QUOTES: readonly string[] = [
 const DAY_MS = 86_400_000;
 
 /** Today's quote: the list rotates daily by local calendar day, and a quote never runs past QUOTE_MAX. */
-export function quoteOfTheDay(now: number): string {
+export function fullQuoteOfTheDay(now: number): string {
   const d = new Date(now);
   const dayNumber = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY_MS);
-  const q = QUOTES[dayNumber % QUOTES.length];
+  return QUOTES[dayNumber % QUOTES.length];
+}
+
+export function quoteOfTheDay(now: number): string {
+  const q = fullQuoteOfTheDay(now);
   return q.length <= QUOTE_MAX ? q : `${q.slice(0, QUOTE_MAX - 1).trimEnd()}…`;
 }

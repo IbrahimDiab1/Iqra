@@ -62,6 +62,7 @@ const ADD_KEY = '+';
         [attr.tabindex]="tabKey() === 'all' ? 0 : -1"
         (click)="chooseAll()"
       ><span>{{ c.all }}</span><span class="ct">{{ counts().all }}</span></button>
+      @if (showUncategorized()) {
       <button
         type="button"
         class="chip"
@@ -75,6 +76,7 @@ const ADD_KEY = '+';
         (pointercancel)="pressEnd()"
         (pointerleave)="pressEnd()"
       ><span>{{ c.uncategorized }}</span><span class="ct">{{ counts().uncategorized }}</span></button>
+      }
 
       @for (cat of categories(); track cat.id; let i = $index) {
         <span class="wrap" [attr.data-cat]="cat.id" [class.on]="isOn(cat.id)" [class.editing]="renamingId() === cat.id">
@@ -310,6 +312,8 @@ export class CategoryBarComponent {
 
   protected readonly c = COPY.categoryBar;
   protected readonly uncategorized = UNCATEGORIZED;
+  /** Uncategorized is hidden while no book is in it (unless it is the chosen filter, so it can be cleared). */
+  protected readonly showUncategorized = computed(() => this.counts().uncategorized > 0 || this.isOn(UNCATEGORIZED));
   protected readonly ADD_KEY = ADD_KEY;
   protected readonly moreIcon: SafeHtml = this.svg('more', 18);
   protected readonly plusIcon: SafeHtml = this.svg('plus', 18);
@@ -325,7 +329,8 @@ export class CategoryBarComponent {
   private readonly activeKey = signal<string>(ALL_KEY);
   protected readonly tabKey = computed(() => {
     const key = this.activeKey();
-    if (key === ALL_KEY || key === 'uncategorized' || key === ADD_KEY) return key;
+    if (key === ALL_KEY || key === ADD_KEY) return key;
+    if (key === 'uncategorized') return this.showUncategorized() ? key : ALL_KEY;
     return this.categories().some((cat) => cat.id === key) ? key : ALL_KEY;
   });
 

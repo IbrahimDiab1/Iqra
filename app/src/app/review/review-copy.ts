@@ -13,6 +13,7 @@ export const REVIEW_COPY = {
     savedAgain: 'Updated in Review',
     saveFailed: 'Couldn’t save that. Try again.',
     speak: 'Listen',
+    close: 'Close',
     speakSource: 'Listen to the selected text',
     speakTranslation: 'Listen to the translation',
     definition: 'Definition',

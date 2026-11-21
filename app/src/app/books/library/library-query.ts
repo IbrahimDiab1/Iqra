@@ -35,7 +35,7 @@ export const DEFAULT_LIBRARY_STATE: LibraryState = {
   tags: [],
   minRating: null,
   downloadedOnly: false,
-  sort: 'recent-read',
+  sort: 'recent-added',
   dir: 'desc',
   query: '',
 };
