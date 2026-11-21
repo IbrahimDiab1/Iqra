@@ -100,6 +100,27 @@ const LOAD_TIMEOUT_MS = 8000;
         <p class="note">{{ l.overview.streakNote }}</p>
         </section>
 
+        <section class="card" data-testid="goals-card">
+          <h2>{{ l.goalsTitle }}</h2>
+          @if (goalRows().length === 0) {
+            <p class="empty">{{ l.noGoals }}</p>
+          }
+          <ul class="goals">
+            @for (g of goalRows(); track g.goal.id) {
+              <li class="goal">
+                <button type="button" class="goal-open" (click)="editing.set(g.goal); editorOpen.set(true)">
+                  <span class="gl" dir="auto">{{ g.text }}</span>
+                  <span class="gs" dir="auto">{{ g.scope }}</span>
+                </button>
+                <span class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="g.pct" [attr.aria-label]="g.text + ', ' + g.scope">
+                  <span class="fill" [style.width.%]="g.pct"></span>
+                </span>
+              </li>
+            }
+          </ul>
+          <button type="button" class="add" (click)="editing.set(null); editorOpen.set(true)">{{ goalCopy.add }}</button>
+        </section>
+
         <section class="card" data-testid="period-card">
 
         <div class="seg periods" role="group" [attr.aria-label]="l.period.label">
@@ -129,27 +150,6 @@ const LOAD_TIMEOUT_MS = 8000;
             <span class="d">{{ timeDelta() }}</span>
           </div>
         </div>
-        </section>
-
-        <section class="card" data-testid="goals-card">
-          <h2>{{ l.goalsTitle }}</h2>
-          @if (goalRows().length === 0) {
-            <p class="empty">{{ l.noGoals }}</p>
-          }
-          <ul class="goals">
-            @for (g of goalRows(); track g.goal.id) {
-              <li class="goal">
-                <button type="button" class="goal-open" (click)="editing.set(g.goal); editorOpen.set(true)">
-                  <span class="gl" dir="auto">{{ g.text }}</span>
-                  <span class="gs" dir="auto">{{ g.scope }}</span>
-                </button>
-                <span class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="g.pct" [attr.aria-label]="g.text + ', ' + g.scope">
-                  <span class="fill" [style.width.%]="g.pct"></span>
-                </span>
-              </li>
-            }
-          </ul>
-          <button type="button" class="add" (click)="editing.set(null); editorOpen.set(true)">{{ goalCopy.add }}</button>
         </section>
 
         <section class="card" data-testid="chart-card">

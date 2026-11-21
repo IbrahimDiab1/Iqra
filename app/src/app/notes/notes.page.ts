@@ -66,7 +66,7 @@ interface Row {
         <label class="search">
           <input type="search" dir="auto" autocomplete="off" [placeholder]="copy.hubSearch" [attr.aria-label]="copy.hubSearch" [value]="query()" (input)="onInput($event)" />
         </label>
-        <div class="chips" role="group" [attr.aria-label]="nc.typeGroup" data-testid="type-chips">
+        <div class="chips one-line" role="group" [attr.aria-label]="nc.typeGroup" data-testid="type-chips">
           <button type="button" class="chip" [class.on]="types().length === 0" [attr.aria-pressed]="types().length === 0" (click)="types.set([])">{{ nc.filters.all }}</button>
           @for (f of filters; track f) {
             <button type="button" class="chip" [class.on]="types().includes(f)" [attr.aria-pressed]="types().includes(f)" (click)="toggleType(f)">{{ nc.filters[f] }}</button>
@@ -167,6 +167,9 @@ interface Row {
     .search input { box-sizing: border-box; width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--fg); font: 16px var(--ui); }
     .search input:focus-visible, .chip:focus-visible, .act:focus-visible, .opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .chips.one-line { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    .chips.one-line::-webkit-scrollbar { display: none; }
+    .chips.one-line .chip { flex: none; white-space: nowrap; }
     .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; max-width: 100%; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg); font: 13px var(--ui); cursor: pointer; overflow-wrap: anywhere; }
     .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
     .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--dot, var(--accent)); }

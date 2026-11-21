@@ -78,7 +78,7 @@ describe('ReviewPage', () => {
     input.value = '';
     input.dispatchEvent(new Event('input'));
     const chip = (name: string) => Array.from(el().querySelectorAll<HTMLButtonElement>('.chips .chip')).find((b) => b.textContent?.trim() === name)!;
-    chip('Phrases').click();
+    chip('Sentences').click();
     await settle();
     expect(rows()).toHaveLength(1);
     expect(rows()[0].textContent).toContain('break the ice');

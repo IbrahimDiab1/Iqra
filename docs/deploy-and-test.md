@@ -190,3 +190,12 @@ Real-device checks for the reader and library overhaul. Use an Android phone (Ch
 - **Sync never sticks (P2b):** a stalled Drive call is abandoned after 2 minutes (status Error, next sync works), a silent token renewal that never answers no longer blocks the poll (20 s), and a stalled upload no longer blocks later uploads (10 minutes).
 - **Two versions of the app open (P2c):** an old tab holding the database closes its connection and reloads when a newer tab upgrades it.
 - **Stats never blank (P2d):** if the data cannot be read, Stats shows "Your reading history could not be loaded" with Try again and Reload app, also when loading takes longer than 8 s. A brand new account shows the empty states.
+
+## Plan 9 checks (Group C: Library, Stats, Review, Notes, copy)
+- **Library (C1):** the Iqra logo and name sit at the top; the greeting, Continue reading and the library (tabs, filters, grid) are separate cards, like Profile and Stats. No sideways scroll at 320, 390 and 1280 px, light and dark.
+- **Greeting (C2):** the line starts with a short quote that changes each day (cut with an ellipsis when long), then a dot, then the rotating stat.
+- **Stats (C3):** Goals is the card right after Overview.
+- **Review (C4):** the filter chips are All, Words, Sentences. Older saved phrases show under Sentences.
+- **Intro and backup copy (C5):** the intro has no technical words, tells readers to right-click (or tap the ⋯ button on) a book for details and actions, and mentions Stats for progress. Profile > Your data describes Back up everything as a backup file of notes, highlights and progress.
+- **Start page (C6):** opening the app, and signing in, lands on Library even though Profile is first in the nav.
+- **Notes (C7):** the type chips (All, Highlights, Notes, Summaries, Bookmarks) stay on one line and scroll sideways with no visible scrollbar.

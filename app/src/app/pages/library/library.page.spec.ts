@@ -309,6 +309,20 @@ describe('LibraryPage', () => {
     expect(el.querySelector('[data-testid="welcome-stats"]')!.textContent).toContain('1 h 30 min read today');
   });
 
+  it('shows the brand, today\'s quote before the stat line, and sections as cards', async () => {
+    await seed([reading]);
+    await create();
+    await waitFor(() => el.querySelector('[data-testid="welcome-stats"]') !== null);
+    expect(el.querySelector('[data-testid="brand"]')!.textContent).toContain('Iqra');
+    const stats = el.querySelector('[data-testid="welcome-stats"]')!;
+    const quote = stats.querySelector('[data-testid="quote"]')!.textContent!;
+    expect(quote.length).toBeGreaterThan(0);
+    expect(quote.length).toBeLessThanOrEqual(60);
+    expect(stats.textContent!.indexOf(quote)).toBe(0);
+    expect(stats.textContent).toContain('·');
+    expect(el.querySelector('section.card')).not.toBeNull();
+  });
+
   it('rotates the stat line every 3 s, pauses while hovered or focused, and is not a live region', async () => {
     await db.sessions.put({
       id: 's1', updatedAt: 1, deviceId: 'd', bookId: 'r', startedAt: 4000, endedAt: 5000, activeMs: 90 * 60_000, pagesRead: [1, 2],

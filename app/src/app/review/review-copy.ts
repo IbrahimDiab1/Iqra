@@ -22,7 +22,7 @@ export const REVIEW_COPY = {
     search: 'Search saved words',
     allBooks: 'All books',
     book: 'Book',
-    kinds: { all: 'All', word: 'Words', phrase: 'Phrases', sentence: 'Sentences' },
+    kinds: { all: 'All', word: 'Words', sentence: 'Sentences' },
     edit: 'Edit',
     delete: 'Delete',
     deleted: 'Deleted',

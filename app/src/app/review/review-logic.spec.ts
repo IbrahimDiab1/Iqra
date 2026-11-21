@@ -99,7 +99,7 @@ describe('filterItems', () => {
     expect(filterItems(items, { query: 'idiom', kind: 'all', bookId: null }).map((r) => r.id)).toEqual(['break the ice']);
   });
   it('filters by kind and book', () => {
-    expect(filterItems(items, { query: '', kind: 'phrase', bookId: null }).map((r) => r.id)).toEqual(['break the ice']);
+    expect(filterItems(items, { query: '', kind: 'sentence', bookId: null }).map((r) => r.id)).toEqual(['break the ice']);
     expect(filterItems(items, { query: '', kind: 'all', bookId: 'b1' })).toHaveLength(2);
   });
 });

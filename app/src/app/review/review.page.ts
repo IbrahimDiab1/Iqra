@@ -15,7 +15,7 @@ import { daysUntilDue, filterItems, type CardDirection } from './review-logic';
 import { ReviewService } from './review.service';
 import { canSpeak, speak } from './translation';
 
-const KINDS = ['all', 'word', 'phrase', 'sentence'] as const;
+const KINDS = ['all', 'word', 'sentence'] as const;
 const DIRECTIONS: readonly CardDirection[] = ['en-ar', 'ar-en', 'mixed'];
 
 /** The language notebook: saved words, phrases and sentences, and flashcard practice. */

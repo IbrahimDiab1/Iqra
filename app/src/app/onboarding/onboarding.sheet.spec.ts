@@ -17,6 +17,15 @@ class Host {
   adds = 0;
 }
 
+describe('onboarding copy', () => {
+  it('uses everyday words and points to the book menu and Stats', () => {
+    const all = ONBOARDING_COPY.steps.map((s) => `${s.title} ${s.body}`).join(' ');
+    for (const word of ['server', 'JSON', 'appData', 'either direction']) expect(all).not.toContain(word);
+    expect(all).toContain('Right-click');
+    expect(all).toContain('Stats');
+  });
+});
+
 describe('OnboardingSheet', () => {
   let db: IqraDb;
   let fixture: ComponentFixture<Host>;

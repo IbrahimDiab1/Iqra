@@ -64,6 +64,12 @@ describe('StatsPage', () => {
     await db.delete();
   });
 
+  it('puts the Goals card right after Overview', async () => {
+    await create();
+    const ids = [...el.querySelectorAll('section.card')].map((s) => s.getAttribute('data-testid'));
+    expect(ids.slice(0, 3)).toEqual(['overview-card', 'goals-card', 'period-card']);
+  });
+
   it('shows the Saturday-based week range by default', async () => {
     await create();
     expect(text()).toContain('This week · Nov 14 – 20');

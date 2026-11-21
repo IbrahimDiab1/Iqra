@@ -1,10 +1,10 @@
 /** Copy for the first-run intro. Lazy, with the sheet that uses it. */
 export const ONBOARDING_COPY = {
   steps: [
-    { id: 'what', title: 'Welcome to Iqra', body: 'Read PDFs on your phone and your computer. Your place, highlights and notes follow you everywhere, and everything works offline.' },
-    { id: 'drive', title: 'Your books stay yours', body: 'Your books live in your own Google Drive, in files Iqra creates. There is no Iqra server, so nobody else can see your library.' },
-    { id: 'book', title: 'Add your first book', body: 'Choose a PDF from your device, or drop one onto the Library page. Iqra reads Arabic and English, in either direction.' },
-    { id: 'goal', title: 'Set a reading goal', body: 'Optional. Pick pages or time, and whether it repeats every day, week or month. You can change it any time in Stats.' },
+    { id: 'what', title: 'Welcome to Iqra', body: 'Read your PDF books on your phone or your computer. Iqra remembers your page, your highlights and your notes, and it works without internet too.' },
+    { id: 'drive', title: 'Your books stay yours', body: 'Your books are kept safely in your own Google Drive. Nobody else can see your library, and you can pick up on any of your devices.' },
+    { id: 'book', title: 'Add your first book', body: 'Choose a PDF from your device, or drop one onto the Library page. Iqra reads Arabic and English books. Right-click a book (or tap the “⋯” button) to see its details and actions, and open Stats any time to see your progress.' },
+    { id: 'goal', title: 'Set a reading goal', body: 'Optional. Choose pages or minutes, and whether it repeats every day, week or month. You can change it any time in Stats.' },
   ],
   addAction: 'Choose a PDF',
   pages: 'Pages',

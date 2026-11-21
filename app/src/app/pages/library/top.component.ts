@@ -8,6 +8,7 @@ import { SettingsService } from '../../core/settings.service';
 import { SyncStatusComponent } from '../../sync/sync-status.component';
 import type { BookView } from './book-card.component';
 import { firstName, statLines } from './greeting';
+import { quoteOfTheDay } from './quotes';
 import { RecentCardComponent } from './recent-card.component';
 import { TOP_COPY } from './top-copy';
 
@@ -22,7 +23,11 @@ const ROTATE_MS = 3000;
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RecentCardComponent, SyncStatusComponent],
   template: `
-    <header class="hello">
+    <div class="brand" data-testid="brand">
+      <img class="logo" src="icons/icon-192.png" width="28" height="28" alt="" />
+      <span class="wordmark">Iqra</span>
+    </div>
+    <header class="hello card">
       <h1 data-testid="welcome">{{ welcomeText() }}</h1>
       <p
         class="stats"
@@ -32,6 +37,8 @@ const ROTATE_MS = 3000;
         (focusin)="paused.set(true)"
         (focusout)="paused.set(false)"
       >
+        <span class="quote" dir="auto" data-testid="quote">{{ quote() }}</span>
+        <span class="dot" aria-hidden="true">·</span>
         @for (l of [line()]; track l) {
           <span class="line">{{ l }}</span>
         }
@@ -40,7 +47,7 @@ const ROTATE_MS = 3000;
     </header>
 
     @if (recent().length > 0) {
-      <section class="recent" data-testid="recent" aria-labelledby="recent-h">
+      <section class="recent card" data-testid="recent" aria-labelledby="recent-h">
         <h2 id="recent-h" class="sec-h">{{ copy.continue }}</h2>
         <ul class="recent-row">
           @for (v of recent(); track v.book.id) {
@@ -53,22 +60,28 @@ const ROTATE_MS = 3000;
   styles: `
     :host { display: block; }
     h1 { margin: 2px 0 0; font-size: 26px; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+    .brand { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
+    .logo { border-radius: 8px; }
+    .wordmark { color: var(--accent); font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+    .card { padding: 14px 16px 16px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
     .hello { margin-bottom: 14px; }
-    .stats { margin: 6px 0 0; min-height: 1.4em; color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; }
-    .line { display: inline-block; animation: line-in .4s ease; }
+    .stats { display: flex; align-items: baseline; gap: 6px; margin: 6px 0 0; min-height: 1.4em; color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+    .quote { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; }
+    .dot { flex: none; }
+    .line { flex: none; white-space: nowrap; display: inline-block; animation: line-in .4s ease; }
     @keyframes line-in { from { opacity: 0; } to { opacity: 1; } }
     @media (prefers-reduced-motion: reduce) { .line { animation: none; } }
     .sec-h { margin: 0 0 10px; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
-    .recent { margin-bottom: 18px; }
+    .recent { margin-bottom: 14px; }
     .recent-row {
       display: flex;
       gap: 12px;
-      margin: 0 calc(-1 * var(--gutter));
-      padding: 2px var(--gutter) 6px;
+      margin: 0 -16px;
+      padding: 2px 16px 6px;
       overflow-x: auto;
       list-style: none;
       scroll-snap-type: x proximity;
-      scroll-padding-inline: var(--gutter);
+      scroll-padding-inline: 16px;
       scrollbar-width: thin;
     }
     .recent-row li { flex: none; width: 92px; scroll-snap-align: start; }
@@ -114,6 +127,8 @@ export class LibraryTopComponent {
     const l = this.lines();
     return l[this.tick() % l.length];
   });
+
+  protected readonly quote = computed(() => quoteOfTheDay(this.now()));
 
   protected readonly welcomeText = computed(() => {
     const name = firstName(this.auth.profile()?.name);

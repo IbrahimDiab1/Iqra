@@ -159,6 +159,7 @@ describe('NotesPage', () => {
     const labels = () => [...el.querySelectorAll('[data-testid="type-chips"] .chip')].map((c) => c.textContent!.trim());
     expect(labels()).toEqual(['All', 'Highlights', 'Notes', 'Summaries', 'Bookmarks']);
     expect(labels()).not.toContain('Areas');
+    expect(el.querySelector('[data-testid="type-chips"]')!.classList.contains('one-line')).toBe(true);
     expect(el.querySelector('[data-testid="type-chips"] .chip')!.getAttribute('aria-pressed')).toBe('true');
     const type = (l: string) => [...el.querySelectorAll<HTMLButtonElement>('[data-testid="type-chips"] .chip')].find((c) => c.textContent!.trim() === l)!;
     type('Highlights').click();

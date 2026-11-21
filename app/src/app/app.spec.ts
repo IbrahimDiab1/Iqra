@@ -34,6 +34,13 @@ describe('App shell', () => {
     fixture.detectChanges();
   });
 
+  it('starts on the Library even though Profile is first in the nav', async () => {
+    await go('/');
+    expect(router.url).toBe('/library');
+    await go('/no-such-page');
+    expect(router.url).toBe('/library');
+  });
+
   it('shows Profile, Library, Notes, Review and Stats tabs with icons on the library route', async () => {
     await go('/library');
     const tabs = Array.from(el.querySelectorAll<HTMLElement>('nav.tabbar a.tab'));

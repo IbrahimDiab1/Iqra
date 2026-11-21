@@ -102,7 +102,7 @@ export function filterItems(items: ReviewItem[], f: ReviewFilter): ReviewItem[] 
   const q = normalizeSelection(f.query).toLowerCase();
   return items.filter(
     (r) =>
-      (f.kind === 'all' || r.kind === f.kind) &&
+      (f.kind === 'all' || (f.kind === 'sentence' ? r.kind !== 'word' : r.kind === f.kind)) &&
       (f.bookId === null || r.bookId === f.bookId) &&
       (q === '' || [r.text, r.translation, r.context, r.note ?? ''].some((v) => v.toLowerCase().includes(q))),
   );

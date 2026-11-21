@@ -92,6 +92,7 @@ function isPdf(file: File): boolean {
       <!-- The greeting and Continue reading row load on demand (see mountTop), so their code stays out of the initial bundle. -->
       <div class="top-slot"><ng-container #topHost /></div>
 
+      <section class="card">
       <div class="lib-head">
         <h2 class="sec-h">{{ copy.section }}</h2>
         <div class="actions">
@@ -207,7 +208,7 @@ function isPdf(file: File): boolean {
 
       @if (noBooks()) {
         <div class="empty first">
-          <svg class="art" width="120" height="96" viewBox="0 0 120 96" aria-hidden="true">
+          <svg class="art" style="margin-bottom:20px" width="120" height="96" viewBox="0 0 120 96" aria-hidden="true">
             <rect x="14" y="26" width="18" height="64" rx="3" fill="var(--accent)" opacity=".55"/>
             <rect x="36" y="14" width="20" height="76" rx="3" fill="var(--accent)"/>
             <rect x="60" y="30" width="18" height="60" rx="3" fill="var(--accent)" opacity=".35" transform="rotate(-6 69 90)"/>
@@ -230,6 +231,7 @@ function isPdf(file: File): boolean {
           }
         </div>
       }
+      </section>
     </section>
 
     @if (dropActive()) {
@@ -258,7 +260,8 @@ function isPdf(file: File): boolean {
       margin: 0 auto;
       padding: 20px var(--gutter) 24px;
     }
-    .top-slot { min-height: 74px; }
+    .top-slot { min-height: 120px; }
+    .card { padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
     .sec-h { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
     .lib-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
     .actions { display: flex; align-items: center; gap: 2px; }
@@ -272,8 +275,7 @@ function isPdf(file: File): boolean {
       background: none;
       color: var(--fg);
     }
-    .icon-btn:hover:not(:disabled), .icon-btn[aria-pressed='true'] { background: var(--surface-2); }
-    .icon-btn:disabled { opacity: 0.4; cursor: default; }
+    .icon-btn:hover, .icon-btn[aria-pressed='true'] { background: var(--surface-2); }
     .add {
       display: inline-flex;
       align-items: center;
@@ -453,8 +455,7 @@ function isPdf(file: File): boolean {
       text-align: center;
     }
     .empty p { margin: 0 0 14px; }
-    .first { display: flex; flex-direction: column; align-items: center; padding-top: 56px; }
-    .first .art { margin-bottom: 20px; }
+    .first { display: flex; flex-direction: column; align-items: center; padding-top: 32px; }
     .first h2 { margin: 0 0 8px; color: var(--fg); font-family: var(--book); font-size: 22px; font-weight: 600; }
     .first p { max-width: 36ch; }
     .big { min-height: 48px; padding: 10px 20px; margin: 4px 0 14px; font-size: 15px; }
