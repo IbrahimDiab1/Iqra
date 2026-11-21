@@ -690,7 +690,7 @@ describe('ReaderPage', () => {
       expect(write).toHaveBeenLastCalledWith('Hello');
     });
 
-    it('Translate opens the sheet with the selected text and the sentence it sits in', async () => {
+    it('Translate opens the popup with the selected text and the sentence it sits in', async () => {
       TestBed.overrideProvider(TRANSLATION_PROVIDERS, { useValue: [] });
       await create();
       session.pageText = async () => 'Before it. Hello there, friend. After it.';
@@ -698,7 +698,7 @@ describe('ReaderPage', () => {
       el.querySelector<HTMLButtonElement>('iqra-selection-toolbar button[data-testid="translate"]')!.click();
       await vi.waitFor(() => {
         fixture.detectChanges();
-        expect(el.querySelector('iqra-translate-sheet .panel.open')).not.toBeNull();
+        expect(el.querySelector('iqra-translate-sheet .pop')).not.toBeNull();
         expect(el.querySelector('iqra-translate-sheet [data-testid="source"]')?.textContent).toBe('Hello');
       });
     });

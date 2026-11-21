@@ -51,6 +51,7 @@ import { ReaderHeaderComponent } from './reader-header.component';
 import { ReaderToolbarComponent, type ToolbarAction } from './reader-toolbar.component';
 import { ShortcutHelpComponent } from './shortcut-help.component';
 import { shortcutFor, type ShortcutAction } from './shortcuts';
+import { isRtl } from '../core/direction';
 import { ReflowViewComponent } from './reflow-view.component';
 import { ScrollerComponent } from './scroller.component';
 import { SelectionService } from './selection.service';
@@ -202,6 +203,8 @@ const FINISH_TOAST_MS = 8000;
               (note)="actions.addNote()"
               (copy)="actions.copySelection()"
               (translate)="actions.translate()"
+              (listen)="actions.listen()"
+              [listening]="actions.listening()"
             />
 
             <iqra-book-panel-drawer
@@ -359,7 +362,7 @@ export class ReaderPage implements OnDestroy {
   private lastPointerType = 'mouse';
 
   protected readonly theme = computed(() => this.settings.settings().readerTheme);
-  protected readonly rtl = computed(() => this.book()?.direction === 'rtl');
+  protected readonly rtl = computed(() => isRtl(this.book()));
   protected readonly chapter = computed(() => {
     const b = this.book();
     const s = this.state();

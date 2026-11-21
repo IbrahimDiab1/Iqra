@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { ElementRef } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import type { ID } from '../core/models';
 import { icon } from '../ui/icons';
-import { SheetComponent } from '../ui/sheet.component';
 import { ToastService } from '../ui/toast.service';
 import { detectLang, kindFor, normalizeSelection } from './review-logic';
 import { REVIEW_COPY } from './review-copy';
@@ -14,6 +14,28 @@ export interface TranslateTarget {
   text: string;
   page: number;
   context: string;
+  /** Where the selection sits in the viewport; the popup opens next to it. */
+  anchor?: { left: number; top: number; right: number; bottom: number };
+}
+
+/** Popup width cap and its gap from the selection. */
+export const POPUP_MAX_WIDTH = 320;
+const GAP = 8;
+const EDGE = 8;
+
+/**
+ * Where the popup goes: under the selection (or above it when there is no room below), centred on it and kept
+ * inside the viewport. Vertical placement is a `top` or a `bottom` so the popup never needs to be measured.
+ */
+export function placePopup(o: { anchor?: TranslateTarget['anchor']; vw: number; vh: number }): { left: number; top?: number; bottom?: number; width: number } {
+  const width = Math.min(POPUP_MAX_WIDTH, Math.max(0, o.vw - 2 * EDGE));
+  const a = o.anchor;
+  if (!a) return { left: Math.max(EDGE, (o.vw - width) / 2), top: Math.round(o.vh / 4), width };
+  const left = Math.min(Math.max((a.left + a.right) / 2 - width / 2, EDGE), Math.max(EDGE, o.vw - width - EDGE));
+  const below = o.vh - a.bottom - GAP - EDGE;
+  const above = a.top - GAP - EDGE;
+  if (below >= 180 || below >= above) return { left, top: a.bottom + GAP, width };
+  return { left, bottom: o.vh - a.top + GAP, width };
 }
 
 type Phase = 'loading' | 'done' | 'offline' | 'too-long' | 'failed';
@@ -24,11 +46,19 @@ type Phase = 'loading' | 'done' | 'offline' | 'too-long' | 'failed';
  */
 @Component({
   selector: 'iqra-translate-sheet',
-  imports: [SheetComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <f-sheet [open]="!!target()" [title]="c.title" (closed)="closed.emit()">
-      @if (target(); as t) {
+    @if (target(); as t) {
+      <div
+        class="pop"
+        role="dialog"
+        [attr.aria-label]="c.title"
+        [style.left.px]="pos().left"
+        [style.top.px]="pos().top ?? null"
+        [style.bottom.px]="pos().bottom ?? null"
+        [style.width.px]="pos().width"
+        (mousedown)="$event.preventDefault()"
+      >
         <p class="dir">{{ c.from(lang()) }}</p>
         <div class="line">
           <p class="src" dir="auto" [attr.lang]="lang()" data-testid="source">{{ shown() }}</p>
@@ -72,28 +102,32 @@ type Phase = 'loading' | 'done' | 'offline' | 'too-long' | 'failed';
           </div>
         }
         <button type="button" class="btn" data-testid="save-review" [disabled]="phase() !== 'done' || saved()" (click)="save()">
-          {{ saved() ? (existed() ? c.savedAgain : c.saved) : c.save }}
+          {{ c.save }}
         </button>
-      }
-    </f-sheet>
+      </div>
+    }
   `,
   styles: `
     :host { display: contents; }
+    .pop {
+      position: fixed; z-index: 24; box-sizing: border-box; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto;
+      padding: 10px 12px 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--fg); box-shadow: var(--shadow);
+    }
     .dir { margin: 0 0 6px; color: var(--muted); font-size: 12px; }
     .line { display: flex; align-items: flex-start; gap: 6px; }
     .src, .tr { flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; }
-    .src { font: 600 18px/1.45 var(--book); max-height: 30vh; overflow-y: auto; }
-    .tr { font: 20px/1.5 var(--book); }
-    .result { margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-control); background: var(--surface-2); min-height: 44px; }
+    .src { font: 600 16px/1.45 var(--book); max-height: 20vh; overflow-y: auto; }
+    .tr { font: 18px/1.5 var(--book); }
+    .result { margin: 8px 0; padding: 8px 10px; border-radius: var(--radius-control); background: var(--surface-2); min-height: 44px; }
     .status { margin: 0; color: var(--muted); font-size: 14px; }
     .status.err { color: var(--fg); }
-    .ico { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border: 0; border-radius: var(--radius-control); background: none; color: var(--accent); cursor: pointer; }
+    .ico { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border: 0; border-radius: var(--radius-control); background: none; color: var(--accent); cursor: pointer; }
     .ico:hover { background: var(--accent-soft); }
     .def { margin: 0 0 12px; font: 14px/1.5 var(--ui); }
     .def h4 { margin: 0 0 2px; color: var(--muted); font-size: 12px; font-weight: 600; }
     .phon { margin: 0; color: var(--muted); }
     .dtext { margin: 2px 0 0; }
-    .btn { min-height: 44px; padding: 0 16px; border: 0; border-radius: var(--radius-control); background: var(--accent); color: var(--accent-fg); font: 600 14px var(--ui); cursor: pointer; }
+    .btn { min-height: 40px; padding: 0 14px; border: 0; border-radius: var(--radius-control); background: var(--accent); color: var(--accent-fg); font: 600 14px var(--ui); cursor: pointer; }
     .btn.ghost { margin-top: 8px; background: none; border: 1px solid var(--line); color: var(--fg); }
     .btn:disabled { opacity: 0.55; cursor: default; }
     .btn:focus-visible, .ico:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -125,7 +159,24 @@ export class TranslateSheet {
   protected readonly shown = computed(() => normalizeSelection(this.target()?.text ?? ''));
   protected readonly lang = computed(() => detectLang(this.shown()));
   protected readonly other = computed(() => otherLang(this.lang()));
+  protected readonly pos = computed(() =>
+    placePopup({ anchor: this.target()?.anchor, vw: typeof innerWidth === 'number' ? innerWidth : 1024, vh: typeof innerHeight === 'number' ? innerHeight : 768 }),
+  );
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private run$ = 0;
+
+  /** A press outside the popup closes it. Captured, because the reader stops some pointer events from bubbling. */
+  @HostListener('document:pointerdown', ['$event'])
+  protected onOutside(e: Event): void {
+    if (!this.target()) return;
+    const pop = this.host.nativeElement.querySelector('.pop');
+    if (pop && !pop.contains(e.target as Node)) this.closed.emit();
+  }
+
+  @HostListener('document:keydown.escape')
+  protected onEscape(): void {
+    if (this.target()) this.closed.emit();
+  }
 
   constructor() {
     // Keyed by the text and page, so the reader filling in the context sentence later does not restart the lookup.
@@ -184,6 +235,8 @@ export class TranslateSheet {
       });
       this.existed.set(existed);
       this.saved.set(true);
+      this.toast.show(existed ? REVIEW_COPY.sheet.savedAgain : REVIEW_COPY.sheet.saved);
+      this.closed.emit();
     } catch {
       this.toast.show(REVIEW_COPY.sheet.saveFailed);
     }

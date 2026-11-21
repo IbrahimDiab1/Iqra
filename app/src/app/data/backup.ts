@@ -54,7 +54,7 @@ const FIELDS: Partial<Record<TableName, Record<string, Check>>> = {
   books: {
     title: str, author: str, driveFileId: str, fileName: str, sha256: str, sizeBytes: nonNeg, pageCount: nonNeg, addedAt: num, lastPageReached: nonNeg,
     outline: list(outlineNode), categoryIds: list(str), tags: list(str),
-    language: oneOf('en', 'ar', 'other'), direction: oneOf('ltr', 'rtl'), status: oneOf('to-read', 'reading', 'paused', 'finished'),
+    language: oneOf('en', 'ar', 'other'), direction: oneOf('ltr', 'rtl'), textDirection: opt(oneOf('auto', 'rtl', 'ltr')), status: oneOf('to-read', 'reading', 'paused', 'finished'),
     progressMode: oneOf('last-page', 'marked'), pageMode: oneOf('swipe', 'scroll'),
     coverFileId: opt(str), lastOpenedAt: opt(num), startedAt: opt(num), finishedAt: opt(num), rating: opt(num), review: opt(str),
   },

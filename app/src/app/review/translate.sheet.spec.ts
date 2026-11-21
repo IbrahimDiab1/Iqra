@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CLOCK } from '../core/clock';
 import { DB, IqraDb } from '../core/db';
 import { newId } from '../core/ids';
-import { TranslateSheet, type TranslateTarget } from './translate.sheet';
+import { ToastService } from '../ui/toast.service';
+import { TranslateSheet, placePopup, type TranslateTarget } from './translate.sheet';
 import { DICTIONARY, TRANSLATION_PROVIDERS, TranslationError, type TranslationProvider } from './translation';
 
 @Component({
@@ -114,10 +115,45 @@ describe('TranslateSheet', () => {
     q('[data-testid="save-review"]')!.click();
     await vi.waitFor(async () => {
       await settle();
-      expect(text()).toContain('Saved to Review');
+      expect(fixture.componentInstance.target()).toBeNull();
     });
+    expect(TestBed.inject(ToastService).current()?.message).toBe('Saved to Review');
     const [saved] = await db.review.toArray();
     expect(saved).toMatchObject({ text: 'serendipity', translation: 'صدفة', kind: 'word', sourceLang: 'en', bookId: 'b1', page: 7, context: 'A happy serendipity.' });
+  });
+
+  it('is a compact popup next to the selection, not a sheet', async () => {
+    fixture.componentInstance.target.set({ text: 'hello', page: 1, context: '', anchor: { left: 100, top: 100, right: 160, bottom: 120 } });
+    await settle();
+    const pop = q('.pop')!;
+    expect(pop.getAttribute('role')).toBe('dialog');
+    expect(q('f-sheet')).toBeNull();
+    expect(parseFloat(pop.style.width)).toBeLessThanOrEqual(320);
+    expect(parseFloat(pop.style.top)).toBeGreaterThan(120);
+  });
+
+  it('closes on Escape and on a press outside, but not on a press inside', async () => {
+    fixture.componentInstance.target.set({ text: 'hello', page: 1, context: '' });
+    await settle();
+    q('.pop')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await settle();
+    expect(fixture.componentInstance.target()).not.toBeNull();
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await settle();
+    expect(fixture.componentInstance.target()).toBeNull();
+    fixture.componentInstance.target.set({ text: 'hello', page: 1, context: '' });
+    await settle();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await settle();
+    expect(fixture.componentInstance.target()).toBeNull();
+  });
+
+  it('placePopup keeps it inside the viewport and flips above near the bottom', () => {
+    const a = placePopup({ anchor: { left: 0, top: 700, right: 40, bottom: 720 }, vw: 390, vh: 740 });
+    expect(a.left).toBeGreaterThanOrEqual(8);
+    expect(a.bottom).toBeDefined();
+    expect(a.top).toBeUndefined();
+    expect(placePopup({ vw: 300, vh: 600 }).width).toBe(284);
   });
 
   it('a late context sentence does not restart the lookup', async () => {

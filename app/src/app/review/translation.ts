@@ -202,13 +202,23 @@ export function canSpeak(): boolean {
   return typeof speechSynthesis !== 'undefined' && typeof SpeechSynthesisUtterance !== 'undefined';
 }
 
-export function speak(text: string, lang: ReviewLang): boolean {
+/** Stops whatever is being read aloud. */
+export function stopSpeaking(): void {
+  if (canSpeak()) speechSynthesis.cancel();
+}
+
+/** Reads `text` aloud; `onEnd` runs when it finishes, is stopped or fails. */
+export function speak(text: string, lang: ReviewLang, onEnd?: () => void): boolean {
   if (!canSpeak() || text.trim() === '') return false;
   const tag = lang === 'ar' ? 'ar' : 'en-US';
   const u = new SpeechSynthesisUtterance(text);
   u.lang = tag;
   const voice = speechSynthesis.getVoices().find((v) => v.lang === tag) ?? speechSynthesis.getVoices().find((v) => v.lang.toLowerCase().startsWith(lang));
   if (voice) u.voice = voice;
+  if (onEnd) {
+    u.onend = onEnd;
+    u.onerror = onEnd;
+  }
   speechSynthesis.cancel();
   speechSynthesis.speak(u);
   return true;

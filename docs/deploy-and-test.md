@@ -190,3 +190,11 @@ Real-device checks for the reader and library overhaul. Use an Android phone (Ch
 - **Sync never sticks (P2b):** a stalled Drive call is abandoned after 2 minutes (status Error, next sync works), a silent token renewal that never answers no longer blocks the poll (20 s), and a stalled upload no longer blocks later uploads (10 minutes).
 - **Two versions of the app open (P2c):** an old tab holding the database closes its connection and reloads when a newer tab upgrades it.
 - **Stats never blank (P2d):** if the data cannot be read, Stats shows "Your reading history could not be loaded" with Try again and Reload app, also when loading takes longer than 8 s. A brand new account shows the empty states.
+
+## Plan 9 checks (Group B: Reader)
+
+- B1: a new book opens in scroll mode and page view. A book you already changed keeps its own mode.
+- B2: select a word, tap Translate. A small card (at most 320 px wide) opens next to the selection, not a sheet. Save to Review closes it and shows "Saved to Review". A click outside, or Esc, closes it too.
+- B3: select text, tap the speaker button next to Translate. It reads aloud (Arabic voice for Arabic). Tap again to stop.
+- B4: on a laptop, Contents opens on the left. On a phone it still slides in from the right. For a right-to-left book it opens on the right.
+- B5: in the reader settings, "Text direction" offers Auto (detected), Right to left, Left to right. Pick one, reopen the book: the choice stays and page order, swipe direction and reading mode follow it.

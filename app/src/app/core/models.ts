@@ -20,7 +20,9 @@ export interface Book extends SyncMeta {
   outline: OutlineNode[]; // captured once at upload; [] if the PDF has none
   coverFileId?: string;
   language: 'en' | 'ar' | 'other'; // detected at upload from page text; editable
-  direction: 'ltr' | 'rtl'; // swipe direction; defaults from language
+  direction: 'ltr' | 'rtl'; // detected from the language at upload
+  /** The reader's own choice; absent or 'auto' follows `direction`. Use effectiveDirection(). */
+  textDirection?: 'auto' | 'rtl' | 'ltr';
   addedAt: number;
   lastOpenedAt?: number;
   status: 'to-read' | 'reading' | 'paused' | 'finished';
