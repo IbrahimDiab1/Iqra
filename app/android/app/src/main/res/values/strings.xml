@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Iqra</string>
+    <string name="title_activity_main">Iqra</string>
+    <string name="package_name">io.github.ibrahimdiab1.iqra</string>
+    <string name="custom_url_scheme">io.github.ibrahimdiab1.iqra</string>
+</resources>

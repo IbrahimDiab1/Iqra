@@ -3,6 +3,7 @@ import { FAKE_DRIVE } from '../../environments/environment';
 import { AuthApi, AuthCancelledError } from '../auth/auth.service';
 import { ScopeDeniedError } from '../auth/scope-grant';
 import { CLOCK } from '../core/clock';
+import { isNativeApp } from '../core/platform';
 import { DB } from '../core/db';
 import type { ReminderSettings } from '../core/models';
 import { SettingsService } from '../core/settings.service';
@@ -12,6 +13,7 @@ import { CALENDAR_API, CALENDAR_SCOPE, CalendarAuthError, type CalendarApi, type
 import { exposeE2eHandles } from '../e2e-hooks';
 import { FakeCalendar } from './fake-calendar';
 import { GoogleCalendar } from './google-calendar';
+import { NOTIFIER, buildPhoneNotifications } from './phone-notifications';
 import { pickQuote } from './quotes';
 import { REMINDER_DEFAULTS, SLOT_EVENT_ID, eventId, reminderSlots } from './schedule';
 
@@ -55,11 +57,36 @@ export class ReminderService {
   private readonly clock = inject(CLOCK);
   private readonly settings = inject(SettingsService);
   private readonly sync = inject(SyncEngine);
+  private readonly notifier = inject(NOTIFIER);
   private readonly calendar: CalendarApi =
     inject(CALENDAR_API, { optional: true }) ?? (FAKE_DRIVE ? exposeFakeCalendar(new FakeCalendar()) : new GoogleCalendar((scope) => this.auth.scopeToken(scope)));
 
   /** True when Calendar permission has to be granted again (after a reload or a revoke). */
   readonly needsPermission = signal(false);
+  /** True when Android notifications were switched off for Iqra while phone reminders are on. */
+  readonly phoneNeedsPermission = signal(false);
+
+  /** Phone notifications exist only in the Android app. */
+  get phoneAvailable(): boolean {
+    return isNativeApp();
+  }
+
+  /** User gesture: asks Android for notification permission, switches phone reminders on and schedules them. */
+  async enablePhone(): Promise<'ok' | 'denied' | 'unavailable'> {
+    if (!this.phoneAvailable) return 'unavailable';
+    if (!(await this.notifier.permission(true))) return 'denied';
+    await this.save({ phone: true });
+    this.phoneNeedsPermission.set(false);
+    await this.fill();
+    return 'ok';
+  }
+
+  /** Switches phone reminders off and cancels the ones scheduled on the device. */
+  async disablePhone(): Promise<void> {
+    await this.save({ phone: false });
+    this.phoneNeedsPermission.set(false);
+    if (this.phoneAvailable) await this.notifier.cancelAll();
+  }
 
   /**
    * User gesture: asks for Calendar access, picks up a calendar another device may have created,
@@ -142,6 +169,7 @@ export class ReminderService {
 
   private async run(): Promise<FillResult | 'needs-permission'> {
     const r = await this.current();
+    await this.runPhone(r);
     if (!r.enabled) return { created: 0, removed: 0 };
     if (!(await this.token())) {
       this.needsPermission.set(true);
@@ -155,6 +183,28 @@ export class ReminderService {
       return result;
     } catch (e) {
       return this.failed(e);
+    }
+  }
+
+  /** Schedules the next 14 days of notifications on the device (replacing the earlier ones). Never throws: Calendar must not wait on it. */
+  private async runPhone(r: ReminderSettings): Promise<void> {
+    if (!r.phone || !this.phoneAvailable) return;
+    try {
+      if (!(await this.notifier.permission(false))) {
+        this.phoneNeedsPermission.set(true);
+        return;
+      }
+      this.phoneNeedsPermission.set(false);
+      const ctx = await this.context();
+      const slots = reminderSlots(new Date(this.clock.now()), r);
+      await this.notifier.replaceAll(
+        buildPhoneNotifications(slots, (slot) => {
+          const e = this.buildEvent(slot, ctx);
+          return { title: e.title, body: e.description.split('\n\n')[0] };
+        }),
+      );
+    } catch (e) {
+      console.warn('Phone reminders could not be scheduled', e);
     }
   }
 

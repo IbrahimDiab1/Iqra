@@ -5,7 +5,8 @@ import { DB } from '../core/db';
 export const fillRemindersOnOpen = async (): Promise<void> => {
   const i = inject(Injector);
   try {
-    if ((await i.get(DB).settings.get('settings'))?.reminders?.enabled) await i.get((await import('./reminder.service')).ReminderService).fill();
+    const reminders = (await i.get(DB).settings.get('settings'))?.reminders;
+    if (reminders?.enabled || reminders?.phone) await i.get((await import('./reminder.service')).ReminderService).fill();
   } catch {
     // Retried the next time the app opens.
   }

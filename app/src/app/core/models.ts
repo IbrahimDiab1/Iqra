@@ -111,7 +111,10 @@ export interface Goal extends SyncMeta {
 
 /** Reading reminders (spec 9.12). Every field is optional; the reminder code applies the defaults. */
 export interface ReminderSettings {
+  /** Google Calendar reminders on. */
   enabled?: boolean;
+  /** Phone notifications on (Android app only; other devices ignore it). */
+  phone?: boolean;
   days?: (0 | 1 | 2 | 3 | 4 | 5 | 6)[]; // JS getDay(): 0 = Sunday
   time?: string; // 'HH:mm' local
   quoteSource?: 'highlights' | 'builtin' | 'both';

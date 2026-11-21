@@ -2,7 +2,8 @@ import { ApplicationConfig, Injector, inject, isDevMode, provideAppInitializer, 
 import { provideRouter, withNavigationErrorHandler } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
 import { FAKE_DRIVE } from '../environments/environment';
-import { AuthApi, GisAuthService } from './auth/auth.service';
+import { AuthApi } from './auth/auth.service';
+import { AUTH_IMPL } from './auth/auth-impl';
 import { FakeAuthService } from './auth/fake-auth.service';
 import { routes } from './app.routes';
 import { DRIVE_ADAPTER } from './sync/drive-adapter';
@@ -52,7 +53,8 @@ export const appConfig: ApplicationConfig = {
       enabled: !isDevMode() && !FAKE_DRIVE,
       registrationStrategy: 'registerWhenStable:30000',
     }),
-    { provide: AuthApi, useClass: FAKE_DRIVE ? FakeAuthService : GisAuthService },
+    // AUTH_IMPL is Google Identity Services, or the system account sign-in in the Android build (see auth-impl.ts).
+    { provide: AuthApi, useClass: FAKE_DRIVE ? FakeAuthService : AUTH_IMPL },
     {
       provide: DRIVE_ADAPTER,
       useFactory: () => (FAKE_DRIVE ? new FakeDrive() : new GoogleDrive(inject(AuthApi))),

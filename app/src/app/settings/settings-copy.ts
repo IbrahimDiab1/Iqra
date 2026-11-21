@@ -57,6 +57,11 @@ export const SETTINGS_COPY = {
   },
   reminders: {
     master: 'Remind me to read',
+    calendarLabel: 'Google Calendar',
+    phoneLabel: 'Phone notifications',
+    phoneNote: 'A reminder from Iqra on this phone',
+    phoneDenied: 'Notifications are off for Iqra. Turn them on in your phone settings, then try again.',
+    phoneNeedsPermission: 'Notifications are off for Iqra on this phone, so phone reminders are paused.',
     connecting: 'Connecting to Google Calendar…',
     denied: "Google didn't allow calendar access. Reminders stay off.",
     apiDisabled: "Google Calendar API isn't enabled for this project. Enable it in Google Cloud Console (APIs & Services → Library → Google Calendar API).",

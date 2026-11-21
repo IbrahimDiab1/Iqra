@@ -20,11 +20,23 @@ type Day = 0 | 1 | 2 | 3 | 4 | 5 | 6;
   template: `
     <label class="row toggle">
       <span class="grow">
-        <span class="lbl">{{ c.master }}</span>
+        <span class="lbl">{{ service.phoneAvailable ? c.calendarLabel : c.master }}</span>
         <span class="sub">{{ c.calendarNote }}</span>
       </span>
       <input type="checkbox" role="switch" data-testid="reminders-switch" [checked]="enabled()" [disabled]="connecting()" (change)="toggle($event)" />
     </label>
+    @if (service.phoneAvailable) {
+      <label class="row toggle">
+        <span class="grow">
+          <span class="lbl">{{ c.phoneLabel }}</span>
+          <span class="sub">{{ c.phoneNote }}</span>
+        </span>
+        <input type="checkbox" role="switch" data-testid="phone-switch" [checked]="phoneOn()" (change)="togglePhone($event)" />
+      </label>
+      @if (service.phoneNeedsPermission() && phoneOn()) {
+        <p class="sub err" role="alert" data-testid="phone-needs-permission">{{ c.phoneNeedsPermission }}</p>
+      }
+    }
     @if (connecting()) {
       <p class="sub status" role="status">{{ c.connecting }}</p>
     }
@@ -42,7 +54,7 @@ type Day = 0 | 1 | 2 | 3 | 4 | 5 | 6;
       </div>
     }
 
-    @if (enabled()) {
+    @if (enabled() || phoneOn()) {
       <span class="cap" id="rem-days">{{ c.days }}</span>
       <div class="days" role="group" aria-labelledby="rem-days">
         @for (d of dayOrder(); track d) {
@@ -114,6 +126,7 @@ export class RemindersSection implements OnDestroy {
 
   private readonly merged = computed(() => ({ ...(this.settings.settings().reminders ?? {}), ...this.pending() }));
   protected readonly enabled = computed(() => this.merged().enabled === true);
+  protected readonly phoneOn = computed(() => this.service.phoneAvailable && this.merged().phone === true);
   protected readonly view = computed(() => {
     const r = this.merged();
     return {
@@ -157,6 +170,26 @@ export class RemindersSection implements OnDestroy {
       box.checked = false;
     } finally {
       this.connecting.set(false);
+    }
+  }
+
+  protected async togglePhone(event: Event): Promise<void> {
+    const box = event.target as HTMLInputElement;
+    this.clearMessage();
+    if (!box.checked) {
+      await this.flush();
+      await this.service.disablePhone();
+      return;
+    }
+    try {
+      if ((await this.service.enablePhone()) !== 'ok') {
+        box.checked = false;
+        this.message.set(this.c.phoneDenied);
+      }
+    } catch (e) {
+      console.warn('Phone reminders could not be switched on', e);
+      box.checked = false;
+      this.message.set(this.c.phoneDenied);
     }
   }
 

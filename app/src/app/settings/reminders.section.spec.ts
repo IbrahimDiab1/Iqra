@@ -303,4 +303,58 @@ describe('fillRemindersOnOpen', () => {
     expect(fill).toHaveBeenCalledTimes(1);
     fill.mockRestore();
   });
+
+  it('fills on app start when only phone reminders are on', async () => {
+    await TestBed.inject(SettingsService).update({ reminders: { phone: true } });
+    const fill = vi.spyOn(ReminderService.prototype, 'fill').mockResolvedValue({ created: 0, removed: 0 });
+    await TestBed.runInInjectionContext(() => fillRemindersOnOpen());
+    expect(fill).toHaveBeenCalledTimes(1);
+    fill.mockRestore();
+  });
+});
+
+describe('RemindersSection phone option', () => {
+  const g = globalThis as { Capacitor?: unknown };
+  let db: IqraDb;
+
+  beforeEach(() => {
+    localStorage.clear();
+    db = new IqraDb(`iqra-test-${newId()}`);
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: DB, useValue: db },
+        { provide: CLOCK, useValue: { now: () => NOW } },
+        { provide: AuthApi, useClass: FakeAuthService },
+        { provide: CALENDAR_API, useValue: new FakeCalendar() },
+        { provide: SyncEngine, useValue: { syncNow: async () => undefined } },
+      ],
+    });
+  });
+
+  afterEach(async () => {
+    delete g.Capacitor;
+    TestBed.resetTestingModule();
+    await db.delete();
+  });
+
+  it('is hidden on the web', async () => {
+    const fixture = TestBed.createComponent(RemindersSection);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="phone-switch"]')).toBeNull();
+    fixture.destroy();
+  });
+
+  it('shows next to Google Calendar in the Android app', async () => {
+    g.Capacitor = { isNativePlatform: () => true };
+    const fixture = TestBed.createComponent(RemindersSection);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="phone-switch"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="reminders-switch"]')).not.toBeNull();
+    expect(el.textContent).toContain('Google Calendar');
+    expect(el.textContent).toContain('Phone notifications');
+    fixture.destroy();
+  });
 });

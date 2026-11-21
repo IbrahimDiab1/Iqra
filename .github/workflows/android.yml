@@ -1,0 +1,118 @@
+name: Build Android app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write # attaches the APK to the `android-latest` release
+
+concurrency:
+  group: android
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: app
+    env:
+      # Secrets cannot be tested in `if:`, so the signing step reads them from here.
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      # Every build gets a higher version code than the one before, so it installs over it.
+      APP_VERSION_CODE: ${{ github.run_number }}
+      APP_VERSION_NAME: 1.0.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+          cache-dependency-path: |
+            app/android/*.gradle
+            app/android/app/build.gradle
+            app/android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the web bundle for the app
+        run: npx ng build --configuration native
+
+      - name: Copy it into the Android project
+        run: npx cap sync android
+
+      - name: Decode the signing key
+        id: signing
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$ANDROID_KEY_ALIAS" ] && [ -n "$ANDROID_KEY_PASSWORD" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/iqra-release.jks"
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/iqra-release.jks" >> "$GITHUB_ENV"
+            echo "mode=release" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Signing secrets are not set, so this build is a debug APK."
+            echo "mode=debug" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the signed release APK
+        if: steps.signing.outputs.mode == 'release'
+        working-directory: app/android
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Build a debug APK (no signing secrets)
+        if: steps.signing.outputs.mode == 'debug'
+        working-directory: app/android
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Name the APK
+        id: apk
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          if [ "${{ steps.signing.outputs.mode }}" = "release" ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/out/iqra.apk"
+          else
+            cp android/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/out/iqra-debug.apk"
+          fi
+          APK="$(ls "$RUNNER_TEMP"/out/*.apk)"
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Android APK (${{ steps.signing.outputs.mode }})"
+            echo
+            echo '```'
+            keytool -printcert -jarfile "$APK" | grep -E "Owner|SHA1|SHA256" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iqra-apk
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+
+      - name: Publish to the android-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android-latest --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
+          gh release create android-latest "${{ steps.apk.outputs.path }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Iqra for Android (latest)" \
+            --notes "Latest Android build from commit $GITHUB_SHA (build ${{ github.run_number }}, ${{ steps.signing.outputs.mode }}). Download the APK, open it on your phone and allow installs from this source."
