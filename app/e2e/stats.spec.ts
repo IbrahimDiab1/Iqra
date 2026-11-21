@@ -364,7 +364,7 @@ test.describe('goals by period', () => {
       await expect(page.locator('.goal .gs')).toContainText('Monthly');
       await expect(page.getByTestId('overview').getByText('No daily goal set').first()).toBeVisible();
       // Each block is its own card, and nothing scrolls the page sideways.
-      await expect(page.locator('.card')).toHaveCount(4);
+      await expect(page.locator('.card')).toHaveCount(5);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     } finally {
       await context.close();
