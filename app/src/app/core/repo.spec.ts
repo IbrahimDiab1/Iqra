@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { CLOCK } from './clock';
 import { DB, IqraDb } from './db';
 import { getDeviceId, newId } from './ids';
-import { Repo } from './repo';
+import { LIVE_RETRY_MS, Repo } from './repo';
 import type { Book } from './models';
 
 function bookDraft(id: string): Omit<Book, 'updatedAt' | 'deviceId'> {
@@ -149,6 +149,47 @@ describe('Repo', () => {
       await repo.put<Book>('books', bookDraft('b1'));
 
       await vi.waitFor(() => expect(signal()?.map((b) => b.id)).toEqual(['b1']));
+    });
+
+    it('a failing query never throws on read: the value stays undefined and the error is reported', async () => {
+      const result = TestBed.runInInjectionContext(() =>
+        repo.liveResult(() => Promise.reject(new Error('Internal error opening backing store'))),
+      );
+      await vi.waitFor(() => expect(result.error()).toBeInstanceOf(Error));
+      expect(result.value()).toBeUndefined();
+    });
+
+    it('retry() runs the query again and clears the error once it works', async () => {
+      let fail = true;
+      const result = TestBed.runInInjectionContext(() =>
+        repo.liveResult(async () => {
+          if (fail) throw new Error('closed');
+          return db.books.toArray();
+        }),
+      );
+      await vi.waitFor(() => expect(result.error()).not.toBeNull());
+      fail = false;
+      result.retry();
+      await vi.waitFor(() => expect(result.value()).toEqual([]));
+      expect(result.error()).toBeNull();
+    });
+
+    it('live() retries a failed query by itself, so a transient failure heals', async () => {
+      const saved = [...LIVE_RETRY_MS];
+      LIVE_RETRY_MS.splice(0, LIVE_RETRY_MS.length, 5, 5, 5);
+      try {
+        let calls = 0;
+        const signal = TestBed.runInInjectionContext(() =>
+          repo.live(async () => {
+            if (++calls < 3) throw new Error('transient');
+            return ['ok'];
+          }),
+        );
+        await vi.waitFor(() => expect(signal()).toEqual(['ok']));
+        expect(calls).toBe(3);
+      } finally {
+        LIVE_RETRY_MS.splice(0, LIVE_RETRY_MS.length, ...saved);
+      }
     });
   });
 });

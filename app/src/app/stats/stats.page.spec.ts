@@ -526,5 +526,58 @@ describe('StatsPage', () => {
       expect(firstRow[0].dataset['day']).toBe('2026-11-02');
     });
   });
-});
 
+  describe('when the data cannot be read', () => {
+    async function mount(): Promise<void> {
+      fixture = TestBed.createComponent(StatsPage);
+      el = fixture.nativeElement as HTMLElement;
+      fixture.detectChanges();
+    }
+
+    it('shows an error with Retry instead of a blank page, and Retry brings the page back', async () => {
+      vi.spyOn(db.sessions, 'filter').mockImplementationOnce(() => {
+        throw new Error('Internal error opening backing store');
+      });
+      await mount();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('[data-testid="stats-error"]')).not.toBeNull();
+      });
+      expect(text()).toContain(STATS_COPY.loadFailed);
+      expect(el.querySelector('[data-ready]')).toBeNull();
+
+      (el.querySelector('[data-testid="stats-retry"]') as HTMLButtonElement).click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('[data-ready]')).not.toBeNull();
+      });
+      expect(el.querySelector('[data-testid="stats-error"]')).toBeNull();
+      expect(text()).toContain(STATS_COPY.noReading);
+    });
+
+    it('shows the error when loading never finishes (a database that never opens)', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+      try {
+        vi.spyOn(db.books, 'filter').mockReturnValue({ toArray: () => new Promise(() => {}) } as never);
+        await mount();
+        expect(el.querySelector('[data-testid="stats-loading"]')).not.toBeNull();
+        await vi.advanceTimersByTimeAsync(9000);
+        fixture.detectChanges();
+        expect(el.querySelector('[data-testid="stats-error"]')).not.toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('shows a Reload button next to Retry', async () => {
+      vi.spyOn(db.categories, 'filter').mockImplementation(() => {
+        throw new Error('closed');
+      });
+      await mount();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('[data-testid="stats-reload"]')).not.toBeNull();
+      });
+    });
+  });
+});

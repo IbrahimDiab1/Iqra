@@ -1,5 +1,5 @@
-import { ApplicationConfig, inject, isDevMode, provideAppInitializer, provideBrowserGlobalErrorListeners } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { ApplicationConfig, Injector, inject, isDevMode, provideAppInitializer, provideBrowserGlobalErrorListeners } from '@angular/core';
+import { provideRouter, withNavigationErrorHandler } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
 import { FAKE_DRIVE } from '../environments/environment';
 import { AuthApi, GisAuthService } from './auth/auth.service';
@@ -12,12 +12,26 @@ import { FakeDrive } from './sync/fake-drive';
 import { GoogleDrive } from './sync/google-drive';
 import { exposeE2eHandles } from './e2e-hooks';
 import { fillRemindersOnOpen } from './reminders/open-fill';
+import { CLOCK } from './core/clock';
+import { PAGE_RELOAD, installChunkReload, isChunkLoadError, reloadOnce } from './core/chunk-reload';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideRouter(routes),
+    provideRouter(
+      routes,
+      // A lazy route whose chunk is gone (a deploy happened while the app was open) reloads the app once.
+      withNavigationErrorHandler((e) => {
+        if (isChunkLoadError(e.error)) reloadOnce(inject(CLOCK).now(), inject(PAGE_RELOAD));
+      }),
+    ),
     provideAppInitializer(() => {
+      // Stale chunks, service worker updates and unrecoverable states are handled signed in or out. The chunk-error
+      // reload is eager (a deploy can remove every lazy chunk); the service worker part loads on its own.
+      const clock = inject(CLOCK);
+      installChunkReload(() => clock.now(), inject(PAGE_RELOAD));
+      const injector = inject(Injector);
+      void import('./core/app-update').then((m) => injector.get(m.AppUpdateService).start()).catch(() => undefined);
       const auth = inject(AuthApi);
       const sync = inject(SyncEngine);
       const scheduler = inject(SyncScheduler);

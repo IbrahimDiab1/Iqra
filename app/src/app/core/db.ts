@@ -1,4 +1,4 @@
-import { InjectionToken } from '@angular/core';
+import { InjectionToken, signal } from '@angular/core';
 import Dexie, { type Table } from 'dexie';
 import type {
   Annotation,
@@ -69,8 +69,25 @@ export class IqraDb extends Dexie {
   declare pendingUploads: Table<PendingUpload, ID>;
   declare pendingDriveDeletes: Table<PendingDriveDelete, string>;
 
-  constructor(name = 'iqra') {
+  /** True while an upgrade of this database is waiting for another tab (an old version of the app) to let go. */
+  private readonly blockedSignal = signal(false);
+  readonly blocked = this.blockedSignal.asReadonly();
+
+  /**
+   * Another tab opened a newer version of the database: this connection must close or that upgrade waits forever, and the
+   * new tab (or this one, after a deploy) then shows no data. Close and reload to pick up the new code.
+   * `hooks.reload` is replaced in tests.
+   */
+  constructor(name = 'iqra', hooks: { reload?: () => void } = {}) {
     super(name);
+    const reload = hooks.reload ?? (() => location.reload());
+    this.on('versionchange', () => {
+      this.close();
+      reload();
+      return false;
+    });
+    this.on('blocked', () => this.blockedSignal.set(true));
+    this.on('ready', () => this.blockedSignal.set(false));
     this.version(1).stores({
       books: 'id, updatedAt, sha256, status, lastOpenedAt, addedAt',
       categories: 'id',

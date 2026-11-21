@@ -36,6 +36,8 @@ import { dayKey, formatRange, weekRange } from './week';
 type Measure = 'pages' | 'time';
 const L = STATS_COPY;
 const PERIODS: readonly Period[] = ['week', 'month', 'year'];
+/** Loading that takes this long counts as failed. */
+const LOAD_TIMEOUT_MS = 8000;
 
 /**
  * Reading for a week, month or year: totals, weekly goals and a day-by-day chart for a week, a colour-by-category
@@ -48,6 +50,18 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
   template: `
     <section class="page" [attr.data-ready]="ready() ? '' : null">
       <h1>{{ title }}</h1>
+      @if (!ready() && failed()) {
+        <div class="state" role="alert" data-testid="stats-error">
+          <p class="state-title">{{ l.loadFailed }}</p>
+          <p class="empty">{{ db.blocked() ? l.loadBlockedHint : l.loadFailedHint }}</p>
+          <div class="state-actions">
+            <button type="button" class="add" data-testid="stats-retry" (click)="retry()">{{ l.retry }}</button>
+            <button type="button" class="add" data-testid="stats-reload" (click)="reloadApp()">{{ l.reloadApp }}</button>
+          </div>
+        </div>
+      } @else if (!ready()) {
+        <p class="empty" role="status" data-testid="stats-loading">{{ l.loading }}</p>
+      }
       @if (ready()) {
         <iqra-stats-filters
           [categories]="categories()"
@@ -211,6 +225,9 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
     .k { font-size: 12px; color: var(--muted); }
     .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .d { font-size: 12px; color: var(--muted); }
+    .state { margin: 16px 0; padding: 16px; border-radius: 14px; background: var(--surface-2); }
+    .state-title { margin: 0 0 4px; font-weight: 600; }
+    .state-actions { display: flex; flex-wrap: wrap; gap: 8px; }
     .empty { margin: 8px 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
     ul { list-style: none; margin: 0; padding: 0; }
     .goal { padding: 4px 0 10px; border-bottom: 1px solid var(--line); }
@@ -235,7 +252,7 @@ export class StatsPage {
   protected readonly periods = PERIODS;
   protected readonly details = inject(BookDetailsService);
 
-  private readonly db = inject(DB);
+  protected readonly db = inject(DB);
   private readonly repo = inject(Repo);
   private readonly clock = inject(CLOCK);
   private readonly settings = inject(SettingsService);
@@ -246,18 +263,50 @@ export class StatsPage {
   protected readonly prevIcon = this.sanitizer.bypassSecurityTrustHtml(icon('chevL', 20));
   protected readonly nextIcon = this.sanitizer.bypassSecurityTrustHtml(icon('chevR', 20));
 
-  private readonly sessionsRec = this.repo.live(() => this.db.sessions.filter((s) => !s.deleted).toArray());
-  private readonly booksRec = this.repo.live(() => this.db.books.filter((b) => !b.deleted).toArray());
-  private readonly categoriesRec = this.repo.live(() => this.db.categories.filter((c) => !c.deleted).sortBy('order'));
+  private readonly sessionsQuery = this.repo.liveResult(() => this.db.sessions.filter((s) => !s.deleted).toArray());
+  private readonly booksQuery = this.repo.liveResult(() => this.db.books.filter((b) => !b.deleted).toArray());
+  private readonly categoriesQuery = this.repo.liveResult(() => this.db.categories.filter((c) => !c.deleted).sortBy('order'));
+  private readonly sessionsRec = this.sessionsQuery.value;
+  private readonly booksRec = this.booksQuery.value;
+  private readonly categoriesRec = this.categoriesQuery.value;
 
   constructor() {
     const refresh = () => this.now.set(this.clock.now());
     const timer = setInterval(refresh, 60_000);
     document.addEventListener('visibilitychange', refresh);
+    this.watchLoading();
     inject(DestroyRef).onDestroy(() => {
       clearInterval(timer);
+      clearTimeout(this.loadTimer);
       document.removeEventListener('visibilitychange', refresh);
     });
+  }
+
+  // ---- loading failures: the page shows an error with Retry instead of staying blank ----
+  private loadTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly timedOut = signal(false);
+  /** A query failed, or loading has taken longer than LOAD_TIMEOUT_MS (a database that never opens never answers). */
+  protected readonly failed = computed(
+    () => this.timedOut() || this.sessionsQuery.error() !== null || this.booksQuery.error() !== null || this.categoriesQuery.error() !== null,
+  );
+
+  private watchLoading(): void {
+    this.timedOut.set(false);
+    clearTimeout(this.loadTimer);
+    this.loadTimer = setTimeout(() => {
+      if (!this.ready()) this.timedOut.set(true);
+    }, LOAD_TIMEOUT_MS);
+  }
+
+  protected retry(): void {
+    this.sessionsQuery.retry();
+    this.booksQuery.retry();
+    this.categoriesQuery.retry();
+    this.watchLoading();
+  }
+
+  protected reloadApp(): void {
+    location.reload();
   }
 
   protected readonly measure = signal<Measure>('pages');
