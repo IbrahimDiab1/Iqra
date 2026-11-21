@@ -15,6 +15,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { findSummary } from '../annotations/summary-scope';
+import { isRtl } from '../core/direction';
 import type { Annotation, Book, SummaryScope } from '../core/models';
 import { COPY } from '../ui/copy';
 import { CHROME_COPY } from './chrome-copy';
@@ -37,7 +38,7 @@ const MIN_QUERY = 2;
   imports: [DrawerComponent, NotesTabComponent, BookmarksTabComponent, TocTreeComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <iqra-drawer [open]="open()" [title]="titles[tab()]" (closed)="close()">
+    <iqra-drawer [open]="open()" [title]="titles[tab()]" [rtl]="rtl()" (closed)="close()">
       <div class="tabs" role="tablist">
         @for (t of tabs; track t.id) {
           <button type="button" role="tab" [attr.aria-selected]="tab() === t.id" [class.on]="tab() === t.id" (click)="selectTab(t.id)">{{ t.label }}</button>
@@ -152,6 +153,7 @@ export class BookPanelDrawerComponent implements OnDestroy {
   /** The tab to show whenever this input changes. */
   readonly initialTab = input<PanelTab>('contents', { alias: 'tab' });
   readonly book = input.required<Book>();
+  protected readonly rtl = computed(() => isRtl(this.book()));
   readonly renderer = input.required<PageRenderer>();
   readonly page = input<number>(1);
   /** This book's live annotations. */

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, Injector, afterNextRender, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, Injector, afterNextRender, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { icon } from '../ui/icons';
 import { CHROME_COPY } from './chrome-copy';
@@ -10,8 +10,8 @@ const FOCUSABLE =
 let nextId = 0;
 
 /**
- * A panel that slides in from the right, to the left of the reader toolbar and below the header, so both
- * stay usable. Wide screens dock a 380 px panel over the page edge; narrow ones add a scrim and trap focus.
+ * A panel below the header. Wide screens dock a 380 px panel over the left page edge (the right edge, beside the
+ * reader toolbar, in a right-to-left book); narrow ones slide it in from the right with a scrim and trap focus.
  */
 @Component({
   selector: 'iqra-drawer',
@@ -27,6 +27,7 @@ let nextId = 0;
       [attr.aria-hidden]="open() ? null : 'true'"
       [attr.inert]="open() ? null : ''"
       [class.open]="open()"
+      [class.left]="onLeft()"
     >
       <header class="head">
         <h3 [id]="titleId">{{ title() }}</h3>
@@ -49,6 +50,8 @@ let nextId = 0;
       transform: translateX(105%); visibility: hidden; transition: transform 220ms cubic-bezier(.2, .8, .2, 1), visibility 220ms;
     }
     .panel.open { transform: none; visibility: visible; }
+    .panel.left { right: auto; left: 0; transform: translateX(-105%); border-inline-start: 0; border-inline-end: 1px solid var(--line); }
+    .panel.left.open { transform: none; }
     @media (min-width: 900px) { .panel { width: 380px; } }
     .head { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 6px 8px var(--gutter); }
     .head h3 { margin: 0; font-size: 17px; font-weight: 600; }
@@ -62,12 +65,16 @@ let nextId = 0;
 export class DrawerComponent {
   readonly open = input(false);
   readonly title = input('');
+  /** A right-to-left book mirrors the docked panel to the right edge. */
+  readonly rtl = input(false);
   readonly closed = output<void>();
 
   protected readonly chrome = CHROME_COPY;
   protected readonly titleId = `drawer-title-${nextId++}`;
   protected readonly closeIcon = inject(DomSanitizer).bypassSecurityTrustHtml(icon('x', 20));
   protected readonly narrow = signal(window.innerWidth < DRAWER_DOCK_MIN_WIDTH);
+
+  protected readonly onLeft = computed(() => !this.narrow() && !this.rtl());
 
   private readonly panel = viewChild.required<ElementRef<HTMLElement>>('panel');
   private readonly injector = inject(Injector);

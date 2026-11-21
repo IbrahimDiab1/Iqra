@@ -228,13 +228,14 @@ test.describe('reader', () => {
     await openPanel(page, 'Contents');
     const header = (await page.locator('.r-top').boundingBox())!;
     const view = page.viewportSize()!;
-    // The panel slides in over 220 ms; measure where it comes to rest at the right edge.
+    // The panel slides in over 220 ms; measure where it comes to rest: the left edge on a wide screen.
     await expect
       .poll(async () => {
         const b = (await page.locator('iqra-drawer .panel').boundingBox())!;
-        return Math.round(b.x + b.width);
+        return Math.round(b.x);
       })
-      .toBe(view.width);
+      .toBe(0);
+    expect(view.width).toBeGreaterThanOrEqual(900);
     const drawer = (await page.locator('iqra-drawer .panel').boundingBox())!;
     expect(drawer.y).toBeGreaterThanOrEqual(header.y + header.height - 1);
     await page.keyboard.press('Escape');

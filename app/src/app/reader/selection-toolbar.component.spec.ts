@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { HighlightColor } from '../annotations/annotation.service';
@@ -22,6 +23,7 @@ const SELECTION: PendingSelection = {
     (note)="notes = notes + 1"
     (copy)="copies = copies + 1"
     (translate)="translations = translations + 1"
+    (listen)="listens = listens + 1"
   />`,
 })
 class HostComponent {
@@ -30,6 +32,7 @@ class HostComponent {
   notes = 0;
   copies = 0;
   translations = 0;
+  listens = 0;
 }
 
 describe('SelectionToolbarComponent', () => {
@@ -51,6 +54,20 @@ describe('SelectionToolbarComponent', () => {
     const dots = el.querySelectorAll<HTMLButtonElement>('button.dot');
     expect(dots).toHaveLength(4);
     dots.forEach((d) => expect(d.getAttribute('aria-label')).toBeTruthy());
+  });
+
+  it('has a Listen button next to Translate that emits listen', () => {
+    vi.stubGlobal('speechSynthesis', {});
+    vi.stubGlobal('SpeechSynthesisUtterance', class {});
+    try {
+      const { host, el } = setup();
+      const btn = el.querySelector<HTMLButtonElement>('[data-testid="listen"]')!;
+      expect(btn.previousElementSibling?.getAttribute('data-testid')).toBe('translate');
+      btn.click();
+      expect(host.listens).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('emits copy and note', () => {
@@ -102,8 +119,8 @@ describe('placeToolbar', () => {
   });
 
   it('is centred on the selection and kept inside the viewport horizontally', () => {
-    expect(placeToolbar({ rect: rect(200, 220, 400, 500), touch: false, ...view }).left).toBe(450 - 148);
+    expect(placeToolbar({ rect: rect(200, 220, 400, 500), touch: false, ...view }).left).toBe(450 - 154);
     expect(placeToolbar({ rect: rect(200, 220, 0, 20), touch: false, ...view }).left).toBe(8);
-    expect(placeToolbar({ rect: rect(200, 220, 980, 1000), touch: false, ...view }).left).toBe(1000 - 296 - 8);
+    expect(placeToolbar({ rect: rect(200, 220, 980, 1000), touch: false, ...view }).left).toBe(1000 - 308 - 8);
   });
 });

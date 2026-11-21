@@ -5,7 +5,9 @@ import { findSummary } from '../annotations/summary-scope';
 import { newId } from '../core/ids';
 import type { Annotation, Book, Rect, SummaryScope } from '../core/models';
 import { ReadMarkService } from '../progress/read-mark.service';
-import { contextSentence } from '../review/review-logic';
+import { contextSentence, detectLang } from '../review/review-logic';
+import type { TranslateTarget } from '../review/translate.sheet';
+import { canSpeak, speak, stopSpeaking } from '../review/translation';
 import { COPY } from '../ui/copy';
 import { ToastService } from '../ui/toast.service';
 import { CHROME_COPY } from './chrome-copy';
@@ -55,7 +57,7 @@ export class ReaderActions {
   /** A rectangle just drawn with the area tool, waiting for a color or a note. */
   readonly pendingArea = signal<PendingArea | null>(null);
   /** The selection the Translate sheet shows; null keeps it closed. */
-  readonly translateTarget = signal<{ text: string; page: number; context: string } | null>(null);
+  readonly translateTarget = signal<TranslateTarget | null>(null);
   readonly toolbarTarget = computed(() => this.pendingArea() ?? this.selection.pending());
 
   /**
@@ -301,7 +303,8 @@ export class ReaderActions {
   async translate(): Promise<void> {
     const sel = this.selection.pending();
     if (!sel) return;
-    const target = { text: sel.quote, page: sel.page, context: '' };
+    const { left, top, right, bottom } = sel.rect;
+    const target = { text: sel.quote, page: sel.page, context: '', anchor: { left, top, right, bottom } };
     this.translateTarget.set(target);
     try {
       const context = contextSentence(await this.ctx.pageText(sel.page), sel.quote);
@@ -309,6 +312,22 @@ export class ReaderActions {
     } catch {
       // No context sentence: the item is still saved.
     }
+  }
+
+  /** True while the selection is being read aloud. */
+  readonly listening = signal(false);
+
+  /** Reads the selection aloud in the language of its script; a second press stops it. */
+  listen(): void {
+    if (this.listening()) {
+      stopSpeaking();
+      this.listening.set(false);
+      return;
+    }
+    const sel = this.selection.pending();
+    if (!sel || !canSpeak()) return;
+    const done = () => this.listening.set(false);
+    if (speak(sel.quote, detectLang(sel.quote), done)) this.listening.set(true);
   }
 
   async copySelection(): Promise<void> {

@@ -5,6 +5,7 @@ import { CLOCK } from '../core/clock';
 import { DB, IqraDb } from '../core/db';
 import { newId } from '../core/ids';
 import type { Book } from '../core/models';
+import { CHROME_COPY } from './chrome-copy';
 import { COPY } from '../ui/copy';
 import type { PositionService } from './position.service';
 import { ReaderState } from './reader.state';
@@ -74,6 +75,14 @@ describe('ReadingSettingsSheetComponent', () => {
     radio(COPY.reader.scroll).click();
     await vi.waitFor(async () => expect((await db.books.get('b1'))!.pageMode).toBe('scroll'));
     expect(host.changed[0].pageMode).toBe('scroll');
+  });
+
+  it('Text direction starts on Auto and a choice is saved on the book', async () => {
+    expect(radio(CHROME_COPY.dirAuto).getAttribute('aria-checked')).toBe('true');
+    radio(CHROME_COPY.dirRtl).click();
+    await vi.waitFor(async () => expect((await db.books.get('b1'))!.textDirection).toBe('rtl'));
+    expect(host.changed.at(-1)!.textDirection).toBe('rtl');
+    expect(host.changed.at(-1)!.pageMode).toBe('swipe');
   });
 
   it('Progress mode is a per-book choice here: it shows the book\u2019s mode and reports a change', () => {

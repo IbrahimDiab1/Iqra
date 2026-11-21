@@ -3,6 +3,7 @@ import { DomSanitizer } from '@angular/platform-browser';
 import { HIGHLIGHT_COLORS, type HighlightColor } from '../annotations/annotation.service';
 import type { Rect } from '../core/models';
 import { REVIEW_COPY } from '../review/review-copy';
+import { canSpeak } from '../review/translation';
 import { COPY } from '../ui/copy';
 import { icon } from '../ui/icons';
 import type { PendingSelection } from './selection.service';
@@ -15,7 +16,7 @@ export interface PendingArea {
   anchor: DOMRect;
 }
 
-const WIDTH = 296;
+const WIDTH = 308;
 const HEIGHT = 48;
 const MARGIN = 8;
 /** On touch the system's selection handles hang under the selection; the bar sits this much further away. */
@@ -64,6 +65,9 @@ export function placeToolbar(o: { rect: DOMRect; touch: boolean; vw: number; vh:
         @if (!isArea()) {
           <button type="button" class="copy" (click)="copy_.emit()">{{ copy.copy }}</button>
           <button type="button" class="tr" data-testid="translate" [attr.aria-label]="translateLabel" (click)="translate.emit()" [innerHTML]="translateIcon"></button>
+          @if (canListen) {
+            <button type="button" class="tr" data-testid="listen" [attr.aria-label]="listenLabel" [attr.aria-pressed]="listening()" [class.on]="listening()" (click)="listen.emit()" [innerHTML]="listenIcon"></button>
+          }
         }
       </div>
     }
@@ -73,13 +77,13 @@ export function placeToolbar(o: { rect: DOMRect; touch: boolean; vw: number; vh:
       position: fixed; z-index: 23; display: flex; align-items: center; gap: 2px; height: 48px; padding: 0 4px;
       border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--fg); box-shadow: var(--shadow);
     }
-    button { min-width: 36px; min-height: 40px; border: 0; border-radius: var(--radius-control); background: none; color: inherit; font: 13px var(--ui); cursor: pointer; }
+    button { min-width: 30px; min-height: 40px; border: 0; border-radius: var(--radius-control); background: none; color: inherit; font: 13px var(--ui); cursor: pointer; }
     button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .dot { position: relative; min-width: 36px; }
-    .tr { display: inline-grid; place-items: center; min-width: 40px; color: var(--accent); }
-    .tr:hover { background: var(--accent-soft); }
-    .dot::after { content: ''; position: absolute; inset: 8px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px var(--line); }
-    .note, .copy { padding: 0 6px; min-width: 40px; }
+    .dot { position: relative; min-width: 30px; }
+    .tr { display: inline-grid; place-items: center; min-width: 36px; color: var(--accent); }
+    .tr:hover, .tr.on { background: var(--accent-soft); }
+    .dot::after { content: ''; position: absolute; inset: 6px 5px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px var(--line); }
+    .note, .copy { padding: 0 4px; min-width: 38px; }
     .note:hover, .copy:hover { background: var(--accent-soft); }
   `,
 })
@@ -88,10 +92,16 @@ export class SelectionToolbarComponent {
   readonly color = output<HighlightColor>();
   readonly note = output<void>();
   readonly translate = output<void>();
+  readonly listen = output<void>();
+  /** True while the selection is being read aloud. */
+  readonly listening = input(false);
   /** Named `copy` for the parent's template; the property is `copy_` because `copy` is the copy-strings table. */
   readonly copy_ = output<void>({ alias: 'copy' });
 
   protected readonly translateLabel = REVIEW_COPY.translate;
+  protected readonly listenLabel = REVIEW_COPY.sheet.speak;
+  protected readonly canListen = canSpeak();
+  protected readonly listenIcon = inject(DomSanitizer).bypassSecurityTrustHtml(icon('speaker', 20));
   protected readonly translateIcon = inject(DomSanitizer).bypassSecurityTrustHtml(icon('translate', 20));
   protected readonly copy = COPY.annotations;
   protected readonly colors = HIGHLIGHT_COLORS;

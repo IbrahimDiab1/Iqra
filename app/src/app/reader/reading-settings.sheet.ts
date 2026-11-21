@@ -4,6 +4,7 @@ import type { Book } from '../core/models';
 import { Repo } from '../core/repo';
 import { SettingsService } from '../core/settings.service';
 import { COPY } from '../ui/copy';
+import { CHROME_COPY } from './chrome-copy';
 import { SheetComponent } from '../ui/sheet.component';
 import type { ReaderState } from './reader.state';
 import { zoomIn, zoomOut } from './zoom';
@@ -39,6 +40,16 @@ interface Choice<T> {
       </section>
 
       <section class="group">
+        <h4 id="rs-dir">{{ chrome.textDirection }}</h4>
+        <div class="seg" role="radiogroup" aria-labelledby="rs-dir">
+          @for (c of directions; track c.value) {
+            <button type="button" role="radio" [attr.aria-checked]="textDirection() === c.value" [class.on]="textDirection() === c.value" (click)="setDirection(c.value)">{{ c.label }}</button>
+          }
+        </div>
+        <p class="hint">{{ chrome.textDirectionHint }}</p>
+      </section>
+
+      <section class="group">
         <h4 id="rs-theme">{{ copy.pageColor }}</h4>
         <div class="seg" role="radiogroup" aria-labelledby="rs-theme">
           @for (c of themes; track c.value) {
@@ -68,6 +79,7 @@ interface Choice<T> {
   `,
   styles: `
     .group { margin: 0 0 18px; }
+    .hint { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
     h4 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
     .seg { display: flex; gap: 4px; padding: 3px; border-radius: var(--radius-control); background: var(--surface-2); }
     .seg button { flex: 1; min-height: 40px; border: 0; border-radius: 10px; background: none; color: var(--muted); font: 600 14px var(--ui); cursor: pointer; }
@@ -90,6 +102,7 @@ export class ReadingSettingsSheetComponent {
   readonly progressModeChange = output<Book['progressMode']>();
 
   protected readonly copy = COPY.reader;
+  protected readonly chrome = CHROME_COPY;
   protected readonly details = COPY.details;
   protected readonly progressModes: Choice<Book['progressMode']>[] = [
     { value: 'last-page', label: COPY.details.lastPage },
@@ -103,6 +116,11 @@ export class ReadingSettingsSheetComponent {
     { value: 'swipe', label: COPY.reader.swipe },
     { value: 'scroll', label: COPY.reader.scroll },
   ];
+  protected readonly directions: Choice<NonNullable<Book['textDirection']>>[] = [
+    { value: 'auto', label: CHROME_COPY.dirAuto },
+    { value: 'rtl', label: CHROME_COPY.dirRtl },
+    { value: 'ltr', label: CHROME_COPY.dirLtr },
+  ];
   protected readonly themes: Choice<Theme>[] = [
     { value: 'paper', label: COPY.reader.paper },
     { value: 'sepia', label: COPY.reader.sepia },
@@ -114,6 +132,7 @@ export class ReadingSettingsSheetComponent {
   private readonly settings = inject(SettingsService);
 
   protected readonly theme = computed(() => this.settings.settings().readerTheme);
+  protected readonly textDirection = computed(() => this.book().textDirection ?? 'auto');
   protected readonly percent = computed(() => Math.round(this.state().zoom() * 100));
   protected readonly next = computed(() => zoomIn(this.state().zoom(), this.state().view()));
   protected readonly out = computed(() => zoomOut(this.state().zoom(), this.state().view()));
@@ -128,14 +147,22 @@ export class ReadingSettingsSheetComponent {
     this.settings.update({ readerTheme }).catch((err) => console.warn('Could not save the page color', err));
   }
 
-  protected async setPageMode(pageMode: Book['pageMode']): Promise<void> {
+  protected setDirection(textDirection: NonNullable<Book['textDirection']>): Promise<void> {
+    return this.saveBook({ textDirection }, 'text direction');
+  }
+
+  protected setPageMode(pageMode: Book['pageMode']): Promise<void> {
+    return this.saveBook({ pageMode }, 'page mode');
+  }
+
+  private async saveBook(patch: Partial<Book>, what: string): Promise<void> {
     try {
       // Read the stored book: the position flush may have raised lastPageReached since this copy was made.
       const stored = (await this.db.books.get(this.book().id)) ?? this.book();
-      const saved = await this.repo.put<Book>('books', { ...stored, pageMode });
+      const saved = await this.repo.put<Book>('books', { ...stored, ...patch });
       this.bookChange.emit(saved);
     } catch (err) {
-      console.warn('Could not save the page mode', err);
+      console.warn(`Could not save the ${what}`, err);
     }
   }
 }

@@ -199,3 +199,11 @@ Real-device checks for the reader and library overhaul. Use an Android phone (Ch
 - **Intro and backup copy (C5):** the intro has no technical words, tells readers to right-click (or tap the ⋯ button on) a book for details and actions, and mentions Stats for progress. Profile > Your data describes Back up everything as a backup file of notes, highlights and progress.
 - **Start page (C6):** opening the app, and signing in, lands on Library even though Profile is first in the nav.
 - **Notes (C7):** the type chips (All, Highlights, Notes, Summaries, Bookmarks) stay on one line and scroll sideways with no visible scrollbar.
+
+## Plan 9 checks (Group B: Reader)
+
+- B1: a new book opens in scroll mode and page view. A book you already changed keeps its own mode.
+- B2: select a word, tap Translate. A small card (at most 320 px wide) opens next to the selection, not a sheet. Save to Review closes it and shows "Saved to Review". A click outside, or Esc, closes it too.
+- B3: select text, tap the speaker button next to Translate. It reads aloud (Arabic voice for Arabic). Tap again to stop.
+- B4: on a laptop, Contents opens on the left. On a phone it still slides in from the right. For a right-to-left book it opens on the right.
+- B5: in the reader settings, "Text direction" offers Auto (detected), Right to left, Left to right. Pick one, reopen the book: the choice stays and page order, swipe direction and reading mode follow it.

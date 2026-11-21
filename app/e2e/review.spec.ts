@@ -68,8 +68,8 @@ test.describe('review', () => {
     await expect(sheet.getByTestId('source')).toHaveText(text);
     await expect(sheet.getByTestId('translation')).toHaveText('ترجمة تجريبية');
     await sheet.getByTestId('save-review').click();
-    await expect(sheet.getByTestId('save-review')).toContainText('Saved to Review');
-    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
+    await expect(page.getByText('Saved to Review')).toBeVisible();
 
     await page.getByRole('link', { name: 'Back to library' }).click();
     const nav = page.getByRole('navigation', { name: 'Main' });
@@ -119,8 +119,7 @@ test.describe('review', () => {
     expect(box.x + box.width).toBeLessThanOrEqual(320);
     await bar.getByRole('button', { name: 'Translate' }).click();
     await page.getByTestId('save-review').click();
-    await expect(page.getByTestId('save-review')).toContainText('Saved');
-    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('save-review')).toBeHidden();
     await page.getByRole('link', { name: 'Back to library' }).click();
     await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Review/ }).click();
     await expect(page.getByTestId('review-item')).toHaveCount(1);
