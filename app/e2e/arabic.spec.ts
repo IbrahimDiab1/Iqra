@@ -135,7 +135,7 @@ test.describe('arabic', () => {
     await expect(spans.first()).toBeVisible();
     await spans.first().evaluate((first) => {
       const layer = first.parentElement!;
-      const lineSpans = Array.from(layer.querySelectorAll('span[data-item]')).slice(0, 7);
+      const lineSpans = Array.from(layer.querySelectorAll('span[data-item]')).slice(0, 4); // the first four words: the layer has a span per word, none for the spaces
       const range = document.createRange();
       range.setStart(lineSpans[0].firstChild!, 0);
       const last = lineSpans[lineSpans.length - 1];

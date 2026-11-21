@@ -190,3 +190,10 @@ Real-device checks for the reader and library overhaul. Use an Android phone (Ch
 - **Sync never sticks (P2b):** a stalled Drive call is abandoned after 2 minutes (status Error, next sync works), a silent token renewal that never answers no longer blocks the poll (20 s), and a stalled upload no longer blocks later uploads (10 minutes).
 - **Two versions of the app open (P2c):** an old tab holding the database closes its connection and reloads when a newer tab upgrades it.
 - **Stats never blank (P2d):** if the data cannot be read, Stats shows "Your reading history could not be loaded" with Try again and Reload app, also when loading takes longer than 8 s. A brand new account shows the empty states.
+
+## Plan 9 checks (Group A: Arabic lag)
+
+- **Dense Arabic book, page by page:** open a typeset Arabic book with a lot of text per page (hundreds of pages, small type) in paged mode and swipe or press the arrow keys through 30 pages. Each turn should feel immediate and the tab should stay well under 1 GB (Chrome Task Manager, "Memory footprint"). Only the page on screen is selectable; the pages next to it are pictures until you turn to them, and their text appears a moment after the page lands.
+- **Selecting text in that book:** drag across a few lines in paged and in scrolling mode. The highlight should follow the pointer smoothly; tap a word to select it, then Highlight, Copy and Translate still work and the saved quote is the words you selected.
+- **Scrolling mode:** scroll quickly through 40 screens. Pages near the screen are selectable; pages further away are pictures only.
+- **Search and Contents:** search for a common word in the same book; hits and jumps are unchanged.

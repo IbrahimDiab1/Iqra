@@ -1,4 +1,4 @@
-import { alignSpans, applyReadingOrder } from './text-layer';
+import { applyReadingOrder, selectedLayerText, tagSpans, textLayerSource } from './text-layer';
 
 function span(text: string): HTMLElement {
   const s = document.createElement('span');
@@ -6,27 +6,40 @@ function span(text: string): HTMLElement {
   return s;
 }
 
-describe('alignSpans', () => {
-  it('tags spans with the index of their non-empty item when only those have spans', () => {
+describe('textLayerSource', () => {
+  const item = (str: string, extra: object = {}) => ({ str, transform: [1, 0, 0, 1, 0, 0], width: 1, height: 1, fontName: 'f', dir: 'rtl', ...extra });
+
+  it('leaves out the space-only items and says which items it kept', () => {
+    const content = { items: [item('كلمة'), item(' '), item('أخرى'), item('  '), item('ثالثة')], styles: {}, lang: null };
+    const out = textLayerSource(content);
+    expect(out.content.items.map((i) => i.str)).toEqual(['كلمة', 'أخرى', 'ثالثة']);
+    expect(out.kept).toEqual([0, 2, 4]);
+  });
+
+  it('keeps an item that only ends a line (it carries the line break) and every item with letters', () => {
+    const content = { items: [item('a'), item(' ', { hasEOL: true }), item(''), item('', { hasEOL: true }), item('b')], styles: {}, lang: 'ar' };
+    const out = textLayerSource(content);
+    expect(out.kept).toEqual([0, 1, 2, 3, 4]);
+    expect(out.content.lang).toBe('ar');
+  });
+
+  it('passes the styles along untouched', () => {
+    const styles = { f: { fontFamily: 'sans-serif', ascent: 1, descent: 0, vertical: false } };
+    expect(textLayerSource({ items: [item('x')], styles, lang: null }).content.styles).toBe(styles);
+  });
+});
+
+describe('tagSpans', () => {
+  it('tags each span with the pdf.js item index it shows', () => {
+    const spans = [span('A'), span('B'), span('C')];
+    tagSpans(spans, [0, 2, 5]);
+    expect(spans.map((s) => s.dataset['item'])).toEqual(['0', '2', '5']);
+  });
+
+  it('never throws when there are more spans than kept items', () => {
     const spans = [span('A'), span('B')];
-    const out = alignSpans([{ str: 'A' }, { str: '' }, { str: 'B' }], spans);
-    expect(out).toBe(spans);
-    expect(spans.map((s) => s.dataset['item'])).toEqual(['0', '2']);
-  });
-
-  it('indexes straight through when pdf.js gave one div per item, empty ones included', () => {
-    const spans = [span('A'), span(''), span('B')];
-    alignSpans([{ str: 'A' }, { str: '' }, { str: 'B' }], spans);
-    expect(spans.map((s) => s.dataset['item'])).toEqual(['0', '1', '2']);
-  });
-
-  it('tags by order and never throws when the counts match neither way', () => {
-    const spans = [span('A'), span('B'), span('C'), span('D')];
-    expect(() => alignSpans([{ str: 'A' }, { str: '' }, { str: 'B' }], spans)).not.toThrow();
-    expect(spans.map((s) => s.dataset['item'])).toEqual(['0', '2', undefined, undefined]);
-    const few = [span('A')];
-    alignSpans([{ str: 'A' }, { str: 'B' }], few);
-    expect(few[0].dataset['item']).toBe('0');
+    expect(() => tagSpans(spans, [3])).not.toThrow();
+    expect(spans.map((s) => s.dataset['item'])).toEqual(['3', undefined]);
   });
 });
 
@@ -85,5 +98,37 @@ describe('applyReadingOrder', () => {
     applyReadingOrder(container, [a, b], [1, 0]);
     expect([a.dataset['item'], b.dataset['item']]).toEqual(['1', '0']);
     expect(Array.from(wrap.children)).toEqual([a, b]);
+  });
+});
+
+describe('selectedLayerText', () => {
+  function layer(words: string[]) {
+    const root = document.createElement('div');
+    words.forEach((w, i) => {
+      const s = span(w);
+      s.dataset['item'] = String(i * 2);
+      root.append(s);
+    });
+    document.body.append(root);
+    return root;
+  }
+
+  it('joins the selected words with one space, as the layer has no span for the gap', () => {
+    const root = layer(['alpha', 'beta', 'gamma', 'delta']);
+    const spans = root.querySelectorAll('span');
+    const range = document.createRange();
+    range.setStart(spans[0].firstChild!, 2);
+    range.setEnd(spans[2].firstChild!, 3);
+    expect(selectedLayerText(root, range)).toBe('pha beta gam');
+    root.remove();
+  });
+
+  it('is empty for a collapsed selection', () => {
+    const root = layer(['alpha', 'beta']);
+    const range = document.createRange();
+    range.setStart(root.querySelector('span')!.firstChild!, 1);
+    range.collapse(true);
+    expect(selectedLayerText(root, range)).toBe('');
+    root.remove();
   });
 });

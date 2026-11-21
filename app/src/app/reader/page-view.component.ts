@@ -17,7 +17,8 @@ import type { Annotation, Rect } from '../core/models';
 import { COPY } from '../ui/copy';
 import { AreaToolDirective } from './area-tool.directive';
 import { HighlightLayerComponent } from './highlight-layer.component';
-import { selectWordAt } from './selection.service';
+import { SelectionService, selectWordAt } from './selection.service';
+import { selectedLayerText } from './text-layer';
 import type { PageRenderer } from './pdf-session';
 
 const ZOOM_DEBOUNCE_MS = 60;
@@ -54,6 +55,7 @@ const FILTERS: Record<PageTheme, string> = {
         [class.inert]="!interactive() || areaTool()"
         [attr.data-page]="page()"
         (click)="onClick($event)"
+        (copy)="onCopy($event)"
       ></div>
       @if (failed()) {
         <div class="failed" role="alert">
@@ -135,6 +137,11 @@ export class PageViewComponent implements OnDestroy {
   readonly annotations = input<Annotation[]>([]);
   readonly flashId = input<string | null>(null);
   readonly interactive = input(true);
+  /**
+   * Whether this page needs a text layer now. A text layer is one absolutely positioned span per word (1 500+ on a dense
+   * Arabic page), which is what makes a page expensive in memory and layout, so only the page the reader can select on has one.
+   */
+  readonly withText = input(true);
   /** The area tool is on: drags draw a rectangle and the text layer ignores the pointer. */
   readonly areaTool = input(false);
   readonly rendered = output<number>();
@@ -146,6 +153,7 @@ export class PageViewComponent implements OnDestroy {
   private readonly canvas = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
   private readonly textLayer = viewChild.required<ElementRef<HTMLElement>>('textLayer');
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly selection = inject(SelectionService, { optional: true });
 
   protected readonly painted = signal(false);
   protected readonly failed = signal(false);
@@ -156,12 +164,15 @@ export class PageViewComponent implements OnDestroy {
   protected readonly filter = computed(() => FILTERS[this.theme()]);
 
   private controller: AbortController | undefined;
+  private textController: AbortController | undefined;
+  private hasText = false;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private lastPage: number | undefined;
   private generation = 0;
   private started = false;
 
   constructor() {
+    this.watchText();
     // Re-render on every change of page, width or zoom. Page changes draw at once; zoom/width changes wait 60 ms.
     effect(() => {
       const page = this.page();
@@ -176,7 +187,12 @@ export class PageViewComponent implements OnDestroy {
         this.controller?.abort();
         this.controller = undefined;
         this.generation++;
-        if (pageChanged) this.textLayer().nativeElement.replaceChildren();
+        this.textController?.abort();
+        this.textController = undefined;
+        if (pageChanged) {
+          this.textLayer().nativeElement.replaceChildren();
+          this.hasText = false;
+        }
         if (pageChanged || !this.started) {
           void renderer.pageSize(page).then((s) => {
             if (this.page() === page) this.ratio.set(s.heightPt / s.widthPt);
@@ -187,6 +203,39 @@ export class PageViewComponent implements OnDestroy {
         }
       });
     });
+  }
+
+  private watchText(): void {
+    // A change of the flag after the first paint adds or drops the text layer without redrawing the page.
+    effect(() => {
+      const want = this.withText();
+      untracked(() => {
+        if (!this.painted()) return;
+        if (want) {
+          if (!this.hasText) this.layText(this.renderer(), this.page(), this.cssWidth());
+        } else {
+          this.dropText();
+        }
+      });
+    });
+  }
+
+  private layText(renderer: PageRenderer, page: number, width: number): void {
+    this.textController?.abort();
+    const controller = new AbortController();
+    this.textController = controller;
+    this.hasText = true;
+    // The text layer is an extra: a failure here never fails the page, and a page without text just has none.
+    renderer.renderTextLayer(page, this.textLayer().nativeElement, width, controller.signal).catch(() => undefined);
+  }
+
+  private dropText(): void {
+    this.textController?.abort();
+    this.textController = undefined;
+    if (this.hasText) this.textLayer().nativeElement.replaceChildren();
+    this.hasText = false;
+    // The words are still read ahead (cheap, cached), so the page that becomes current gets its layer quickly.
+    void this.renderer().textItems(this.page()).catch(() => undefined);
   }
 
   protected retry(): void {
@@ -206,10 +255,8 @@ export class PageViewComponent implements OnDestroy {
         if (generation !== this.generation || controller.signal.aborted) return;
         this.painted.set(true);
         this.rendered.emit(page);
-        // The text layer is an extra: a failure here never fails the page, and a page without text just has none.
-        renderer
-          .renderTextLayer(page, this.textLayer().nativeElement, width, controller.signal)
-          .catch(() => undefined);
+        if (this.withText()) this.layText(renderer, page, width);
+        else this.dropText();
       },
       (err: unknown) => {
         if (generation !== this.generation || controller.signal.aborted) return;
@@ -217,6 +264,23 @@ export class PageViewComponent implements OnDestroy {
         this.failed.set(true);
       },
     );
+  }
+
+  /**
+   * The browser's own copy of a selection in the layer would run the words together (the layer has no span for a space), and
+   * would hand over presentation-form letters as the PDF stores them. Copy what the selection toolbar copies instead: the quote.
+   */
+  protected onCopy(e: ClipboardEvent): void {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0 || !e.clipboardData) return;
+    const layer = this.textLayer().nativeElement;
+    const range = sel.getRangeAt(0);
+    if (!layer.contains(range.startContainer) && !layer.contains(range.endContainer)) return;
+    const pending = this.selection?.pending();
+    const text = pending && pending.page === this.page() ? pending.quote : selectedLayerText(layer, range);
+    if (text === '') return;
+    e.clipboardData.setData('text/plain', text);
+    e.preventDefault();
   }
 
   protected onClick(e: MouseEvent): void {
@@ -240,6 +304,7 @@ export class PageViewComponent implements OnDestroy {
   ngOnDestroy(): void {
     clearTimeout(this.timer);
     this.controller?.abort();
+    this.textController?.abort();
     const canvas = this.canvas().nativeElement;
     canvas.width = 0;
     canvas.height = 0;

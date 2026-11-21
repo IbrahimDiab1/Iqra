@@ -1,26 +1,42 @@
-/**
- * Tags each pdf.js text-layer span with `data-item`, the index of the text item it shows.
- *
- * pdf.js's `TextLayer.textDivs` holds one element per text item, including the empty items it emits
- * for line ends; those are never attached to the DOM. So when the counts agree the nth div is item n.
- * When they do not (another pdf.js build), fall back to one span per non-empty item, in order.
- * A mismatch tags what it can and never throws.
- */
-export function alignSpans(items: { str: string }[], spans: HTMLElement[]): HTMLElement[] {
-  if (spans.length === items.length) {
-    spans.forEach((span, i) => (span.dataset['item'] = String(i)));
-    return spans;
-  }
-  let s = 0;
-  for (let i = 0; i < items.length && s < spans.length; i++) {
-    if (items[i].str === '') continue;
-    spans[s++].dataset['item'] = String(i);
-  }
-  return spans;
+import type { TextItem } from './text';
+
+/** The pdf.js text content of a page as the reader keeps it: text items only, plus what the text layer needs to size them. */
+export interface PdfTextContent {
+  items: (TextItem & { fontName?: string; dir?: string })[];
+  styles: Record<string, { fontFamily: string; ascent: number; descent: number; vertical: boolean }>;
+  lang: string | null | undefined;
 }
 
 /**
- * Puts a text layer's spans in reading order: `order[new] = old` over the pdf.js item indexes `alignSpans` tagged.
+ * What the text layer is built from. A dense Arabic page has a text item for every word *and* one for every space between
+ * words; the spaces are invisible, hold no letters and are never the target of a selection, yet each costs a styled, absolutely
+ * positioned span. They are left out, except one that ends a line (it carries the line break). `kept[k]` is the index in
+ * `items` of the k-th item given to the layer, so spans can be tagged with the item they show.
+ */
+export function textLayerSource(content: PdfTextContent): { content: PdfTextContent; kept: number[] } {
+  const items: PdfTextContent['items'] = [];
+  const kept: number[] = [];
+  content.items.forEach((it, i) => {
+    if (it.str !== '' && it.str.trim() === '' && !it.hasEOL) return;
+    items.push(it);
+    kept.push(i);
+  });
+  return { content: { items, styles: content.styles, lang: content.lang }, kept };
+}
+
+/**
+ * Tags each pdf.js text-layer span with `data-item`, the index of the text item it shows.
+ *
+ * pdf.js's `TextLayer.textDivs` holds one element per item it was given, including the empty items it emits
+ * for line ends (those are never attached to the DOM): the nth div is the nth kept item.
+ * A mismatch tags what it can and never throws.
+ */
+export function tagSpans(spans: HTMLElement[], kept: number[]): void {
+  for (let k = 0; k < spans.length && k < kept.length; k++) spans[k].dataset['item'] = String(kept[k]);
+}
+
+/**
+ * Puts a text layer's spans in reading order: `order[new] = old` over the pdf.js item indexes `tagSpans` tagged.
  * Spans are renumbered to their new index and moved within the layer; each line break (`<br>`) stays after its own
  * line. When the layer is not a flat run of spans and breaks, only the renumbering is done.
  */
@@ -43,4 +59,21 @@ export function applyReadingOrder(container: HTMLElement, spans: HTMLElement[], 
   }
   const sorted = slots.map((s) => s.span).sort((a, b) => Number(a.dataset['item']) - Number(b.dataset['item']));
   container.replaceChildren(...sorted.flatMap((span, k) => (slots[k].br ? [span, slots[k].br!] : [span])));
+}
+
+/**
+ * The text a selection covers in a text layer, with a space between words. The layer has no span for the space between two
+ * words, so the browser's own copy would run them together; this joins the selected part of each word's span with one space.
+ */
+export function selectedLayerText(layer: HTMLElement, range: Range): string {
+  const parts: string[] = [];
+  for (const span of Array.from(layer.querySelectorAll<HTMLElement>('span[data-item]'))) {
+    if (!range.intersectsNode(span)) continue;
+    let text = span.textContent ?? '';
+    const node = span.firstChild;
+    if (node && node === range.endContainer) text = text.slice(0, range.endOffset);
+    if (node && node === range.startContainer) text = text.slice(range.startOffset);
+    if (text !== '') parts.push(text);
+  }
+  return parts.join(' ');
 }

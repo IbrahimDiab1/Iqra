@@ -31,14 +31,18 @@ class FakeRenderer implements PageRenderer {
       });
     });
   }
-  async textItems() {
+  async textItems(page: number) {
+    this.itemsAsked.push(page);
     return [];
   }
   async pageText() {
     return '';
   }
   textLayerFails = false;
-  renderTextLayer(): Promise<void> {
+  textLayers: { page: number; container: HTMLElement; signal: AbortSignal }[] = [];
+  itemsAsked: number[] = [];
+  renderTextLayer(page: number, container: HTMLElement, _w: number, signal: AbortSignal): Promise<void> {
+    this.textLayers.push({ page, container, signal });
     return this.textLayerFails ? Promise.reject(new Error('no text')) : Promise.resolve();
   }
 }
@@ -51,6 +55,7 @@ class FakeRenderer implements PageRenderer {
     [fitWidthPx]="fit()"
     [zoom]="zoom()"
     [theme]="theme()"
+    [withText]="withText()"
     [annotations]="anns()"
     (rendered)="done.push($event)"
     (annotationTap)="taps.push($event)"
@@ -62,6 +67,7 @@ class HostComponent {
   page = signal(1);
   fit = signal(400);
   zoom = signal(1);
+  withText = signal(true);
   theme = signal<'paper' | 'sepia' | 'night'>('paper');
   done: number[] = [];
   anns = signal<Annotation[]>([]);
@@ -241,6 +247,92 @@ describe('PageViewComponent', () => {
       sel.removeAllRanges();
       expect(host.taps).toEqual([]);
       expect(host.pageTaps).toBe(0);
+    });
+  });
+  describe('text layer on demand', () => {
+    const paint = async () => {
+      host.renderer.calls.at(-1)!.resolve();
+      await settle();
+    };
+
+    it('lays a text layer once the page is painted', async () => {
+      await paint();
+      expect(host.renderer.textLayers).toHaveLength(1);
+      expect(host.renderer.textLayers[0].page).toBe(1);
+    });
+
+    it('builds no text layer for a page that does not need one, but reads its words ahead', async () => {
+      host.withText.set(false);
+      host.page.set(2);
+      await settle();
+      await paint();
+      expect(host.renderer.textLayers).toHaveLength(0);
+      expect(host.renderer.itemsAsked).toContain(2);
+    });
+
+    it('adds the layer when the page becomes the one being read, without drawing the page again', async () => {
+      host.withText.set(false);
+      host.page.set(2);
+      await settle();
+      await paint();
+      const draws = host.renderer.calls.length;
+      host.withText.set(true);
+      await settle();
+      expect(host.renderer.textLayers).toHaveLength(1);
+      expect(host.renderer.calls).toHaveLength(draws);
+    });
+
+    it('drops the layer (and stops building it) when the page no longer needs it', async () => {
+      await paint();
+      const layer = host.renderer.textLayers[0];
+      layer.container.append(document.createElement('span'));
+      host.withText.set(false);
+      await settle();
+      expect(layer.signal.aborted).toBe(true);
+      expect(layer.container.children).toHaveLength(0);
+    });
+  });
+  describe('copy', () => {
+    function selectWords(words: string[]) {
+      const layer = el.querySelector('.text-layer') as HTMLElement;
+      words.forEach((w, i) => {
+        const span = document.createElement('span');
+        span.textContent = w;
+        span.dataset['item'] = String(i * 2);
+        layer.append(span);
+      });
+      const spans = layer.querySelectorAll('span');
+      const range = document.createRange();
+      range.setStart(spans[0].firstChild!, 0);
+      range.setEnd(spans[spans.length - 1].firstChild!, words[words.length - 1].length);
+      const sel = window.getSelection()!;
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return layer;
+    }
+    function copyEvent(layer: HTMLElement) {
+      const store = new Map<string, string>();
+      const data = { setData: (t: string, v: string) => store.set(t, v), getData: (t: string) => store.get(t) ?? '' };
+      const e = new Event('copy', { bubbles: true, cancelable: true });
+      Object.defineProperty(e, 'clipboardData', { value: data });
+      layer.dispatchEvent(e);
+      return { e, data };
+    }
+
+    it('copies the selected words with a space between them (the layer has no span for the gap)', () => {
+      const layer = selectWords(['كلمة', 'أخرى', 'ثالثة']);
+      const { e, data } = copyEvent(layer);
+      expect(data.getData('text/plain')).toBe('كلمة أخرى ثالثة');
+      expect(e.defaultPrevented).toBe(true);
+      window.getSelection()?.removeAllRanges();
+    });
+
+    it('leaves a copy alone when nothing is selected', () => {
+      const layer = el.querySelector('.text-layer') as HTMLElement;
+      window.getSelection()?.removeAllRanges();
+      const { e, data } = copyEvent(layer);
+      expect(data.getData('text/plain')).toBe('');
+      expect(e.defaultPrevented).toBe(false);
     });
   });
 });
