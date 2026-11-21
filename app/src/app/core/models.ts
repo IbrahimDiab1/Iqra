@@ -102,7 +102,9 @@ export interface UpNext extends SyncMeta {
 export interface Goal extends SyncMeta {
   categoryId: ID | null; // null = all books
   measure: 'time' | 'pages';
-  target: number; // minutes or pages, per week
+  target: number; // minutes or pages, per `period`
+  /** How often the target repeats. Goals saved before periods existed have none and are weekly. */
+  period?: 'day' | 'week' | 'month';
 }
 
 /** Reading reminders (spec 9.12). Every field is optional; the reminder code applies the defaults. */

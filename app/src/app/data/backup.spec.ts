@@ -34,6 +34,15 @@ describe('buildBackup', () => {
   });
 });
 
+describe('goal periods in a backup', () => {
+  const parse = (extra: Record<string, unknown>) =>
+    parseBackup(JSON.stringify({ schemaVersion: 1, tables: { goals: [{ ...valid('goals'), ...extra }] } })).ok;
+  it('accepts day, week and month, and an old goal without a period; rejects anything else', () => {
+    expect([parse({ period: 'day' }), parse({ period: 'week' }), parse({ period: 'month' }), parse({})]).toEqual([true, true, true, true]);
+    expect(parse({ period: 'year' })).toBe(false);
+  });
+});
+
 describe('parseBackup field validation', () => {
   it.each(Object.keys(BAD))('rejects the whole backup when one %s record has a bad field, naming table and index', (table) => {
     const tables = { books: [valid('books', 'ok')], [table]: [valid(table, 'good'), { ...valid(table, 'bad'), ...BAD[table] }] };

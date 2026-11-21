@@ -1,17 +1,20 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, input, signal } from '@angular/core';
 import { AuthApi } from '../../auth/auth.service';
 import { CLOCK } from '../../core/clock';
 import { DB } from '../../core/db';
 import { Repo } from '../../core/repo';
-import { formatDuration } from '../../stats/format';
+import { GoalService } from '../../stats/goal.service';
+import { SettingsService } from '../../core/settings.service';
 import { SyncStatusComponent } from '../../sync/sync-status.component';
 import type { BookView } from './book-card.component';
-import { firstName, welcomeStats } from './greeting';
+import { firstName, statLines } from './greeting';
 import { RecentCardComponent } from './recent-card.component';
 import { TOP_COPY } from './top-copy';
 
+const ROTATE_MS = 3000;
+
 /**
- * The top of the Library: the greeting with the streak and all-time reading time, and the Continue reading row.
+ * The top of the Library: the greeting with a stat line that rotates every few seconds, and the Continue reading row.
  * The page loads it with `@defer`, so the statistics code stays out of the initial bundle.
  */
 @Component({
@@ -21,13 +24,16 @@ import { TOP_COPY } from './top-copy';
   template: `
     <header class="hello">
       <h1 data-testid="welcome">{{ welcomeText() }}</h1>
-      <p class="stats" data-testid="welcome-stats">
-        <span>{{ streakText() }}</span>
-        <span class="sep" aria-hidden="true">·</span>
-        <span>{{ timeText() }}</span>
-        @if (stats().finished > 0) {
-          <span class="sep" aria-hidden="true">·</span>
-          <span>{{ copy.finishedCount(stats().finished) }}</span>
+      <p
+        class="stats"
+        data-testid="welcome-stats"
+        (mouseenter)="paused.set(true)"
+        (mouseleave)="paused.set(false)"
+        (focusin)="paused.set(true)"
+        (focusout)="paused.set(false)"
+      >
+        @for (l of [line()]; track l) {
+          <span class="line">{{ l }}</span>
         }
       </p>
       <iqra-sync-status />
@@ -48,8 +54,10 @@ import { TOP_COPY } from './top-copy';
     :host { display: block; }
     h1 { margin: 2px 0 0; font-size: 26px; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; overflow-wrap: anywhere; }
     .hello { margin-bottom: 14px; }
-    .stats { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin: 6px 0 0; color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; }
-    .sep { opacity: 0.6; }
+    .stats { margin: 6px 0 0; min-height: 1.4em; color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+    .line { display: inline-block; animation: line-in .4s ease; }
+    @keyframes line-in { from { opacity: 0; } to { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { .line { animation: none; } }
     .sec-h { margin: 0 0 10px; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
     .recent { margin-bottom: 18px; }
     .recent-row {
@@ -78,12 +86,45 @@ export class LibraryTopComponent {
   private readonly clock = inject(CLOCK);
   protected readonly copy = TOP_COPY;
 
+  private readonly goalService = inject(GoalService);
+  private readonly settings = inject(SettingsService);
+
   private readonly sessions = this.repo.live(() => this.db.sessions.filter((s) => !s.deleted).toArray());
-  protected readonly stats = computed(() => welcomeStats(this.sessions() ?? [], this.finished(), this.clock.now()));
+  private readonly books = this.repo.live(() => this.db.books.filter((b) => !b.deleted).toArray());
+  private readonly categories = this.repo.live(() => this.db.categories.filter((c) => !c.deleted).toArray());
+
+  /** Rotation is paused while the pointer or focus is on the line, so it can be read. */
+  protected readonly paused = signal(false);
+  private readonly tick = signal(0);
+  /** Refreshed with every tick, so the day and week rollovers are followed. */
+  private readonly now = signal(this.clock.now());
+
+  protected readonly lines = computed(() =>
+    statLines({
+      sessions: this.sessions() ?? [],
+      books: this.books() ?? [],
+      categories: this.categories() ?? [],
+      goals: this.goalService.goals()() ?? [],
+      finished: this.finished(),
+      now: this.now(),
+      weekStartsOn: this.settings.settings().weekStartsOn,
+    }),
+  );
+  protected readonly line = computed(() => {
+    const l = this.lines();
+    return l[this.tick() % l.length];
+  });
+
   protected readonly welcomeText = computed(() => {
     const name = firstName(this.auth.profile()?.name);
     return name ? this.copy.welcome(name) : this.copy.welcomeAnon;
   });
-  protected readonly streakText = computed(() => (this.stats().streak > 0 ? this.copy.streakDays(this.stats().streak) : this.copy.streakNone));
-  protected readonly timeText = computed(() => this.copy.timeRead(formatDuration(this.stats().ms)));
+
+  constructor() {
+    const timer = setInterval(() => {
+      this.now.set(this.clock.now());
+      if (!this.paused()) this.tick.update((n) => n + 1);
+    }, ROTATE_MS);
+    inject(DestroyRef).onDestroy(() => clearInterval(timer));
+  }
 }

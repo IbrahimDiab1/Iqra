@@ -3,11 +3,14 @@ import { DB } from '../core/db';
 import { newId } from '../core/ids';
 import type { Goal, ID } from '../core/models';
 import { Repo } from '../core/repo';
+import type { GoalPeriod } from './goal-period';
 
 export interface NewGoal {
   categoryId: ID | null;
   measure: Goal['measure'];
   target: number;
+  /** Day, week or month; weekly when left out. */
+  period?: GoalPeriod;
 }
 
 const MIN_TARGET = 1;
@@ -18,7 +21,7 @@ function clampTarget(n: number): number {
   return Number.isFinite(n) ? Math.min(MAX_TARGET, Math.max(MIN_TARGET, Math.round(n))) : MIN_TARGET;
 }
 
-/** The only writer of weekly goals. Goals are never hard-deleted. */
+/** The only writer of goals. Goals are never hard-deleted. */
 @Injectable({ providedIn: 'root' })
 export class GoalService {
   private readonly repo = inject(Repo);
@@ -31,7 +34,7 @@ export class GoalService {
   }
 
   create(g: NewGoal): Promise<Goal> {
-    return this.repo.put<Goal>('goals', { id: newId(), categoryId: g.categoryId, measure: g.measure, target: clampTarget(g.target) });
+    return this.repo.put<Goal>('goals', { id: newId(), categoryId: g.categoryId, measure: g.measure, target: clampTarget(g.target), period: g.period ?? 'week' });
   }
 
   update(id: ID, patch: Partial<NewGoal>): Promise<Goal | undefined> {

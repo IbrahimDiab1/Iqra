@@ -1636,7 +1636,7 @@ describe('ReaderPage', () => {
       expect(tool('area')!.getAttribute('aria-pressed')).toBe('false');
     });
 
-    it('a touch long-press on blank page area opens the menu; moving first cancels it', async () => {
+    it('a touch long-press does not open the custom menu and leaves the native menu and selection alone; the mouse right-click still does', async () => {
       vi.useFakeTimers();
       try {
         await create();
@@ -1646,19 +1646,22 @@ describe('ReaderPage', () => {
       vi.useFakeTimers();
       try {
         const stage = el.querySelector('.stage')!;
-        const pt = (type: string, x: number, y: number) => {
-          const e = new MouseEvent(type, { bubbles: true, clientX: x, clientY: y });
-          Object.defineProperties(e, { pointerType: { value: 'touch' }, pointerId: { value: 3 }, isPrimary: { value: true } });
-          stage.dispatchEvent(e);
-        };
-        pt('pointerdown', 100, 100);
-        pt('pointermove', 140, 100);
+        const down = new MouseEvent('pointerdown', { bubbles: true, clientX: 100, clientY: 100 });
+        Object.defineProperties(down, { pointerType: { value: 'touch' }, pointerId: { value: 3 }, isPrimary: { value: true } });
+        stage.dispatchEvent(down);
         vi.advanceTimersByTime(700);
+        const e = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 100 });
+        stage.dispatchEvent(e);
         fixture.detectChanges();
+        expect(e.defaultPrevented).toBe(false);
         expect(menu()).toBeNull();
-        pt('pointerdown', 100, 100);
-        vi.advanceTimersByTime(700);
+        const mouse = new MouseEvent('pointerdown', { bubbles: true });
+        Object.defineProperty(mouse, 'pointerType', { value: 'mouse' });
+        stage.dispatchEvent(mouse);
+        const r = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 100 });
+        stage.dispatchEvent(r);
         fixture.detectChanges();
+        expect(r.defaultPrevented).toBe(true);
         expect(menu()).not.toBeNull();
       } finally {
         vi.useRealTimers();

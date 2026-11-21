@@ -295,18 +295,45 @@ describe('LibraryPage', () => {
     expect(tab('All').getAttribute('aria-selected')).toBe('true');
   });
 
-  it('greets by first name, falls back to Welcome, and shows streak and all-time reading time', async () => {
+  it('greets by first name, falls back to Welcome, and starts the rotating stat line with the time read today', async () => {
     const auth = TestBed.inject(AuthApi) as FakeAuthService;
     await db.sessions.put({
       id: 's1', updatedAt: 1, deviceId: 'd', bookId: 'r', startedAt: 5000 - 1000, endedAt: 5000, activeMs: 90 * 60_000, pagesRead: [1, 2],
     } as never);
     await seed([reading]);
     await create();
-    await waitFor(() => el.querySelector('[data-testid="welcome-stats"]')!.textContent!.includes('1 h 30 min read'));
+    await waitFor(() => el.querySelector('[data-testid="welcome-stats"]')!.textContent!.includes('1 h 30 min read today'));
     const name = auth.profile()?.name ?? '';
     const first = name.trim().split(/\s+/)[0];
     expect(el.querySelector('[data-testid="welcome"]')!.textContent).toBe(first ? `Welcome, ${first}` : 'Welcome');
-    expect(el.querySelector('[data-testid="welcome-stats"]')!.textContent).toContain('1-day streak');
+    expect(el.querySelector('[data-testid="welcome-stats"]')!.textContent).toContain('1 h 30 min read today');
+  });
+
+  it('rotates the stat line every 3 s, pauses while hovered or focused, and is not a live region', async () => {
+    await db.sessions.put({
+      id: 's1', updatedAt: 1, deviceId: 'd', bookId: 'r', startedAt: 4000, endedAt: 5000, activeMs: 90 * 60_000, pagesRead: [1, 2],
+    } as never);
+    await seed([reading]);
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      await create();
+      const stats = () => el.querySelector('[data-testid="welcome-stats"]')!;
+      await waitFor(() => stats().textContent!.includes('read today'));
+      expect(stats().getAttribute('aria-live')).toBeNull();
+      vi.advanceTimersByTime(3000);
+      fixture.detectChanges();
+      expect(stats().textContent).toContain('2 pages today');
+      stats().dispatchEvent(new Event('mouseenter'));
+      vi.advanceTimersByTime(9000);
+      fixture.detectChanges();
+      expect(stats().textContent).toContain('2 pages today');
+      stats().dispatchEvent(new Event('mouseleave'));
+      vi.advanceTimersByTime(3000);
+      fixture.detectChanges();
+      expect(stats().textContent).toContain('pages read in total');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('lists up to five recently read in-progress books in a Continue reading row, hidden when none', async () => {

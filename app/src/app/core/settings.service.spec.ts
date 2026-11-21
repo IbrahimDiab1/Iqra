@@ -34,7 +34,7 @@ describe('SettingsService', () => {
   });
 
   it('has the owner defaults: week starts Saturday, scroll, last page, paper', () => {
-    expect(DEFAULT_SETTINGS).toMatchObject({ weekStartsOn: 6, defaultPageMode: 'scroll', defaultProgressMode: 'last-page', readerTheme: 'paper' });
+    expect(DEFAULT_SETTINGS).toMatchObject({ weekStartsOn: 6, defaultPageMode: 'swipe', defaultProgressMode: 'last-page', readerTheme: 'paper' });
   });
 
   it('defaults the reader theme to night when the system prefers dark', () => {

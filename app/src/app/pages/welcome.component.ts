@@ -20,7 +20,6 @@ import { icon, type IconName } from '../ui/icons';
       <div class="top">
         <div class="hero">
           <p class="ar-word" lang="ar" dir="rtl"><span class="word">اقرأ</span></p>
-          <p class="meaning">{{ copy.meaning }}</p>
           <h1>{{ copy.title }}</h1>
           <p class="sub">{{ copy.body }}</p>
 
@@ -117,7 +116,6 @@ import { icon, type IconName } from '../ui/icons';
       animation: sweep 700ms 250ms ease-out backwards;
     }
     @keyframes sweep { from { transform: rotate(-1.5deg) scaleX(0); } }
-    .meaning { margin-top: 6px; color: var(--muted); font-size: 14px; }
     h1 { margin-top: 28px; font-family: var(--book); font-size: clamp(28px, 7vw, 44px); font-weight: 600; line-height: 1.15; letter-spacing: -0.01em; text-wrap: balance; }
     .sub { margin-top: 14px; max-width: 46ch; color: var(--muted); font-size: 17px; line-height: 1.5; }
 

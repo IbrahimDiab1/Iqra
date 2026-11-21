@@ -14,6 +14,7 @@ import { ChartComponent, type ChartBar } from './chart.component';
 import { StatsFiltersComponent } from './filters.component';
 import { formatDuration, formatMinutes } from './format';
 import { GoalEditorSheet } from './goal-editor.sheet';
+import { goalPeriod, goalRange } from './goal-period';
 import { GoalService } from './goal.service';
 import { HeatmapComponent } from './heatmap.component';
 import {
@@ -38,7 +39,7 @@ const L = STATS_COPY;
 const PERIODS: readonly Period[] = ['week', 'month', 'year'];
 
 /**
- * Reading for a week, month or year: totals, weekly goals and a day-by-day chart for a week, a colour-by-category
+ * Reading for a week, month or year: totals, goals and a day-by-day chart for a week, a colour-by-category
  * heat map for a month or year, filters by category and book, and the books in progress.
  */
 @Component({
@@ -111,7 +112,7 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
           </div>
         </div>
 
-        @if (period() === 'week') {
+        <section class="card" data-testid="goals-card">
           <h2>{{ l.goalsTitle }}</h2>
           @if (goalRows().length === 0) {
             <p class="empty">{{ l.noGoals }}</p>
@@ -130,7 +131,7 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
             }
           </ul>
           <button type="button" class="add" (click)="editing.set(null); editorOpen.set(true)">{{ goalCopy.add }}</button>
-        }
+        </section>
 
         <h2>{{ period() === 'week' ? l.dayByDay : l.heatTitle[heatPeriod()] }}</h2>
         @if (periodEmpty()) {
@@ -374,13 +375,16 @@ export class StatsPage {
       const gone = goal.categoryId !== null && !names.has(goal.categoryId);
       const scope = goal.categoryId === null ? L.allBooks : gone ? L.categoryGone : names.get(goal.categoryId)!;
       // A goal whose category is gone is left out of the maths.
-      const value = gone ? 0 : goalProgress(goal, this.sessions(), books, this.bounds()).value;
+      const per = goalPeriod(goal);
+      const range = goalRange(per, this.now(), this.weekStartsOn());
+      const value = gone ? 0 : goalProgress(goal, this.sessions(), books, range).value;
       const fraction = gone || goal.target <= 0 ? 0 : Math.min(1, value / goal.target);
       const text =
         goal.measure === 'time'
           ? L.progressOf(L.readingLabel, formatMinutes(value), formatMinutes(goal.target))
           : L.progressOf(L.pagesLabel, String(Math.floor(value)), String(goal.target));
-      return { goal, scope, text, pct: Math.round(fraction * 100) };
+      const perText = per === 'day' ? L.goals.periodDay : per === 'week' ? L.goals.periodWeek : L.goals.periodMonth;
+      return { goal, scope: L.goals.scopeLine(scope, perText), text, pct: Math.round(fraction * 100) };
     });
   });
 
@@ -444,10 +448,10 @@ export class StatsPage {
     return { from: new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(), to: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() };
   });
   private readonly todayTotal = computed(() => StatsPage.sum(dayStats(this.sessions(), this.today())));
-  /** A daily target is a seventh of the weekly goal over all books; none when there is no such goal. */
+  /** The daily goal over all books for a measure; none when the user has not set one. Weekly and monthly goals are not split into days. */
   private dailyTarget(measure: Goal['measure']): number | null {
-    const g = (this.goalService.goals()() ?? []).find((x) => x.measure === measure && x.categoryId === null && x.target > 0);
-    return g ? Math.max(1, Math.ceil(g.target / 7)) : null;
+    const g = (this.goalService.goals()() ?? []).find((x) => goalPeriod(x) === 'day' && x.measure === measure && x.categoryId === null && x.target > 0);
+    return g ? g.target : null;
   }
   protected readonly todayTiles = computed(() => {
     const t = this.todayTotal();

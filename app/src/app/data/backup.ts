@@ -60,7 +60,7 @@ const FIELDS: Partial<Record<TableName, Record<string, Check>>> = {
   },
   categories: { name: str, order: num },
   upNext: { bookIds: list(str) },
-  goals: { categoryId: (v) => v === null || str(v), measure: oneOf('time', 'pages'), target: nonNeg },
+  goals: { categoryId: (v) => v === null || str(v), measure: oneOf('time', 'pages'), target: nonNeg, period: opt(oneOf('day', 'week', 'month')) },
   settings: {
     defaultProgressMode: oneOf('last-page', 'marked'), defaultPageMode: oneOf('swipe', 'scroll'), defaultView: oneOf('page', 'reflow'),
     readerTheme: oneOf('paper', 'sepia', 'night'), weekStartsOn: oneOf(0, 1, 6), cardDirection: oneOf('en-ar', 'ar-en', 'mixed'),

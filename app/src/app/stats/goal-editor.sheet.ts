@@ -3,10 +3,11 @@ import type { Category, Goal, ID } from '../core/models';
 import { SheetComponent } from '../ui/sheet.component';
 import { ToastService } from '../ui/toast.service';
 import { formatMinutes } from './format';
+import { GOAL_PERIODS, goalPeriod, type GoalPeriod } from './goal-period';
 import { GoalService } from './goal.service';
 import { STATS_COPY } from './stats-copy';
 
-/** Creates or edits a weekly goal. `goal` null with `open` set means a new goal. */
+/** Creates or edits a goal for a day, a week or a month. `goal` null with `open` set means a new goal. */
 @Component({
   selector: 'iqra-goal-editor-sheet',
   imports: [SheetComponent],
@@ -27,12 +28,19 @@ import { STATS_COPY } from './stats-copy';
         <button type="button" [attr.aria-pressed]="measure() === 'pages'" (click)="measure.set('pages')">{{ c.pages }}</button>
       </div>
 
-      <label class="lbl" for="goal-target">{{ measure() === 'time' ? c.targetTime : c.targetPages }}</label>
+      <span class="lbl" id="ge-period">{{ c.period }}</span>
+      <div class="seg" role="group" aria-labelledby="ge-period">
+        @for (p of periods; track p) {
+          <button type="button" [attr.data-period]="p" [attr.aria-pressed]="period() === p" (click)="period.set(p)">{{ periodLabel(p) }}</button>
+        }
+      </div>
+
+      <label class="lbl" for="goal-target">{{ measure() === 'time' ? c.targetTime(per()) : c.targetPages(per()) }}</label>
       <input id="goal-target" class="field" type="text" inputmode="numeric" autocomplete="off" [value]="targetText()" (input)="onTarget($event)" [attr.aria-invalid]="valid() || targetText() === '' ? null : 'true'" />
       @if (targetText() !== '' && !valid()) {
         <p class="hint err">{{ c.invalid }}</p>
       } @else if (valid() && measure() === 'time') {
-        <p class="hint">{{ c.perWeek(hours()) }}</p>
+        <p class="hint">{{ c.hint(hours(), per()) }}</p>
       }
 
       <div sheet-foot class="foot-row">
@@ -75,7 +83,10 @@ export class GoalEditorSheet {
   protected readonly allBooks = STATS_COPY.allBooks;
   protected readonly categoryId = signal<ID | null>(null);
   protected readonly measure = signal<Goal['measure']>('time');
+  protected readonly period = signal<GoalPeriod>('week');
+  protected readonly periods = GOAL_PERIODS;
   protected readonly targetText = signal('');
+  protected readonly per = computed(() => ({ day: this.c.perDay, week: this.c.perWeek, month: this.c.perMonth })[this.period()]);
 
   private readonly goals = inject(GoalService);
   private readonly toast = inject(ToastService);
@@ -97,9 +108,14 @@ export class GoalEditorSheet {
       untracked(() => {
         this.categoryId.set(g?.categoryId ?? null);
         this.measure.set(g?.measure ?? 'time');
+        this.period.set(g ? goalPeriod(g) : 'week');
         this.targetText.set(g ? String(g.target) : '');
       });
     });
+  }
+
+  protected periodLabel(p: GoalPeriod): string {
+    return p === 'day' ? this.c.periodDay : p === 'week' ? this.c.periodWeek : this.c.periodMonth;
   }
 
   protected onTarget(ev: Event): void {
@@ -110,7 +126,7 @@ export class GoalEditorSheet {
     const target = this.target();
     if (target === null) return;
     const g = this.goal();
-    const fields = { categoryId: this.categoryId(), measure: this.measure(), target };
+    const fields = { categoryId: this.categoryId(), measure: this.measure(), target, period: this.period() };
     try {
       if (g) await this.goals.update(g.id, fields);
       else await this.goals.create(fields);

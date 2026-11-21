@@ -202,9 +202,9 @@ describe('StatsPage', () => {
       expect(text()).not.toContain('Books in progress');
     });
 
-    it('shows today vs the daily goal (a seventh of the weekly goal), and both streaks', async () => {
-      await db.goals.put(goal('g1', { measure: 'pages', target: 21 }));
-      await db.goals.put(goal('g2', { measure: 'time', target: 140 }));
+    it('shows today vs the daily goal the user set, and both streaks', async () => {
+      await db.goals.put(goal('g1', { measure: 'pages', target: 3, period: 'day' }));
+      await db.goals.put(goal('g2', { measure: 'time', target: 20, period: 'day' }));
       await db.sessions.bulkPut([
         session('s0', at(11, 17), range(2)),
         session('s1', at(11, 18), range(2)),
@@ -224,6 +224,14 @@ describe('StatsPage', () => {
       expect(tile('[data-streak="current"]')).toContain('3 days');
       expect(tile('[data-streak="longest"]')).toContain('5 days');
       expect(text()).toContain(STATS_COPY.overview.streakNote);
+    });
+
+    it('a weekly or monthly goal is not turned into a daily one', async () => {
+      await db.goals.put(goal('g1', { measure: 'pages', target: 21 }));
+      await db.goals.put(goal('g2', { measure: 'time', target: 140, period: 'month' }));
+      await create();
+      expect(tile('[data-today="pages"]')).toContain(STATS_COPY.overview.noGoal);
+      expect(tile('[data-today="time"]')).toContain(STATS_COPY.overview.noGoal);
     });
 
     it('says there is no daily goal and draws no bar without a goal', async () => {
@@ -272,7 +280,20 @@ describe('StatsPage', () => {
       await db.books.bulkPut([makeBook('b2', { title: 'History Book', categoryIds: ['c2'] }), makeBook('b3', { title: 'كتاب حر', categoryIds: [] })]);
     }
 
-    it('starts on Week, and switching to Month or Year swaps the chart for a heat map and hides the weekly goals', async () => {
+    it('each goal shows progress for its own period, whatever period the page is browsing', async () => {
+      await db.goals.put(goal('gd', { measure: 'pages', target: 4, period: 'day' }));
+      await db.goals.put(goal('gm', { measure: 'pages', target: 100, period: 'month' }));
+      await db.sessions.bulkPut([session('s1', at(11, 19, 9), range(2)), session('s2', at(11, 3), range(5))]);
+      await create();
+      const rows = () => [...el.querySelectorAll('.goal .gl')].map((e) => e.textContent!.trim());
+      expect(rows()).toEqual(expect.arrayContaining(['Pages · 2 of 4', 'Pages · 7 of 100']));
+      period('year').click();
+      await settle(() => expect(cells()).toHaveLength(365));
+      expect(rows()).toEqual(expect.arrayContaining(['Pages · 2 of 4', 'Pages · 7 of 100']));
+      expect(text()).toContain('All books · Daily');
+    });
+
+    it('starts on Week, and switching to Month or Year swaps the chart for a heat map; goals stay', async () => {
       await db.goals.put(goal('g1'));
       await db.sessions.put(session('s1', at(11, 16), range(4)));
       await create();
@@ -283,7 +304,7 @@ describe('StatsPage', () => {
       period('month').click();
       await settle(() => expect(cells()).toHaveLength(30));
       expect(el.querySelector('.week-chart')).toBeNull();
-      expect(el.querySelector('.goal')).toBeNull();
+      expect(el.querySelector('.goal')).not.toBeNull();
       expect(label()).toBe('This month · November 2026');
 
       period('year').click();

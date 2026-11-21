@@ -69,6 +69,24 @@ describe('GoalEditorSheet', () => {
     expect(fixture.componentInstance.closes).toBe(1);
   });
 
+  it('saves the chosen period and words the target for it', async () => {
+    btn(c.periodMonth).click();
+    fixture.detectChanges();
+    expect(el.querySelector('label[for=goal-target]')!.textContent).toContain('per month');
+    type('300');
+    btn(c.save).click();
+    await vi.waitFor(async () => expect(await db.goals.toArray()).toMatchObject([{ period: 'month', target: 300 }]));
+  });
+
+  it('an old goal without a period opens as weekly', async () => {
+    const g: Goal = { id: 'g1', deviceId: 'd', updatedAt: 1, categoryId: null, measure: 'time', target: 60 };
+    fixture.componentInstance.goal.set(g);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-period=week]')!.getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('shows hours and minutes as helper text for time goals', () => {
     btn(c.time).click();
     type('125');

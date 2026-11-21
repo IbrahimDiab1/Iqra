@@ -70,8 +70,6 @@ const SYNC_TOAST_MS = 8000;
 /** A jump to an annotation lands a little above it. */
 const ANNOTATION_JUMP_MARGIN = 0.05;
 const FINISH_TOAST_MS = 8000;
-const LONG_PRESS_MS = 550;
-const LONG_PRESS_SLOP_PX = 10;
 
 @Component({
   selector: 'iqra-reader-page',
@@ -121,9 +119,6 @@ const LONG_PRESS_SLOP_PX = 10;
             class="stage"
             (contextmenu)="onContextMenu($event)"
             (pointerdown)="onStagePointerDown($event)"
-            (pointermove)="onStagePointerMove($event)"
-            (pointerup)="cancelPress()"
-            (pointercancel)="cancelPress()"
           >
             @if (s.view() === 'reflow') {
               <iqra-reflow-view
@@ -357,7 +352,8 @@ export class ReaderPage implements OnDestroy {
       reflow: this.state()?.view() === 'reflow',
     }),
   );
-  private press: { id: number; x: number; y: number; timer: ReturnType<typeof setTimeout> } | undefined;
+  /** What the last press on the page area was made with; a touch long-press must leave the native menu and selection alone. */
+  private lastPointerType = 'mouse';
 
   protected readonly theme = computed(() => this.settings.settings().readerTheme);
   protected readonly rtl = computed(() => this.book()?.direction === 'rtl');
@@ -613,8 +609,9 @@ export class ReaderPage implements OnDestroy {
   /** Right-click in the page area: cancels a running area tool, otherwise opens the page-actions menu. Elsewhere the native menu stays. */
   protected onContextMenu(e: MouseEvent): void {
     if (!this.state()) return;
+    // Touch (long-press) keeps the system's own text selection and menu; the custom menu is for mouse and keyboard.
+    if (this.lastPointerType === 'touch' || (e as PointerEvent).pointerType === 'touch') return;
     e.preventDefault();
-    this.cancelPress();
     if (this.actions.cancelArea()) return;
     this.menuAt.set({ x: e.clientX, y: e.clientY });
   }
@@ -627,32 +624,8 @@ export class ReaderPage implements OnDestroy {
     this.menuAt.set({ x: box.left + box.width / 2, y: box.top + box.height / 2, keyboard: true });
   }
 
-  /** Touch long-press on blank page area opens the menu; pressing text is left to the system's own selection. */
   protected onStagePointerDown(e: PointerEvent): void {
-    this.cancelPress();
-    if (e.pointerType !== 'touch' || e.isPrimary === false || this.state()?.tool() !== 'none') return;
-    if ((e.target as Element | null)?.closest?.('[data-item], .reflow-article p')) return;
-    const x = e.clientX;
-    const y = e.clientY;
-    this.press = {
-      id: e.pointerId,
-      x,
-      y,
-      timer: setTimeout(() => {
-        this.press = undefined;
-        this.menuAt.set({ x, y });
-      }, LONG_PRESS_MS),
-    };
-  }
-
-  protected onStagePointerMove(e: PointerEvent): void {
-    const p = this.press;
-    if (p && e.pointerId === p.id && Math.hypot(e.clientX - p.x, e.clientY - p.y) > LONG_PRESS_SLOP_PX) this.cancelPress();
-  }
-
-  protected cancelPress(): void {
-    if (this.press) clearTimeout(this.press.timer);
-    this.press = undefined;
+    this.lastPointerType = e.pointerType || 'mouse';
   }
 
   protected onMenuPick(id: ContextActionId): void {
@@ -771,7 +744,6 @@ export class ReaderPage implements OnDestroy {
 
   ngOnDestroy(): void {
     this.destroyed = true;
-    this.cancelPress();
     this.stopListening();
     // Position and reading session are written first; leaving the reader then syncs at once.
     const saved = Promise.all([this.tracking?.end(), this.state()?.flush()]);

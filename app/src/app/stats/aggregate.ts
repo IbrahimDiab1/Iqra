@@ -13,7 +13,7 @@ export interface GoalProgress {
   fraction: number; // 0..1
 }
 
-interface Range {
+export interface Range {
   from: number;
   to: number;
 }

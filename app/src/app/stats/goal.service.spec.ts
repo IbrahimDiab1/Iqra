@@ -28,6 +28,18 @@ describe('GoalService', () => {
     await vi.waitFor(() => expect(service.goals()()?.map((x) => x.id)).toEqual([g.id]));
   });
 
+  it('keeps the chosen period, weekly when none is given, and lets it be changed', async () => {
+    const d = await service.create({ categoryId: null, measure: 'pages', target: 5, period: 'day' });
+    expect(d.period).toBe('day');
+    const w = await service.create({ categoryId: null, measure: 'pages', target: 5 });
+    expect(w.period).toBe('week');
+    expect((await service.update(d.id, { period: 'month' }))?.period).toBe('month');
+  });
+
+  it('starts empty: no goal exists until the user makes one', async () => {
+    await vi.waitFor(() => expect(service.goals()()).toEqual([]));
+  });
+
   it('clamps the target to a whole number from 1 to 100000', async () => {
     expect((await service.create({ categoryId: null, measure: 'time', target: 0 })).target).toBe(1);
     expect((await service.create({ categoryId: null, measure: 'time', target: -4 })).target).toBe(1);

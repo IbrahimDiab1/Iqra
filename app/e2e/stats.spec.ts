@@ -172,7 +172,7 @@ test.describe('progress and stats', () => {
 
   test('stats tab: add a weekly pages goal, it shows progress after reading', async () => {
     await page.getByRole('link', { name: 'Stats' }).click();
-    await expect(page.getByText('Set a weekly goal to see your progress here.')).toBeVisible();
+    await expect(page.getByText('Set a goal to see your progress here.')).toBeVisible();
     await page.getByRole('button', { name: 'Add goal', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('button', { name: 'Pages read', exact: true }).click();

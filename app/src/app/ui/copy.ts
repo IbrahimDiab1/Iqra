@@ -2,7 +2,6 @@ export const COPY = {
   welcome: {
     title: 'Your library, in your own Google Drive',
     body: 'Read PDFs on your phone and your PC. Your page, highlights and notes follow you everywhere, and everything works offline.',
-    meaning: 'Iqra means “read” in Arabic.',
     cta: 'Continue with Google',
     busy: 'Opening Google…',
     trust: 'Iqra can only open the files it creates in your Drive. It has no server and never sees your other files.',
