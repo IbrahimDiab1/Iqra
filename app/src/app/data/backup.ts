@@ -5,7 +5,7 @@ export const BACKUP_VERSION = 1;
 const MAX_BACKUP_CHARS = 50 * 1024 * 1024;
 
 export const BACKUP_TABLES: readonly TableName[] = [
-  'books', 'categories', 'upNext', 'goals', 'settings', 'annotations', 'positions', 'readMarks', 'sessions', 'words',
+  'books', 'categories', 'upNext', 'goals', 'settings', 'annotations', 'positions', 'readMarks', 'sessions', 'review',
 ];
 
 export type BackupTables = Partial<Record<TableName, SyncRecord[]>>;
@@ -76,6 +76,11 @@ const FIELDS: Partial<Record<TableName, Record<string, Check>>> = {
   },
   positions: { bookId: str, page: num, offset: num, zoom: num, view: oneOf('page', 'reflow') },
   readMarks: { bookId: str, page: num, read: bool },
+  review: {
+    text: str, translation: str, bookId: str, page: num, context: str, createdAt: num,
+    kind: oneOf('word', 'phrase', 'sentence'), sourceLang: oneOf('en', 'ar'), note: opt(str),
+    srs: shape({ due: num, intervalDays: nonNeg, ease: num, reps: nonNeg, lapses: nonNeg }),
+  },
   sessions: { bookId: str, startedAt: num, endedAt: num, activeMs: nonNeg, pagesRead: list(num) },
 };
 

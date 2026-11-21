@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { BACKUP_TABLES, buildBackup, mergeInto, parseBackup, type BackupTables } from '../data/backup';
-import { exportNotes } from '../data/export-markdown';
+import { exportNotes, exportReview } from '../data/export-markdown';
 import { zipFiles } from '../data/zip';
 import { CLOCK } from '../core/clock';
 import { DB } from '../core/db';
@@ -13,7 +13,7 @@ import { ToastService } from '../ui/toast.service';
 import { SETTINGS_COPY } from './settings-copy';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
-const COUNTED = ['books', 'annotations', 'categories', 'goals', 'sessions'] as const;
+const COUNTED = ['books', 'annotations', 'categories', 'goals', 'sessions', 'review'] as const;
 
 /** Local calendar date as YYYY-MM-DD. */
 function dateStamp(ms: number): string {
@@ -118,8 +118,10 @@ export class DataSection {
 
   protected async exportNotes(): Promise<void> {
     await this.guarded(async () => {
-      const [books, anns] = await Promise.all([this.db.books.toArray(), this.db.annotations.toArray()]);
+      const [books, anns, review] = await Promise.all([this.db.books.toArray(), this.db.annotations.toArray(), this.db.review.toArray()]);
       const files = exportNotes(books as Book[], anns as Annotation[]);
+      const saved = exportReview(books as Book[], review);
+      if (saved) files.push(saved);
       if (files.length === 0) {
         this.toast.show(this.c.noNotes);
         return;

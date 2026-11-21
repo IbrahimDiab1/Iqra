@@ -108,6 +108,7 @@ export const SETTINGS_COPY = {
       categories: ['category', 'categories'],
       goals: ['goal', 'goals'],
       sessions: ['reading session', 'reading sessions'],
+      review: ['saved word', 'saved words'],
     },
   },
 } as const;

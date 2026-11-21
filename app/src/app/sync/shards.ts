@@ -26,7 +26,7 @@ export function shardFor(table: TableName, rec: SyncRecord): string {
       const month = String(d.getUTCMonth() + 1).padStart(2, '0');
       return `sessions-${d.getUTCFullYear()}-${month}.json`;
     }
-    case 'words':
-      return 'words.json';
+    case 'review':
+      return 'review.json';
   }
 }
