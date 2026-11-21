@@ -9,6 +9,7 @@ interface Calls {
   getTextContent: ReturnType<typeof vi.fn>;
   destroy: ReturnType<typeof vi.fn>;
   cleanup: ReturnType<typeof vi.fn>;
+  docCleanup: ReturnType<typeof vi.fn>;
 }
 
 function install(failWith?: unknown): Calls {
@@ -25,12 +26,13 @@ function install(failWith?: unknown): Calls {
   const page = { getViewport, render, getTextContent, cleanup };
   const getPage = vi.fn(async () => page);
   const destroy = vi.fn(async () => undefined);
+  const docCleanup = vi.fn(async () => undefined);
   const getDocument = vi.fn(() => ({
-    promise: failWith === undefined ? Promise.resolve({ numPages: 3, getPage }) : Promise.reject(failWith),
+    promise: failWith === undefined ? Promise.resolve({ numPages: 3, getPage, cleanup: docCleanup }) : Promise.reject(failWith),
     destroy,
   }));
   setPdfjsLoaderForTests(async () => ({ getDocument }) as never);
-  return { getDocument, render, cancel, getViewport, getPage, getTextContent, destroy, cleanup };
+  return { getDocument, render, cancel, getViewport, getPage, getTextContent, destroy, cleanup, docCleanup };
 }
 
 const local = () => ({ kind: 'local' as const, blob: new Blob([new Uint8Array([1, 2, 3])]) });
@@ -212,6 +214,89 @@ describe('PdfSession', () => {
     const s = await PdfSession.open(local());
     expect((await s.textItems(1)).map((i) => i.str)).toEqual(['القراءة', 'غذاء', 'العقل']);
     expect(await s.pageText(1)).toBe('القراءة غذاء العقل');
+  });
+
+  it('extracts a page text content once, however often its items are asked for (selection handlers ask on every change)', async () => {
+    const c = install();
+    const s = await PdfSession.open(local());
+    const first = await s.textItems(1);
+    for (let i = 0; i < 20; i++) await s.textItems(1);
+    await s.pageText(1);
+    expect(c.getTextContent).toHaveBeenCalledTimes(1);
+    expect(await s.textItems(1)).toBe(first);
+  });
+
+  it('bounds the memoised text of pages (the least recently used page is dropped)', async () => {
+    const c = install();
+    const s = await PdfSession.open(local());
+    for (let p = 1; p <= 40; p++) await s.textItems(p);
+    expect(c.getTextContent).toHaveBeenCalledTimes(40);
+    await s.textItems(40);
+    expect(c.getTextContent).toHaveBeenCalledTimes(40);
+    await s.textItems(1);
+    expect(c.getTextContent).toHaveBeenCalledTimes(41);
+  });
+
+  describe('releasing document resources (fonts, caches) that page.cleanup() keeps', () => {
+    async function draw(s: PdfSession, c: Calls, n: number): Promise<void> {
+      setCanvasFactoryForTests(() => fakeCanvas().c);
+      c.render.mockImplementation(() => ({ promise: Promise.resolve(), cancel: c.cancel }));
+      for (let i = 0; i < n; i++) await s.renderPage(1 + (i % 3), fakeCanvas(10, 10).c, 300, new AbortController().signal);
+    }
+
+    it('cleans the document after a run of page renders, never while one is running', async () => {
+      const c = install();
+      const s = await PdfSession.open(local());
+      await draw(s, c, 7);
+      expect(c.docCleanup).not.toHaveBeenCalled();
+      await draw(s, c, 1);
+      await vi.waitFor(() => expect(c.docCleanup).toHaveBeenCalledTimes(1));
+      expect(c.docCleanup).toHaveBeenCalledWith(false);
+
+      // A render in flight blocks the next clean-up until it settles.
+      let finish: (() => void) | undefined;
+      c.render.mockImplementation(() => ({ promise: new Promise<void>((r) => (finish = r)), cancel: c.cancel }));
+      setCanvasFactoryForTests(() => fakeCanvas().c);
+      const slow = s.renderPage(1, fakeCanvas(10, 10).c, 300, new AbortController().signal);
+      await vi.waitFor(() => expect(finish).toBeDefined());
+      expect(c.docCleanup).toHaveBeenCalledTimes(1);
+      finish!();
+      await slow;
+    });
+
+    it('also cleans once the reader has been idle for a while after some renders', async () => {
+      vi.useFakeTimers();
+      try {
+        const c = install();
+        const s = await PdfSession.open(local());
+        await draw(s, c, 2);
+        expect(c.docCleanup).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(5000);
+        expect(c.docCleanup).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(20000);
+        expect(c.docCleanup).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('a failing clean-up never breaks rendering, and nothing runs after destroy', async () => {
+      vi.useFakeTimers();
+      try {
+        const c = install();
+        c.docCleanup.mockRejectedValue(new Error('page is rendering'));
+        const s = await PdfSession.open(local());
+        await draw(s, c, 8);
+        await vi.advanceTimersByTimeAsync(5000);
+        await draw(s, c, 1);
+        s.destroy();
+        const calls = c.docCleanup.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(60000);
+        expect(c.docCleanup.mock.calls.length).toBe(calls);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('destroy destroys the document', async () => {
