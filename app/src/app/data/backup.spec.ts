@@ -11,12 +11,13 @@ const VALID: Record<string, Record<string, unknown>> = {
   annotations: { bookId: 'b1', type: 'highlight', page: 1, color: 'yellow', text: { page: 1, start: { item: 0, offset: 0 }, end: { item: 0, offset: 3 }, rects: [{ x: 0, y: 0, w: 1, h: 1 }], quote: 'q' }, tags: [], createdAt: 1 },
   positions: { bookId: 'b1', page: 1, offset: 0, zoom: 1, view: 'page' },
   readMarks: { bookId: 'b1', page: 1, read: true },
+  review: { text: 'book', translation: 'كتاب', kind: 'word', sourceLang: 'en', bookId: 'b1', page: 2, context: 'A book.', createdAt: 1, srs: { due: 1, intervalDays: 0, ease: 2.5, reps: 0, lapses: 0 } },
   sessions: { bookId: 'b1', startedAt: 1_700_000_000_000, endedAt: 1_700_000_060_000, activeMs: 60000, pagesRead: [1] },
 };
 const valid = (table: string, id = 'r1', updatedAt = 1): SyncRecord => rec(id, updatedAt, 'a', VALID[table]);
 const BAD: Record<string, Record<string, unknown>> = {
   books: { categoryIds: 'c1' }, categories: { name: 5 }, upNext: { bookIds: [1] }, goals: { measure: 'money' }, settings: { reminders: { days: [9] } },
-  annotations: { tags: undefined }, positions: { page: '1' }, readMarks: { read: 'yes' }, sessions: { pagesRead: 'x' },
+  annotations: { tags: undefined }, positions: { page: '1' }, readMarks: { read: 'yes' }, sessions: { pagesRead: 'x' }, review: { kind: 'essay' },
 };
 
 function rec(id: string, updatedAt: number, deviceId = 'a', extra: Record<string, unknown> = {}): SyncRecord {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Annotation, Book } from '../core/models';
-import { bookMarkdown, exportNotes, safeFileName } from './export-markdown';
+import { bookMarkdown, exportNotes, exportReview, reviewMarkdown, safeFileName } from './export-markdown';
 
 function book(id: string, title: string, extra: Partial<Book> = {}): Book {
   return {
@@ -154,5 +154,23 @@ describe('exportNotes', () => {
 
   it('returns nothing when there are no notes', () => {
     expect(exportNotes([book('b1', 'A')], [])).toEqual([]);
+  });
+});
+
+describe('review export', () => {
+  const book = { id: 'b1', title: 'Dune', deleted: false } as never;
+  const item = (o: object) => ({ id: 'r', text: 'serendipity', translation: 'صدفة', page: 4, createdAt: 1, context: 'A happy serendipity.', ...o }) as never;
+  it('lists live items by book with page, translation and context', () => {
+    const md = reviewMarkdown([book], [item({ bookId: 'b1' }), item({ id: 's', bookId: 'b1', text: 'gone', deleted: true })]);
+    expect(md).toContain('# Review');
+    expect(md).toContain('## Dune');
+    expect(md).toContain('- **serendipity** — صدفة (p. 4)');
+    expect(md).toContain('> A happy serendipity.');
+    expect(md).not.toContain('gone');
+  });
+  it('is null when nothing is saved', () => {
+    expect(exportReview([book], [])).toBeNull();
+    expect(exportReview([book], [item({ bookId: 'b1', deleted: true })])).toBeNull();
+    expect(exportReview([book], [item({ bookId: 'b1' })])?.name).toBe('Review.md');
   });
 });

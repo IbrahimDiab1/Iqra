@@ -7,6 +7,7 @@ export const routes: Routes = [
   { path: 'welcome', loadComponent: () => import('./pages/welcome.component').then((m) => m.WelcomePage), canActivate: [signedOutGuard] },
   { path: 'library', component: LibraryPage, canActivate: [signedInGuard] },
   { path: 'notes', loadComponent: () => import('./notes/notes.page').then((m) => m.NotesPage), canActivate: [signedInGuard] },
+  { path: 'review', loadComponent: () => import('./review/review.page').then((m) => m.ReviewPage), canActivate: [signedInGuard] },
   { path: 'stats', loadComponent: () => import('./stats/stats.page').then((m) => m.StatsPage), canActivate: [signedInGuard] },
   { path: 'profile', loadComponent: () => import('./profile/profile.page').then((m) => m.ProfilePage), canActivate: [signedInGuard] },
   { path: 'settings', redirectTo: 'profile', pathMatch: 'full' },

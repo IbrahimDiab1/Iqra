@@ -139,13 +139,30 @@ export interface ReadingSession extends SyncMeta {
   pagesRead: number[]; // pages that counted as read in this session (see 9.2)
 }
 
-export interface Word extends SyncMeta {
-  // phase 2
-  text: string;
+export type ReviewKind = 'word' | 'phrase' | 'sentence';
+export type ReviewLang = 'en' | 'ar';
+
+/** Spaced-repetition state of a saved item, one schedule per direction is not kept: the item is one card. */
+export interface ReviewSrs {
+  due: number; // ms
+  intervalDays: number;
+  ease: number; // SM-2 ease factor, >= 1.3
+  reps: number; // consecutive successful reviews
+  lapses: number;
+}
+
+/** A word, phrase or sentence saved from a book to the language notebook. */
+export interface ReviewItem extends SyncMeta {
+  text: string; // as selected
   translation: string;
+  kind: ReviewKind; // by length
+  sourceLang: ReviewLang; // language of `text`
   bookId: ID;
   page: number;
-  srs: { due: number; intervalDays: number; ease: number; reps: number; lapses: number };
+  context: string; // the sentence it was selected in; '' when unknown
+  note?: string;
+  srs: ReviewSrs;
+  createdAt: number;
 }
 
 export type TableName =
@@ -158,6 +175,6 @@ export type TableName =
   | 'positions'
   | 'readMarks'
   | 'sessions'
-  | 'words';
+  | 'review';
 
 export type SyncRecord = SyncMeta & Record<string, unknown>;

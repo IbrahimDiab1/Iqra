@@ -6,7 +6,7 @@ import { FakeAuthService } from '../auth/fake-auth.service';
 import { CLOCK } from '../core/clock';
 import { DB, IqraDb } from '../core/db';
 import { DEVICE_ID } from '../core/ids';
-import type { Annotation, Book, Category, Goal, ID, ReadMark, ReadingSession, Settings } from '../core/models';
+import type { Annotation, Book, Category, Goal, ID, ReadMark, ReadingSession, ReviewItem, Settings } from '../core/models';
 import { Repo } from '../core/repo';
 import { UploadQueue } from '../books/upload-queue';
 import { DRIVE_ADAPTER, DriveAuthError } from './drive-adapter';
@@ -123,6 +123,32 @@ describe('SyncEngine', () => {
     const onB = await b.db.books.get('b1');
     expect(onB?.title).toBe('Sample');
     expect(onB?.updatedAt).toBe(10);
+  });
+
+  it('syncs the language notebook as review.json, the newer edit wins and a delete stays deleted', async () => {
+    const item = (over: Partial<ReviewItem> = {}) => ({
+      id: 'r1', text: 'book', translation: 'كتاب', kind: 'word' as const, sourceLang: 'en' as const, bookId: 'b1', page: 2, context: '',
+      srs: { due: 1, intervalDays: 0, ease: 2.5, reps: 0, lapses: 0 }, createdAt: 1, ...over,
+    });
+    a.clock.t = 10;
+    await a.repo.put<ReviewItem>('review', item());
+    await a.engine.syncNow();
+    expect((await drive.listAppData()).map((f) => f.name)).toContain('review.json');
+    await b.engine.syncNow();
+    expect((await b.db.review.get('r1'))?.translation).toBe('كتاب');
+
+    b.clock.t = 20;
+    await b.repo.put<ReviewItem>('review', item({ translation: 'الكتاب' }));
+    await b.engine.syncNow();
+    a.clock.t = 30;
+    await a.engine.syncNow();
+    expect((await a.db.review.get('r1'))?.translation).toBe('الكتاب');
+
+    a.clock.t = 40;
+    await a.repo.softDelete('review', 'r1');
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    expect((await b.db.review.get('r1'))?.deleted).toBe(true);
   });
 
   it('keeps B\'s title when A and B edit the same book in turn', async () => {

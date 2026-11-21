@@ -54,7 +54,7 @@ export const COPY = {
     pageColor: 'Page color', paper: 'Paper', sepia: 'Sepia', night: 'Night', saved: 'Saved',
   },
   // Added in Task 2 for the app shell and placeholder pages.
-  nav: { library: 'Library', notes: 'Notes', stats: 'Stats', profile: 'Profile' },
+  nav: { library: 'Library', notes: 'Notes', review: 'Review', stats: 'Stats', profile: 'Profile' },
   placeholder: { notesTitle: 'Notes' },
   annotations: {
     highlight: 'Highlight',

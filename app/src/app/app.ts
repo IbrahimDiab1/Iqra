@@ -6,6 +6,7 @@ import { filter, map } from 'rxjs';
 import { BookDetailsSheetComponent } from './books/details/book-details.sheet';
 import { OpenBookSheetComponent } from './books/open-book.sheet';
 import { RemoveBookSheetComponent } from './books/remove-book.sheet';
+import { ReviewService } from './review/review.service';
 import { COPY } from './ui/copy';
 import { icon, IconName } from './ui/icons';
 import { ReconnectBannerComponent } from './sync/reconnect-banner.component';
@@ -40,6 +41,8 @@ const TABLESS_ROUTE = /^\/(welcome|read)(?:[/?#]|$)/;
 export class App {
   private readonly router = inject(Router);
   private readonly sanitizer = inject(DomSanitizer);
+  /** Items due now, shown as a badge on the Review tab. */
+  protected readonly due = inject(ReviewService).dueCount();
 
   constructor() {
     // Hover and focus labels for every icon-only button, from one place.
@@ -49,10 +52,11 @@ export class App {
   }
 
   protected readonly tabs: readonly Tab[] = [
+    { path: '/profile', label: COPY.nav.profile, icon: 'user' },
     { path: '/library', label: COPY.nav.library, icon: 'library' },
     { path: '/notes', label: COPY.nav.notes, icon: 'notes' },
+    { path: '/review', label: COPY.nav.review, icon: 'cards' },
     { path: '/stats', label: COPY.nav.stats, icon: 'stats' },
-    { path: '/profile', label: COPY.nav.profile, icon: 'user' },
   ];
 
   private readonly url = toSignal(
@@ -64,6 +68,10 @@ export class App {
   );
 
   protected readonly showTabs = computed(() => !TABLESS_ROUTE.test(this.url()));
+
+  protected dueLabel(n: number): string {
+    return `${n} due today`;
+  }
 
   /** Icon markup comes from the static ICON table in icons.ts, so it is safe to trust. */
   protected iconMarkup(name: IconName) {

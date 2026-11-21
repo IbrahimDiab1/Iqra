@@ -1,4 +1,4 @@
-import type { Annotation, Book, OutlineNode } from '../core/models';
+import type { Annotation, Book, OutlineNode, ReviewItem } from '../core/models';
 
 const MAX_NAME = 80;
 const FORBIDDEN = /[\\/:*?"<>|\u0000-\u001f\u007f]/g;
@@ -118,4 +118,32 @@ export function exportNotes(books: Book[], anns: Annotation[]): { name: string; 
   const used = new Set<string>();
   const enc = new TextEncoder();
   return chosen.map((b) => ({ name: safeFileName(b.title, used), data: enc.encode(bookMarkdown(b, anns)) }));
+}
+
+/** The language notebook as one Markdown file: a section per book, one bullet per saved word, phrase or sentence. */
+export function reviewMarkdown(books: Book[], items: ReviewItem[]): string {
+  const live = items.filter((r) => !r.deleted);
+  const sections: string[] = ['# Review'];
+  const titles = new Map(books.map((b) => [b.id, oneLine(b.title)]));
+  const ids = [...new Set(live.map((r) => r.bookId))].sort((a, b) => (titles.get(a) ?? '').localeCompare(titles.get(b) ?? '') || (a < b ? -1 : 1));
+  for (const id of ids) {
+    sections.push(`## ${titles.get(id) || 'Unknown book'}`);
+    const rows = live.filter((r) => r.bookId === id).sort((a, b) => a.page - b.page || a.createdAt - b.createdAt);
+    sections.push(
+      rows
+        .map((r) => {
+          const head = `- **${oneLine(r.text)}** — ${oneLine(r.translation)} (p. ${r.page})`;
+          const extra = [r.context ? `  ${quote(oneLine(r.context))}`.replace(/\n/g, '\n  ') : '', r.note?.trim() ? `  ${oneLine(r.note)}` : ''].filter(Boolean);
+          return [head, ...extra].join('\n');
+        })
+        .join('\n'),
+    );
+  }
+  return sections.join('\n\n') + '\n';
+}
+
+/** `Review.md` for the zip, or null when nothing is saved. */
+export function exportReview(books: Book[], items: ReviewItem[]): { name: string; data: Uint8Array } | null {
+  if (!items.some((r) => !r.deleted)) return null;
+  return { name: 'Review.md', data: new TextEncoder().encode(reviewMarkdown(books, items)) };
 }

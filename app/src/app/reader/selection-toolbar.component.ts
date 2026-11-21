@@ -1,7 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { DomSanitizer } from '@angular/platform-browser';
 import { HIGHLIGHT_COLORS, type HighlightColor } from '../annotations/annotation.service';
 import type { Rect } from '../core/models';
+import { REVIEW_COPY } from '../review/review-copy';
 import { COPY } from '../ui/copy';
+import { icon } from '../ui/icons';
 import type { PendingSelection } from './selection.service';
 
 /** A drawn rectangle waiting for a color or a note. `anchor` is where it sits in the viewport, for placing the toolbar. */
@@ -60,6 +63,7 @@ export function placeToolbar(o: { rect: DOMRect; touch: boolean; vw: number; vh:
         <button type="button" class="note" (click)="note.emit()">{{ copy.note }}</button>
         @if (!isArea()) {
           <button type="button" class="copy" (click)="copy_.emit()">{{ copy.copy }}</button>
+          <button type="button" class="tr" data-testid="translate" [attr.aria-label]="translateLabel" (click)="translate.emit()" [innerHTML]="translateIcon"></button>
         }
       </div>
     }
@@ -69,11 +73,13 @@ export function placeToolbar(o: { rect: DOMRect; touch: boolean; vw: number; vh:
       position: fixed; z-index: 23; display: flex; align-items: center; gap: 2px; height: 48px; padding: 0 4px;
       border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--fg); box-shadow: var(--shadow);
     }
-    button { min-width: 40px; min-height: 40px; border: 0; border-radius: var(--radius-control); background: none; color: inherit; font: 13px var(--ui); cursor: pointer; }
+    button { min-width: 36px; min-height: 40px; border: 0; border-radius: var(--radius-control); background: none; color: inherit; font: 13px var(--ui); cursor: pointer; }
     button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .dot { position: relative; }
+    .dot { position: relative; min-width: 36px; }
+    .tr { display: inline-grid; place-items: center; min-width: 40px; color: var(--accent); }
+    .tr:hover { background: var(--accent-soft); }
     .dot::after { content: ''; position: absolute; inset: 8px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px var(--line); }
-    .note, .copy { padding: 0 10px; }
+    .note, .copy { padding: 0 6px; min-width: 40px; }
     .note:hover, .copy:hover { background: var(--accent-soft); }
   `,
 })
@@ -81,9 +87,12 @@ export class SelectionToolbarComponent {
   readonly selection = input<PendingSelection | PendingArea | null>(null);
   readonly color = output<HighlightColor>();
   readonly note = output<void>();
+  readonly translate = output<void>();
   /** Named `copy` for the parent's template; the property is `copy_` because `copy` is the copy-strings table. */
   readonly copy_ = output<void>({ alias: 'copy' });
 
+  protected readonly translateLabel = REVIEW_COPY.translate;
+  protected readonly translateIcon = inject(DomSanitizer).bypassSecurityTrustHtml(icon('translate', 20));
   protected readonly copy = COPY.annotations;
   protected readonly colors = HIGHLIGHT_COLORS;
 

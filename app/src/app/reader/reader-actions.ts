@@ -5,6 +5,7 @@ import { findSummary } from '../annotations/summary-scope';
 import { newId } from '../core/ids';
 import type { Annotation, Book, Rect, SummaryScope } from '../core/models';
 import { ReadMarkService } from '../progress/read-mark.service';
+import { contextSentence } from '../review/review-logic';
 import { COPY } from '../ui/copy';
 import { ToastService } from '../ui/toast.service';
 import { CHROME_COPY } from './chrome-copy';
@@ -53,6 +54,8 @@ export class ReaderActions {
   readonly newSideNoteId = signal<string | null>(null);
   /** A rectangle just drawn with the area tool, waiting for a color or a note. */
   readonly pendingArea = signal<PendingArea | null>(null);
+  /** The selection the Translate sheet shows; null keeps it closed. */
+  readonly translateTarget = signal<{ text: string; page: number; context: string } | null>(null);
   readonly toolbarTarget = computed(() => this.pendingArea() ?? this.selection.pending());
 
   /**
@@ -291,6 +294,20 @@ export class ReaderActions {
     } catch (err) {
       console.warn('Could not save the note', err);
       this.toast.show(COPY.annotations.saveFailed);
+    }
+  }
+
+  /** Opens the Translate sheet for the selection; the sentence it sits in is filled in once the page text is read. */
+  async translate(): Promise<void> {
+    const sel = this.selection.pending();
+    if (!sel) return;
+    const target = { text: sel.quote, page: sel.page, context: '' };
+    this.translateTarget.set(target);
+    try {
+      const context = contextSentence(await this.ctx.pageText(sel.page), sel.quote);
+      if (context !== '' && this.translateTarget() === target) this.translateTarget.set({ ...target, context });
+    } catch {
+      // No context sentence: the item is still saved.
     }
   }
 

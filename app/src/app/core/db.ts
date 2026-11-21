@@ -10,8 +10,8 @@ import type {
   ReadMark,
   ReadingSession,
   Settings,
+  ReviewItem,
   UpNext,
-  Word,
 } from './models';
 
 /** A PDF kept on this device only. Never synced. */
@@ -35,6 +35,13 @@ export interface SyncState {
   remoteModified?: string;
   dirty: boolean;
   error?: string;
+}
+
+/** A cached translation, keyed by direction and text. Local only. */
+export interface TranslationCacheEntry {
+  key: string;
+  translation: string;
+  at: number;
 }
 
 /** An upload that has not finished yet. */
@@ -62,12 +69,13 @@ export class IqraDb extends Dexie {
   declare positions: Table<Position, ID>;
   declare readMarks: Table<ReadMark, ID>;
   declare sessions: Table<ReadingSession, ID>;
-  declare words: Table<Word, ID>;
+  declare review: Table<ReviewItem, ID>;
   declare pdfFiles: Table<PdfFile, ID>;
   declare covers: Table<CoverFile, ID>;
   declare syncState: Table<SyncState, string>;
   declare pendingUploads: Table<PendingUpload, ID>;
   declare pendingDriveDeletes: Table<PendingDriveDelete, string>;
+  declare translationCache: Table<TranslationCacheEntry, string>;
 
   constructor(name = 'iqra') {
     super(name);
@@ -87,6 +95,12 @@ export class IqraDb extends Dexie {
       syncState: 'shard',
       pendingUploads: 'id, bookId',
       pendingDriveDeletes: 'fileId',
+    });
+    // The language notebook replaces the unused `words` store; translations are cached locally.
+    this.version(2).stores({
+      words: null,
+      review: 'id, bookId, updatedAt',
+      translationCache: 'key',
     });
   }
 }

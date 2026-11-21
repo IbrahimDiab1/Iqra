@@ -45,6 +45,7 @@ import type { HighlightColor } from '../annotations/annotation.service';
 import { PositionService } from './position.service';
 import { ReaderState } from './reader.state';
 import { SessionService, type ReaderSessionHandle } from './session.service';
+import { TranslateSheet } from '../review/translate.sheet';
 import { ReadingSettingsSheetComponent } from './reading-settings.sheet';
 import { ReaderHeaderComponent } from './reader-header.component';
 import { ReaderToolbarComponent, type ToolbarAction } from './reader-toolbar.component';
@@ -73,7 +74,7 @@ const FINISH_TOAST_MS = 8000;
 
 @Component({
   selector: 'iqra-reader-page',
-  imports: [BackLinkDirective, ContextMenuComponent, ReaderHeaderComponent, ReaderToolbarComponent, ShortcutHelpComponent, BookPanelDrawerComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective, SelectionToolbarComponent, NoteSheetComponent, TextEditorSheet],
+  imports: [BackLinkDirective, ContextMenuComponent, ReaderHeaderComponent, ReaderToolbarComponent, ShortcutHelpComponent, BookPanelDrawerComponent, ReadingSettingsSheetComponent, PagerComponent, ScrollerComponent, ReflowViewComponent, ZoomGesturesDirective, SelectionToolbarComponent, NoteSheetComponent, TextEditorSheet, TranslateSheet],
   providers: [SelectionService, UndoStack, ReaderActions],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -200,6 +201,7 @@ const FINISH_TOAST_MS = 8000;
               (color)="actions.highlight($event)"
               (note)="actions.addNote()"
               (copy)="actions.copySelection()"
+              (translate)="actions.translate()"
             />
 
             <iqra-book-panel-drawer
@@ -235,6 +237,7 @@ const FINISH_TOAST_MS = 8000;
               [tagSuggestions]="tagSuggestions()"
               (closed)="actions.closeText($event.empty)"
             />
+            <iqra-translate-sheet [target]="actions.translateTarget()" [bookId]="b.id" (closed)="actions.translateTarget.set(null)" />
             <iqra-note-sheet
               [annotation]="actions.noteTarget()"
               [isNew]="actions.noteTarget()?.id === actions.newNoteId()"
@@ -633,6 +636,7 @@ export class ReaderPage implements OnDestroy {
     switch (id) {
       case 'note': void this.actions.addNote(); break;
       case 'copySelection': void this.actions.copySelection(); break;
+      case 'translate': void this.actions.translate(); break;
       case 'sideNote': void this.actions.addSideNote(); break;
       case 'bookmark': void this.actions.toggleBookmark(); break;
       case 'mark': void this.markPage(); break;

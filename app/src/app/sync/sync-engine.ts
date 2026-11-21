@@ -26,10 +26,10 @@ const TABLES: TableName[] = [
   'positions',
   'readMarks',
   'sessions',
-  'words',
+  'review',
 ];
 /** Drive files in appDataFolder that are sync shards. Covers and anything else are ignored. */
-const SHARD_NAME = /^(library|words|book-.+|sessions-\d{4}-\d{2})\.json$/;
+const SHARD_NAME = /^(library|review|book-.+|sessions-\d{4}-\d{2})\.json$/;
 /** A deleted book's local files are removed once its tombstone is this old. */
 const LOCAL_SWEEP_MS = 15_000;
 const DEBOUNCE_MS = 5000;

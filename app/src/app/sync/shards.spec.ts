@@ -6,4 +6,8 @@ describe('shardFor', () => {
       'sessions-2026-11.json',
     );
   });
+
+  it('keeps the language notebook in review.json', () => {
+    expect(shardFor('review', { id: 'r' } as never)).toBe('review.json');
+  });
 });

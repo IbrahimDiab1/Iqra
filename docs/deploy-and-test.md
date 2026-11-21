@@ -175,3 +175,10 @@ Real-device checks for the reader and library overhaul. Use an Android phone (Ch
 - U6 Welcome page no longer says "Iqra means read in Arabic".
 - U7 New books and new accounts open paged (swipe, arrow keys). Books and settings that already store scroll stay scroll.
 - U8 Reader on a phone: long-press selects text natively and shows the system menu, never the Iqra page menu. Right-click with a mouse and Shift+F10 still open it.
+
+## Plan 8 checks (V: Review tab)
+
+- **Bottom bar order (V1):** Profile, Library, Notes, Review, Stats. Review opens `/review` and shows a number badge with the items due today; the badge is gone when none are due.
+- **Translate in the reader (V2):** select a word in an English book: the selection bar has a Translate icon button (and the right-click menu a Translate item). The sheet shows the text, the Arabic translation, for a single English word a definition and phonetic, a Listen button and Save to Review. Select Arabic text: it translates to English. In Chrome with the built-in Translator it works offline after the model downloads; otherwise it needs a connection (MyMemory). Offline with a word you never looked up shows "You're offline…" with Try again; a word you looked up before still translates offline. On a 320 px phone the selection bar stays inside the screen.
+- **Saved items and sync (V3):** Save to Review twice on the same word from the same book keeps one item. On a second device the item appears after sync (Drive shard `review.json`); Profile → Your data → Back up includes saved words and the notes export adds `Review.md`.
+- **Review page (V4):** search, Words / Phrases / Sentences chips and a book filter; Edit (text, translation, note), Delete with Undo, Open in book opens the book at the saved page. Practice: pick English to Arabic, Arabic to English or Mixed, press Space (or "Show answer") to flip, then 1 Again, 2 Hard, 3 Good, 4 Easy (or the buttons). Again brings the card back later in the same session; Good moves it to tomorrow. The Listen buttons read each side aloud when the phone has an English or Arabic voice. The empty page explains how to save a first word.
