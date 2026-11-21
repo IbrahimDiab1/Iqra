@@ -3,6 +3,7 @@ import Dexie from 'dexie';
 import type { Subscription } from 'rxjs';
 import { AuthApi } from '../auth/auth.service';
 import { CLOCK } from '../core/clock';
+import { withTimeout } from '../core/timeout';
 import { DB, SyncState } from '../core/db';
 import type { Annotation, Book, ID, Position, ReadMark, ReadingSession, SyncRecord, TableName } from '../core/models';
 import { Repo } from '../core/repo';
@@ -34,7 +35,9 @@ const SHARD_NAME = /^(library|review|book-.+|sessions-\d{4}-\d{2})\.json$/;
 const LOCAL_SWEEP_MS = 15_000;
 const DEBOUNCE_MS = 5000;
 /** A run still going after this long is abandoned, so a stalled call cannot block later syncs. */
-const RUN_TIMEOUT_MS = 5 * 60_000;
+const RUN_TIMEOUT_MS = 2 * 60_000;
+/** How long resume() waits for a silent token renewal before syncing with whatever token there is (none: it pauses). */
+const SILENT_WAIT_MS = 20_000;
 
 interface PullResult {
   errors: string[];
@@ -124,7 +127,10 @@ export class SyncEngine implements OnDestroy {
    * expired only inside token(), so the expiry check must run here, not read state() alone.
    */
   async resume(): Promise<void> {
-    if (this.auth.state() !== 'signed-out' && this.auth.token() === null) await this.auth.trySilent();
+    if (this.auth.state() !== 'signed-out' && this.auth.token() === null) {
+      // A renewal that GIS never answers must not hold every caller: the poll re-arms only after resume() ends.
+      await withTimeout(this.auth.trySilent(), SILENT_WAIT_MS).catch(() => false);
+    }
     await this.syncNow();
   }
 

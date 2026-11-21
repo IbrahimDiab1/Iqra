@@ -1,11 +1,25 @@
-import { Injectable, Signal, inject } from '@angular/core';
+import { Injectable, Signal, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Observable, Subject, from } from 'rxjs';
+import { BehaviorSubject, EMPTY, Observable, Subject, from, timer } from 'rxjs';
+import { catchError, switchMap, tap } from 'rxjs/operators';
 import { liveQuery, type Table } from 'dexie';
 import { CLOCK } from './clock';
 import { DB } from './db';
 import { DEVICE_ID } from './ids';
 import type { ID, SyncMeta, SyncRecord, TableName } from './models';
+
+/** A live query that reports failure instead of throwing when read. */
+export interface LiveResult<T> {
+  /** Undefined until the first result, and while the query fails. */
+  value: Signal<T | undefined>;
+  /** The last failure, or null while the query works. */
+  error: Signal<unknown>;
+  /** Runs the query again (a new subscription). */
+  retry(): void;
+}
+
+/** A failed `live` query is retried after these delays, then given up on (the screen shows its own retry). */
+export const LIVE_RETRY_MS: number[] = [1000, 3000, 8000];
 
 export interface RepoChange {
   table: TableName;
@@ -81,7 +95,37 @@ export class Repo {
    * the subscription ends when that context is destroyed.
    */
   live<T>(query: () => Promise<T>): Signal<T | undefined> {
-    return toSignal(from(liveQuery(query)));
+    return this.liveResult(query, true).value;
+  }
+
+  /**
+   * Like `live`, but a failing query (IndexedDB refusing to open, a closed database) never throws from the signal: `value`
+   * stays undefined and `error` holds the failure, so a screen can show an error state and `retry()`.
+   * With `autoRetry` the query is also retried by itself after 1, 3 and 8 s.
+   */
+  liveResult<T>(query: () => Promise<T>, autoRetry = false): LiveResult<T> {
+    const error = signal<unknown>(null);
+    const attempt = new BehaviorSubject(0);
+    let failures = 0;
+    const value = toSignal(
+      attempt.pipe(
+        switchMap(() =>
+          from(liveQuery(async () => query())).pipe(
+            tap(() => {
+              failures = 0;
+              error.set(null);
+            }),
+            catchError((e: unknown) => {
+              error.set(e);
+              const delay = LIVE_RETRY_MS[failures++];
+              if (autoRetry && delay !== undefined) timer(delay).subscribe(() => attempt.next(attempt.value + 1));
+              return EMPTY;
+            }),
+          ),
+        ),
+      ),
+    );
+    return { value, error: error.asReadonly(), retry: () => attempt.next(attempt.value + 1) };
   }
 
   private table(name: TableName): Table<SyncMeta, ID> {

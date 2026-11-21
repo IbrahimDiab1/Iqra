@@ -1,6 +1,12 @@
 /** Strings for the Stats tab and goals. Lives with the stats screens so the eager copy.ts stays small. */
 export const STATS_COPY = {
   notYet: 'Not yet',
+  loading: 'Loading your reading…',
+  loadFailed: 'Your reading history could not be loaded.',
+  loadFailedHint: 'This can happen after an update or when storage on this device is busy. Try again, or reload the app.',
+  loadBlockedHint: 'Another Iqra tab or window may be holding the data. Close it, then try again.',
+  retry: 'Try again',
+  reloadApp: 'Reload app',
   noGoals: 'Set a goal to see your progress here.',
   noReading: 'Nothing read this week yet.',
   categoryGone: 'All books (category removed)',

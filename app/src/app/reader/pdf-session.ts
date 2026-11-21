@@ -47,6 +47,11 @@ export function setPdfjsLoaderForTests(fn: (() => Promise<PdfjsModule>) | undefi
 }
 
 const TEXT_CACHE_PAGES = 200;
+/** Pages whose extracted text items stay in memory: the pages around the reader plus the ones being searched. */
+const ITEMS_CACHE_PAGES = 32;
+/** After this many page renders, and again once the reader has been idle this long, pdf.js is told to drop what it caches. */
+const CLEANUP_EVERY_RENDERS = 8;
+const CLEANUP_IDLE_MS = 2500;
 
 type CanvasFactory = () => HTMLCanvasElement;
 let makeCanvas: CanvasFactory = () => document.createElement('canvas');
@@ -77,7 +82,14 @@ function abortError(): Error {
 export class PdfSession implements PageRenderer {
   private readonly sizes = new Map<number, Promise<PageSize>>();
   private readonly texts = new Map<number, string>();
+  /** Per page: items in pdf.js order and in reading order, computed once (selection and highlights ask on every change). */
+  private readonly raws = new Map<number, Promise<TextItem[]>>();
+  private readonly ordered = new Map<number, Promise<TextItem[]>>();
   private destroyed = false;
+  private active = 0;
+  private rendersSinceCleanup = 0;
+  private cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+  private cleaning: Promise<void> | undefined;
 
   private constructor(
     private readonly doc: PDFDocumentProxy,
@@ -124,13 +136,53 @@ export class PdfSession implements PageRenderer {
 
   async renderPage(page: number, canvas: HTMLCanvasElement, cssWidthPx: number, signal: AbortSignal): Promise<void> {
     if (signal.aborted) throw abortError();
-    const p = await this.doc.getPage(page);
+    this.active++;
     try {
-      await this.drawPage(p, canvas, cssWidthPx, signal);
+      await this.cleaning;
+      const p = await this.doc.getPage(page);
+      try {
+        await this.drawPage(p, canvas, cssWidthPx, signal);
+      } finally {
+        // Releases the page's operator list and decoded images; a no-op while another render of it is running.
+        p.cleanup();
+      }
     } finally {
-      // Releases the page's operator list and decoded images; a no-op while another render of it is running.
-      p.cleanup();
+      this.active--;
+      this.rendersSinceCleanup++;
+      this.noteIdle();
     }
+  }
+
+  /**
+   * page.cleanup() keeps what the document shares between pages: decoded fonts (a FontFace in this document and a parsed
+   * font in the worker, one per page for books that embed a subset per page), glyph caches and filters. They grow with
+   * every page read, so release them in a run of renders and when reading pauses. Never while a render is running.
+   */
+  private noteIdle(): void {
+    clearTimeout(this.cleanupTimer);
+    this.cleanupTimer = undefined;
+    if (this.destroyed || this.active > 0 || this.rendersSinceCleanup === 0) return;
+    if (this.rendersSinceCleanup >= CLEANUP_EVERY_RENDERS) {
+      this.cleanDocument();
+    } else {
+      this.cleanupTimer = setTimeout(() => this.noteIdle2(), CLEANUP_IDLE_MS);
+    }
+  }
+
+  private noteIdle2(): void {
+    this.cleanupTimer = undefined;
+    if (!this.destroyed && this.active === 0 && this.rendersSinceCleanup > 0) this.cleanDocument();
+  }
+
+  private cleanDocument(): void {
+    this.rendersSinceCleanup = 0;
+    const done = Promise.resolve()
+      .then(() => this.doc.cleanup(false))
+      .catch(() => undefined) // a render started meanwhile: pdf.js refuses; the next run tries again
+      .then(() => {
+        if (this.cleaning === done) this.cleaning = undefined;
+      });
+    this.cleaning = done;
   }
 
   private async drawPage(
@@ -182,6 +234,23 @@ export class PdfSession implements PageRenderer {
   async renderTextLayer(page: number, container: HTMLElement, cssWidthPx: number, signal: AbortSignal): Promise<void> {
     if (signal.aborted) throw abortError();
     const { TextLayer } = await loader();
+    this.active++;
+    try {
+      await this.cleaning;
+      await this.layText(TextLayer, page, container, cssWidthPx, signal);
+    } finally {
+      this.active--;
+      this.noteIdle();
+    }
+  }
+
+  private async layText(
+    TextLayer: PdfjsModule['TextLayer'],
+    page: number,
+    container: HTMLElement,
+    cssWidthPx: number,
+    signal: AbortSignal,
+  ): Promise<void> {
     const p = await this.doc.getPage(page);
     try {
       const base = p.getViewport({ scale: 1 });
@@ -212,12 +281,35 @@ export class PdfSession implements PageRenderer {
   }
 
   /** The page's text items in reading order: a right-to-left line the PDF draws left to right is reversed. */
-  async textItems(page: number): Promise<TextItem[]> {
-    return toReadingOrder(await this.rawTextItems(page)).items;
+  textItems(page: number): Promise<TextItem[]> {
+    let items = this.ordered.get(page);
+    if (!items) {
+      items = this.rawTextItems(page).then((raw) => toReadingOrder(raw).items);
+      items.catch(() => this.ordered.delete(page));
+      this.ordered.set(page, items);
+      this.trim(this.ordered);
+    }
+    return items;
   }
 
   /** The items in the order pdf.js produced them (the order its text-layer spans are in). */
-  private async rawTextItems(page: number): Promise<TextItem[]> {
+  private rawTextItems(page: number): Promise<TextItem[]> {
+    let raw = this.raws.get(page);
+    if (!raw) {
+      raw = this.extractItems(page);
+      raw.catch(() => this.raws.delete(page));
+      this.raws.set(page, raw);
+      this.trim(this.raws);
+    }
+    return raw;
+  }
+
+  /** Keeps the most recently asked-for pages: the oldest entry goes when there are too many. */
+  private trim(cache: Map<number, Promise<TextItem[]>>): void {
+    while (cache.size > ITEMS_CACHE_PAGES) cache.delete(cache.keys().next().value as number);
+  }
+
+  private async extractItems(page: number): Promise<TextItem[]> {
     const p = await this.doc.getPage(page);
     let content;
     try {
@@ -241,6 +333,10 @@ export class PdfSession implements PageRenderer {
 
   destroy(): void {
     this.destroyed = true;
+    clearTimeout(this.cleanupTimer);
+    this.raws.clear();
+    this.ordered.clear();
+    this.texts.clear();
     // pdf.js exposes teardown on the loading task: it also stops the worker's network requests.
     void this.task.destroy();
   }

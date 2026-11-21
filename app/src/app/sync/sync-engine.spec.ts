@@ -474,6 +474,32 @@ describe('SyncEngine', () => {
     expect(a.engine.status()).toBe('synced');
   });
 
+  it('abandons a stalled run after two minutes, long before a phone would give up on the tab', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    vi.spyOn(drive, 'listAppData').mockReturnValueOnce(new Promise(() => {}));
+
+    const stalled = a.engine.syncNow();
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    await stalled;
+
+    expect(a.engine.lastError()).toBe('Sync timed out');
+    await a.engine.syncNow();
+    expect(a.engine.status()).toBe('synced');
+  });
+
+  it('resume() does not wait forever for a silent token renewal that never answers', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    await a.auth.signIn();
+    vi.spyOn(a.auth, 'trySilent').mockReturnValue(new Promise(() => {}));
+    vi.spyOn(a.auth, 'token').mockReturnValueOnce(null);
+
+    const resumed = a.engine.resume();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await resumed;
+
+    expect(a.engine.status()).toBe('synced');
+  });
+
   it('stays saving and syncs again when a change lands during a run', async () => {
     await a.repo.put<Book>('books', bookDraft('b1'));
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });

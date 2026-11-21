@@ -230,4 +230,21 @@ describe('UploadQueue', () => {
     expect((await pendingFor(book.id)).some((u) => u.kind === 'pdf')).toBe(true);
     expect(auth.state()).toBe('signed-in');
   });
+
+  it('releases its lock when an upload stalls, so the next run is not stuck behind it', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const book = await importBook();
+      await auth.signIn();
+      vi.spyOn(drive, 'uploadPdf').mockReturnValueOnce(new Promise(() => {}));
+      const stalled = queue.run();
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      await stalled;
+
+      await queue.run();
+      expect((await pendingFor(book.id)).some((u) => u.kind === 'pdf')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -63,6 +63,7 @@ const PROFILE_KEY = 'iqra.profile';
 export const EXPIRY_MARGIN_MS = 60_000;
 /** A silent token request that GIS has not answered by now counts as failed. */
 export const SILENT_TIMEOUT_MS = 10_000;
+const PROFILE_TIMEOUT_MS = 15_000;
 /** A fresh token is requested this long before the current one reads as expired. */
 export const RENEW_LEAD_MS = 5 * 60_000;
 /** After a failed renewal, the next try comes this much later (while the token is still good). */
@@ -399,7 +400,15 @@ export class GisAuthService extends AuthApi implements OnDestroy {
   }
 
   private async fetchProfile(token: string): Promise<Profile> {
-    const res = await fetch(USERINFO_URL, { headers: { Authorization: `Bearer ${token}` } });
+    // Bounded: a silent renewal waits on this check, and a request a phone dropped never settles by itself.
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), PROFILE_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(USERINFO_URL, { headers: { Authorization: `Bearer ${token}` }, signal: abort.signal });
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) throw new Error(`Profile request failed: ${res.status}`);
     const json = (await res.json()) as { name?: string; email?: string; picture?: string };
     return { name: json.name ?? '', email: json.email ?? '', picture: json.picture };

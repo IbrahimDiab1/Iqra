@@ -4,8 +4,12 @@ import { CLOCK } from '../core/clock';
 import { DB, type PendingUpload } from '../core/db';
 import type { Book, ID } from '../core/models';
 import { Repo } from '../core/repo';
+import { TimeoutError, withTimeout } from '../core/timeout';
 import { ToastService } from '../ui/toast.service';
 import { DRIVE_ADAPTER, DriveAuthError, DriveQuotaError } from '../sync/drive-adapter';
+
+/** One run of the queue is abandoned after this long (a large PDF on a slow link still fits). */
+const RUN_TIMEOUT_MS = 10 * 60_000;
 
 /**
  * Sends local PDFs and covers to Drive. Each entry in db.pendingUploads stays until its upload
@@ -41,9 +45,16 @@ export class UploadQueue {
       this.rerun = true;
       return this.inFlight;
     }
-    this.inFlight = this.drainWhileRequested().finally(() => {
-      this.inFlight = null;
-    });
+    // A stalled upload (a connection a phone dropped without telling the page) must not hold the lock for good.
+    this.inFlight = withTimeout(this.drainWhileRequested(), RUN_TIMEOUT_MS)
+      .catch((error: unknown) => {
+        if (!(error instanceof TimeoutError)) throw error;
+        this.rerun = false;
+        console.error('Upload run timed out');
+      })
+      .finally(() => {
+        this.inFlight = null;
+      });
     return this.inFlight;
   }
 
