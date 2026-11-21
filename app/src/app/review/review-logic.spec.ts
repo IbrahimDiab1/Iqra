@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ReviewItem } from '../core/models';
-import { contextSentence, detectLang, frontBack, grade, kindFor, newSrs, normalizeSelection } from './review-logic';
+import { contextSentence, daysUntilDue, detectLang, filterItems, frontBack, grade, kindFor, newSrs, normalizeSelection } from './review-logic';
 
 const DAY = 86_400_000;
 
@@ -87,5 +87,26 @@ describe('frontBack', () => {
     expect(frontBack(item('en'), 'ar-en')).toEqual({ front: 'tr', back: 'src', frontLang: 'ar', backLang: 'en' });
     expect(frontBack(item('ar'), 'en-ar')).toEqual({ front: 'tr', back: 'src', frontLang: 'en', backLang: 'ar' });
     expect(frontBack(item('ar'), 'ar-en')).toEqual({ front: 'src', back: 'tr', frontLang: 'ar', backLang: 'en' });
+  });
+});
+
+describe('filterItems', () => {
+  const mk = (id: string, o: Partial<ReviewItem>): ReviewItem => ({ id, text: id, translation: '', context: '', kind: 'word', bookId: 'b1', ...o }) as ReviewItem;
+  const items = [mk('apple', { translation: 'تفاحة' }), mk('break the ice', { kind: 'phrase', bookId: 'b2', note: 'idiom' }), mk('x', { context: 'An Apple a day.' })];
+  it('filters by text, translation, context and note, ignoring case', () => {
+    expect(filterItems(items, { query: 'APPLE', kind: 'all', bookId: null }).map((r) => r.id)).toEqual(['apple', 'x']);
+    expect(filterItems(items, { query: 'تفاحة', kind: 'all', bookId: null }).map((r) => r.id)).toEqual(['apple']);
+    expect(filterItems(items, { query: 'idiom', kind: 'all', bookId: null }).map((r) => r.id)).toEqual(['break the ice']);
+  });
+  it('filters by kind and book', () => {
+    expect(filterItems(items, { query: '', kind: 'phrase', bookId: null }).map((r) => r.id)).toEqual(['break the ice']);
+    expect(filterItems(items, { query: '', kind: 'all', bookId: 'b1' })).toHaveLength(2);
+  });
+});
+
+describe('daysUntilDue', () => {
+  it('is 0 when due and rounds up otherwise', () => {
+    expect(daysUntilDue({ srs: { due: 5 } } as ReviewItem, 10)).toBe(0);
+    expect(daysUntilDue({ srs: { due: 10 + DAY + 1 } } as ReviewItem, 10)).toBe(2);
   });
 });

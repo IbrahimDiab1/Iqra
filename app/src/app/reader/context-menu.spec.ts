@@ -13,10 +13,10 @@ describe('contextMenuModel', () => {
     expect(m.items.find((i) => i.id === 'goto')!.label).toBe('Go to page…');
   });
 
-  it('with a selection it adds the colour dots, Note and Copy before the page actions', () => {
+  it('with a selection it adds the colour dots, Note, Copy and Translate before the page actions', () => {
     const m = contextMenuModel({ ...base, hasSelection: true });
     expect(m.colors).toBe(true);
-    expect(m.items.map((i) => i.id)).toEqual(['note', 'copySelection', 'sideNote', 'bookmark', 'mark', 'area', 'summary', 'goto', 'copyPage']);
+    expect(m.items.map((i) => i.id)).toEqual(['note', 'copySelection', 'translate', 'sideNote', 'bookmark', 'mark', 'area', 'summary', 'goto', 'copyPage']);
     expect(m.items.find((i) => i.id === 'note')!.group).toBe(0);
     expect(m.items.find((i) => i.id === 'sideNote')!.group).toBe(1);
   });

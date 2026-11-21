@@ -10,6 +10,9 @@
       <a class="tab" [routerLink]="tab.path" routerLinkActive="active" ariaCurrentWhenActive="page">
         <span class="tab-icon" [innerHTML]="iconMarkup(tab.icon)"></span>
         <span>{{ tab.label }}</span>
+        @if (tab.path === '/review' && due() > 0) {
+          <span class="badge" data-testid="due-badge" [attr.aria-label]="dueLabel(due())">{{ due() > 99 ? '99+' : due() }}</span>
+        }
       </a>
     }
   </nav>

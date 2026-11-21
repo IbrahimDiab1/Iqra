@@ -21,6 +21,7 @@ const SELECTION: PendingSelection = {
     (color)="colors.push($event)"
     (note)="notes = notes + 1"
     (copy)="copies = copies + 1"
+    (translate)="translations = translations + 1"
   />`,
 })
 class HostComponent {
@@ -28,6 +29,7 @@ class HostComponent {
   colors: HighlightColor[] = [];
   notes = 0;
   copies = 0;
+  translations = 0;
 }
 
 describe('SelectionToolbarComponent', () => {
@@ -57,6 +59,14 @@ describe('SelectionToolbarComponent', () => {
     el.querySelector<HTMLButtonElement>('button.note')!.click();
     expect(host.copies).toBe(1);
     expect(host.notes).toBe(1);
+  });
+
+  it('has a labelled Translate button that emits translate', () => {
+    const { host, el } = setup();
+    const btn = el.querySelector<HTMLButtonElement>('button[data-testid="translate"]')!;
+    expect(btn.getAttribute('aria-label')).toBe('Translate');
+    btn.click();
+    expect(host.translations).toBe(1);
   });
 
   it('renders nothing without a selection', () => {

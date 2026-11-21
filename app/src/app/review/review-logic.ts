@@ -90,3 +90,25 @@ export function frontBack(item: Pick<ReviewItem, 'text' | 'translation' | 'sourc
   const ar = item.sourceLang === 'ar' ? item.text : item.translation;
   return direction === 'en-ar' ? { front: en, back: ar, frontLang: 'en', backLang: 'ar' } : { front: ar, back: en, frontLang: 'ar', backLang: 'en' };
 }
+
+export interface ReviewFilter {
+  query: string;
+  kind: ReviewKind | 'all';
+  bookId: string | null;
+}
+
+/** Items matching the search text (in the text, translation, context or note), the kind and the book. */
+export function filterItems(items: ReviewItem[], f: ReviewFilter): ReviewItem[] {
+  const q = normalizeSelection(f.query).toLowerCase();
+  return items.filter(
+    (r) =>
+      (f.kind === 'all' || r.kind === f.kind) &&
+      (f.bookId === null || r.bookId === f.bookId) &&
+      (q === '' || [r.text, r.translation, r.context, r.note ?? ''].some((v) => v.toLowerCase().includes(q))),
+  );
+}
+
+/** Whole days from `now` until the item is due; 0 or less when due. */
+export function daysUntilDue(r: Pick<ReviewItem, 'srs'>, now: number): number {
+  return r.srs.due <= now ? 0 : Math.ceil((r.srs.due - now) / DAY_MS);
+}

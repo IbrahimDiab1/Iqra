@@ -19,6 +19,8 @@ const ICON = {
   library: '<path d="M5 4h3v16H5zM10.5 4h3v16h-3zM16 5.2l2.9-.8 3.6 15-2.9.8z"/>',
   notes: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
   words: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 10h8"/>',
+  cards: '<rect x="3.5" y="7" width="13" height="13" rx="2"/><path d="M7.5 7V5.5a2 2 0 0 1 2-2H18a2 2 0 0 1 2 2V14a2 2 0 0 1-2 2h-1.5"/><path d="M7 12.5h6"/>',
+  speaker: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
   stats: '<path d="M5 20V11M12 20V4M19 20v-6"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   // "Aa": a large A and a small a, for the reading settings.

@@ -1,7 +1,8 @@
 import { COPY } from '../ui/copy';
+import { REVIEW_COPY } from '../review/review-copy';
 import { CHROME_COPY } from './chrome-copy';
 
-export type ContextActionId = 'note' | 'copySelection' | 'sideNote' | 'bookmark' | 'mark' | 'area' | 'summary' | 'goto' | 'copyPage';
+export type ContextActionId = 'note' | 'copySelection' | 'translate' | 'sideNote' | 'bookmark' | 'mark' | 'area' | 'summary' | 'goto' | 'copyPage';
 
 /** Everything the menu's contents depend on. */
 export interface ContextSituation {
@@ -35,7 +36,7 @@ export function contextMenuModel(s: ContextSituation): ContextMenuModel {
   const a = COPY.annotations;
   const items: ContextMenuItem[] = [];
   if (s.hasSelection) {
-    items.push({ id: 'note', label: a.note, group: 0 }, { id: 'copySelection', label: a.copy, group: 0 });
+    items.push({ id: 'note', label: a.note, group: 0 }, { id: 'copySelection', label: a.copy, group: 0 }, { id: 'translate', label: REVIEW_COPY.translate, group: 0 });
   }
   items.push(
     { id: 'sideNote', label: CHROME_COPY.addSideNoteOn(s.page), group: 1 },

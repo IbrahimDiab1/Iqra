@@ -19,6 +19,7 @@
 }
 
 .tab {
+  position: relative;
   flex: 1;
   min-width: 40px;
   min-height: 40px;
@@ -36,4 +37,21 @@
 
 .tab.active {
   color: var(--accent);
+}
+
+.badge {
+  position: absolute;
+  top: 2px;
+  inset-inline-start: calc(50% + 6px);
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }

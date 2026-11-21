@@ -12,6 +12,7 @@ import { COPY } from '../ui/copy';
 import { ReadMarkService } from '../progress/read-mark.service';
 import { PROGRESS_COPY } from './progress-copy';
 import { CHROME_COPY } from './chrome-copy';
+import { TRANSLATION_PROVIDERS } from '../review/translation';
 import { ToastService } from '../ui/toast.service';
 import { signal } from '@angular/core';
 import type { PendingSelection } from './selection.service';
@@ -687,6 +688,19 @@ describe('ReaderPage', () => {
       copy();
       await vi.waitFor(() => expect(toast.current()?.message).toBe(COPY.annotations.copied));
       expect(write).toHaveBeenLastCalledWith('Hello');
+    });
+
+    it('Translate opens the sheet with the selected text and the sentence it sits in', async () => {
+      TestBed.overrideProvider(TRANSLATION_PROVIDERS, { useValue: [] });
+      await create();
+      session.pageText = async () => 'Before it. Hello there, friend. After it.';
+      fixture.detectChanges();
+      el.querySelector<HTMLButtonElement>('iqra-selection-toolbar button[data-testid="translate"]')!.click();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(el.querySelector('iqra-translate-sheet .panel.open')).not.toBeNull();
+        expect(el.querySelector('iqra-translate-sheet [data-testid="source"]')?.textContent).toBe('Hello');
+      });
     });
 
     it('with no selection (a page without text) no toolbar is shown', async () => {
