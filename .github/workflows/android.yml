@@ -74,12 +74,12 @@ jobs:
       - name: Build the signed release APK
         if: steps.signing.outputs.mode == 'release'
         working-directory: app/android
-        run: ./gradlew --no-daemon assembleRelease
+        run: ./gradlew --no-daemon --stacktrace assembleRelease
 
       - name: Build a debug APK (no signing secrets)
         if: steps.signing.outputs.mode == 'debug'
         working-directory: app/android
-        run: ./gradlew --no-daemon assembleDebug
+        run: ./gradlew --no-daemon --stacktrace assembleDebug
 
       - name: Name the APK
         id: apk
