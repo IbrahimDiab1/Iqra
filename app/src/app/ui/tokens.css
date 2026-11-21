@@ -1,5 +1,6 @@
 /* Design tokens. Values copied from folio-prototype.html (:root and both dark blocks). */
 :root {
+  color-scheme: light;
   --ui: "Instrument Sans", "IBM Plex Sans Arabic", system-ui, sans-serif;
   --book: "Literata Variable", "IBM Plex Sans Arabic", Georgia, serif;
   --display-ar: "Aref Ruqaa", "Amiri", "Noto Naskh Arabic", "Segoe UI", Tahoma, serif;

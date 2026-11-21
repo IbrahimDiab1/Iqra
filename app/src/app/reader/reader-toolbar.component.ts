@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, OnDestroy, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import type { Book } from '../core/models';
+import { isNativeApp } from '../core/platform';
 import { COPY } from '../ui/copy';
 import { icon, type IconName } from '../ui/icons';
 import { CHROME_COPY } from './chrome-copy';
@@ -37,6 +38,7 @@ interface Item {
  */
 @Component({
   selector: 'iqra-reader-toolbar',
+  host: { '[class.native-app]': 'nativeApp' },
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div
@@ -88,6 +90,10 @@ interface Item {
       transition: transform 200ms cubic-bezier(.2, .8, .2, 1), opacity 200ms;
     }
     .tools::-webkit-scrollbar { display: none; }
+    :host(.native-app) .tb[data-tool="fullscreen"] { display: none; }
+    @media (max-width: 600px), (hover: none) and (pointer: coarse) {
+      .tb[data-tool="fullscreen"] { display: none; }
+    }
     /* Hidden, it slides off the bottom edge but stays in the tab order: focusing a button shows it again. */
     .tools.away { transform: translateY(calc(100% + 24px)); opacity: 0; pointer-events: none; }
     @media (prefers-reduced-motion: reduce) { .tools { transition: none; } }
@@ -118,6 +124,7 @@ export class ReaderToolbarComponent implements OnDestroy {
   readonly action = output<ToolbarAction>();
 
   protected readonly chrome = CHROME_COPY;
+  protected readonly nativeApp = isNativeApp();
   protected readonly shown = signal(true);
   private readonly focusInside = signal(false);
   private mouseNear = false;

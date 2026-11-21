@@ -26,6 +26,44 @@ test('/settings still opens the Profile page', async ({ page }) => {
   await expect(page.getByTestId('profile-name')).toBeVisible();
 });
 
+test('Appearance persists an explicit theme and System follows the device', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/settings');
+  const theme = page.getByRole('combobox', { name: 'Theme', exact: true });
+  const root = page.locator('html');
+  await expect(theme).toHaveValue('system');
+  await expect(root).toHaveCSS('color-scheme', 'dark');
+
+  await theme.selectOption('light');
+  await expect(root).toHaveCSS('color-scheme', 'light');
+  await page.reload();
+  await expect(theme).toHaveValue('light');
+  await expect(root).toHaveCSS('color-scheme', 'light');
+
+  await page.emulateMedia({ colorScheme: 'light' });
+  await theme.selectOption('dark');
+  await expect(root).toHaveCSS('color-scheme', 'dark');
+  await theme.selectOption('system');
+  await expect(root).toHaveAttribute('data-theme', 'system');
+  await expect(root).toHaveCSS('color-scheme', 'light');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(root).toHaveCSS('color-scheme', 'dark');
+});
+
+test('the full-screen button is hidden on a phone and shown at desktop width', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/library');
+  await addSample(page);
+  await bookCard(page).click();
+  const tools = page.locator('iqra-reader-toolbar');
+  await expect(tools.locator('[data-tool="settings"]')).toBeVisible();
+  const fullscreen = tools.locator('[data-tool="fullscreen"]');
+  await expect(fullscreen).toBeHidden();
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(fullscreen).toBeVisible();
+});
+
 /* ---- storage, downloads, your data, reminders ---- */
 
 const SAMPLE = join(__dirname, 'fixtures', 'sample.pdf');

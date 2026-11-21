@@ -10,6 +10,7 @@ Iqra (اقرأ) is a personal PDF reader for the web and Android. It works offli
 - Read in scroll, swipe, or reflow mode, with Arabic and right-to-left support.
 - Search within a book, jump to chapters, and resume from your last reading position.
 - Save highlights, notes, bookmarks, and summaries. Review saved translations and annotations with spaced repetition.
+- Choose a light or dark appearance, or follow your device’s theme.
 - Set reading goals, track your progress, and schedule reminders through Google Calendar or Android notifications.
 
 PDFs uploaded by Iqra live in `My Drive/Iqra/Books`. Reading data is stored locally in IndexedDB and synced through Iqra’s private Drive app data folder. The Android app supports Android 7.0 and later.

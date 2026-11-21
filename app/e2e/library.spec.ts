@@ -141,7 +141,15 @@ test('first-run intro: skippable, shown once, reachable again from Profile', asy
 test('the Today\u2019s quote button opens the quote and closes on Escape and on an outside click', async ({ page }) => {
   await page.goto('/library');
   await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 320, height: 700 });
   const btn = page.getByTestId('quote-btn');
+  const stats = page.getByTestId('welcome-stats');
+  await expect(stats).toBeVisible();
+  const quoteBox = (await btn.boundingBox())!;
+  const statsBox = (await stats.boundingBox())!;
+  expect(quoteBox.x + quoteBox.width).toBeLessThan(statsBox.x);
+  expect(Math.abs(quoteBox.y + quoteBox.height / 2 - statsBox.y - statsBox.height / 2)).toBeLessThan(1);
+  expect(statsBox.x + statsBox.width).toBeLessThanOrEqual(320);
   await expect(btn).toHaveText(/Today.s quote/);
   await expect(page.getByTestId('quote')).toHaveCount(0);
   await btn.click();

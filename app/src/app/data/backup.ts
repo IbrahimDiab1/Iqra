@@ -63,7 +63,8 @@ const FIELDS: Partial<Record<TableName, Record<string, Check>>> = {
   goals: { categoryId: (v) => v === null || str(v), measure: oneOf('time', 'pages'), target: nonNeg, period: opt(oneOf('day', 'week', 'month')) },
   settings: {
     defaultProgressMode: oneOf('last-page', 'marked'), defaultPageMode: oneOf('swipe', 'scroll'), defaultView: oneOf('page', 'reflow'),
-    readerTheme: oneOf('paper', 'sepia', 'night'), weekStartsOn: oneOf(0, 1, 6), cardDirection: oneOf('en-ar', 'ar-en', 'mixed'), introSeen: opt(bool),
+    readerTheme: oneOf('paper', 'sepia', 'night'), appTheme: opt(oneOf('light', 'dark', 'system')),
+    weekStartsOn: oneOf(0, 1, 6), cardDirection: oneOf('en-ar', 'ar-en', 'mixed'), introSeen: opt(bool),
     reminders: shape({
       enabled: opt(bool), days: opt(list(oneOf(0, 1, 2, 3, 4, 5, 6))), time: opt(str), quoteSource: opt(oneOf('highlights', 'builtin', 'both')),
       customQuotes: opt(list(str)), calendarId: opt(str),

@@ -4,6 +4,7 @@ export const SETTINGS_COPY = {
   waitingForWifi: 'Waiting for Wi-Fi',
   sections: {
     account: 'Sync and account',
+    appearance: 'Appearance',
     storage: 'Storage',
     reminders: 'Reminders',
     data: 'Your data',

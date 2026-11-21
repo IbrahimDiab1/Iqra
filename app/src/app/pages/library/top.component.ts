@@ -31,38 +31,40 @@ const ROTATE_MS = 3000;
     </div>
     <header class="hello card">
       <h1 data-testid="welcome">{{ welcomeText() }}</h1>
-      <p
-        class="stats"
-        data-testid="welcome-stats"
-        (mouseenter)="paused.set(true)"
-        (mouseleave)="paused.set(false)"
-        (focusin)="paused.set(true)"
-        (focusout)="paused.set(false)"
-      >
-        @for (l of [line()]; track l) {
-          <span class="line">{{ l }}</span>
-        }
-      </p>
-      <div class="quote-wrap">
-        <button
-          type="button"
-          class="quote-btn"
-          data-testid="quote-btn"
-          aria-haspopup="dialog"
-          [attr.aria-expanded]="quoteOpen()"
-          (click)="quoteOpen.set(!quoteOpen())"
+      <div class="greeting-row">
+        <div class="quote-wrap">
+          <button
+            type="button"
+            class="quote-btn"
+            data-testid="quote-btn"
+            aria-haspopup="dialog"
+            [attr.aria-expanded]="quoteOpen()"
+            (click)="quoteOpen.set(!quoteOpen())"
+          >
+            <span class="qi" aria-hidden="true" [innerHTML]="quoteIcon"></span>{{ copy.todaysQuote }}
+          </button>
+          @if (quoteOpen()) {
+            <div class="quote-pop" role="dialog" [attr.aria-label]="copy.todaysQuote" data-testid="quote-pop">
+              <p class="q-text" dir="auto" data-testid="quote">{{ quote().text }}</p>
+              @if (quote().author) {
+                <p class="q-author" data-testid="quote-author">{{ quote().author }}</p>
+              }
+              <button type="button" class="q-close" data-testid="quote-close" (click)="closeQuote(true)">{{ copy.closeQuote }}</button>
+            </div>
+          }
+        </div>
+        <p
+          class="stats"
+          data-testid="welcome-stats"
+          (mouseenter)="paused.set(true)"
+          (mouseleave)="paused.set(false)"
+          (focusin)="paused.set(true)"
+          (focusout)="paused.set(false)"
         >
-          <span class="qi" aria-hidden="true" [innerHTML]="quoteIcon"></span>{{ copy.todaysQuote }}
-        </button>
-        @if (quoteOpen()) {
-          <div class="quote-pop" role="dialog" [attr.aria-label]="copy.todaysQuote" data-testid="quote-pop">
-            <p class="q-text" dir="auto" data-testid="quote">{{ quote().text }}</p>
-            @if (quote().author) {
-              <p class="q-author" data-testid="quote-author">{{ quote().author }}</p>
-            }
-            <button type="button" class="q-close" data-testid="quote-close" (click)="closeQuote(true)">{{ copy.closeQuote }}</button>
-          </div>
-        }
+          @for (l of [line()]; track l) {
+            <span class="line" [title]="l">{{ l }}</span>
+          }
+        </p>
       </div>
       <iqra-sync-status />
     </header>
@@ -86,9 +88,10 @@ const ROTATE_MS = 3000;
     .wordmark { color: var(--accent); font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
     .card { padding: 14px 16px 16px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
     .hello { margin-bottom: 14px; }
-    .stats { display: flex; align-items: baseline; gap: 6px; margin: 6px 0 0; min-height: 1.4em; color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; }
-    .quote-wrap { position: relative; margin: 6px 0 4px; }
-    .quote-btn { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 2px 8px 2px 6px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; }
+    .greeting-row { display: flex; align-items: center; gap: 8px; margin: 6px 0 4px; }
+    .stats { min-width: 0; margin: 0; color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+    .quote-wrap { position: relative; flex: none; }
+    .quote-btn { display: inline-flex; white-space: nowrap; align-items: center; gap: 5px; min-height: 28px; padding: 2px 8px 2px 6px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; }
     .quote-btn:hover { color: var(--fg); background: color-mix(in srgb, currentColor 8%, transparent); }
     .quote-btn:focus-visible, .q-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .qi { display: inline-grid; place-items: center; }
@@ -96,7 +99,7 @@ const ROTATE_MS = 3000;
     .q-text { margin: 0; font-size: 16px; font-style: italic; line-height: 1.5; overflow-wrap: anywhere; }
     .q-author { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
     .q-close { display: block; margin: 10px 0 0 auto; padding: 4px 10px; border: 0; border-radius: var(--radius-control); background: none; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; }
-    .line { flex: none; white-space: nowrap; display: inline-block; animation: line-in .4s ease; }
+    .line { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; animation: line-in .4s ease; }
     @keyframes line-in { from { opacity: 0; } to { opacity: 1; } }
     @media (prefers-reduced-motion: reduce) { .line { animation: none; } }
     .sec-h { margin: 0 0 10px; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }

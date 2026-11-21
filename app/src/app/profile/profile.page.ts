@@ -14,6 +14,7 @@ interface SectionDef {
 /** Sections in screen order. Each loads on demand so its code stays out of the main bundle. */
 const SECTIONS: readonly SectionDef[] = [
   { id: 'account', title: SETTINGS_COPY.sections.account, load: () => import('../settings/account.section').then((m) => m.AccountSection) },
+  { id: 'appearance', title: SETTINGS_COPY.sections.appearance, load: () => import('../settings/appearance.section').then((m) => m.AppearanceSection) },
   { id: 'storage', title: SETTINGS_COPY.sections.storage, load: () => import('../settings/storage.section').then((m) => m.StorageSection) },
   { id: 'reminders', title: SETTINGS_COPY.sections.reminders, load: () => import('../settings/reminders.section').then((m) => m.RemindersSection) },
   { id: 'data', title: SETTINGS_COPY.sections.data, load: () => import('../settings/data.section').then((m) => m.DataSection) },
@@ -44,7 +45,7 @@ class SectionHost implements OnInit {
   }
 }
 
-/** The Profile tab: who is signed in, sync state, then the settings sections (account, storage, reminders, data). */
+/** The Profile tab: who is signed in, sync state, then the settings sections (account, appearance, storage, reminders, data). */
 @Component({
   selector: 'iqra-profile-page',
   imports: [SectionHost],

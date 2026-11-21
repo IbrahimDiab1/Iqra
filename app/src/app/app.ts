@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, DOCUMENT, computed, effect, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { DomSanitizer } from '@angular/platform-browser';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
@@ -7,6 +7,7 @@ import { BookDetailsSheetComponent } from './books/details/book-details.sheet';
 import { OpenBookSheetComponent } from './books/open-book.sheet';
 import { RemoveBookSheetComponent } from './books/remove-book.sheet';
 import { ReviewService } from './review/review.service';
+import { SettingsService } from './core/settings.service';
 import { COPY } from './ui/copy';
 import { icon, IconName } from './ui/icons';
 import { ReconnectBannerComponent } from './sync/reconnect-banner.component';
@@ -45,6 +46,9 @@ export class App {
   protected readonly due = inject(ReviewService).dueCount();
 
   constructor() {
+    const root = inject(DOCUMENT).documentElement;
+    const settings = inject(SettingsService);
+    effect(() => { root.dataset['theme'] = settings.settings().appTheme ?? 'system'; });
     // Hover and focus labels for every icon-only button, from one place.
     inject(TooltipService).install();
     // Counts the app's navigations from the first one, so back arrows know whether there is a page to go back to.

@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS: Omit<Settings, keyof SyncMeta> = {
   defaultPageMode: DEFAULT_PAGE_MODE,
   defaultView: 'page',
   readerTheme: 'paper',
+  appTheme: 'system',
   weekStartsOn: 6,
   reminders: {},
   cardDirection: 'en-ar',

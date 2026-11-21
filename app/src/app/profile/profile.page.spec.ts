@@ -72,7 +72,7 @@ describe('ProfilePage', () => {
       expect(el.querySelector('[data-section="reminders"] iqra-reminders-section')).not.toBeNull();
       expect(el.querySelector('[data-section="data"] iqra-data-section')).not.toBeNull();
     });
-    expect(Array.from(el.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(['Sync and account', 'Storage', 'Reminders', 'Your data']);
+    expect(Array.from(el.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(['Sync and account', 'Appearance', 'Storage', 'Reminders', 'Your data']);
   });
 
   it('no longer has the categories, defaults or quote sections, and signing out is reachable', async () => {

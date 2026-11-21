@@ -128,6 +128,7 @@ export interface Settings extends SyncMeta {
   defaultPageMode: Book['pageMode'];
   defaultView: 'page' | 'reflow';
   readerTheme: 'paper' | 'sepia' | 'night';
+  appTheme?: 'light' | 'dark' | 'system';
   weekStartsOn: 0 | 1 | 6; // Sun / Mon / Sat; default 6 = Saturday [decided]
   reminders: ReminderSettings;
   cardDirection: 'en-ar' | 'ar-en' | 'mixed'; // phase 2
