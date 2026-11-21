@@ -180,8 +180,10 @@ const ADD_KEY = '+';
       /* Room for the focus rings the scroll box would clip. */
       padding: 3px;
       overflow-x: auto;
-      scrollbar-width: thin;
+      /* One line that scrolls by touch, wheel or keyboard; the bar itself is hidden. */
+      scrollbar-width: none;
     }
+    .strip::-webkit-scrollbar { display: none; }
     .wrap { display: inline-flex; flex: none; align-items: center; max-width: 100%; }
     .chip {
       display: inline-flex;

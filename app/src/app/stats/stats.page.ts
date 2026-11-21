@@ -59,6 +59,7 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
           (bookChange)="bookFilter.set($event)"
         />
 
+        <section class="card" data-testid="overview-card">
         <h2>{{ l.overview.title }}</h2>
         <div class="overview" data-testid="overview">
           @for (t of todayTiles(); track t.key) {
@@ -83,6 +84,9 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
           </div>
         </div>
         <p class="note">{{ l.overview.streakNote }}</p>
+        </section>
+
+        <section class="card" data-testid="period-card">
 
         <div class="seg periods" role="group" [attr.aria-label]="l.period.label">
           @for (p of periods; track p) {
@@ -111,6 +115,7 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
             <span class="d">{{ timeDelta() }}</span>
           </div>
         </div>
+        </section>
 
         <section class="card" data-testid="goals-card">
           <h2>{{ l.goalsTitle }}</h2>
@@ -133,6 +138,7 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
           <button type="button" class="add" (click)="editing.set(null); editorOpen.set(true)">{{ goalCopy.add }}</button>
         </section>
 
+        <section class="card" data-testid="chart-card">
         <h2>{{ period() === 'week' ? l.dayByDay : l.heatTitle[heatPeriod()] }}</h2>
         @if (periodEmpty()) {
           <p class="empty">{{ emptyText() }}</p>
@@ -180,12 +186,16 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
           }
         }
 
+        </section>
+
+        <section class="card" data-testid="all-time-card">
         <h2>{{ l.allTime.title }}</h2>
         <div class="overview" data-testid="all-time">
           <div class="tile" data-all="time"><span class="k">{{ l.allTime.time }}</span><span class="v">{{ allTimeTime() }}</span></div>
           <div class="tile" data-all="books"><span class="k">{{ l.allTime.books }}</span><span class="v">{{ allTimeBooks() }}</span></div>
           <div class="tile" data-all="pages"><span class="k">{{ l.allTime.pages }}</span><span class="v">{{ all().pages }}</span></div>
         </div>
+        </section>
       }
       <iqra-goal-editor-sheet [open]="editorOpen()" [goal]="editing()" [categories]="categories()" (closed)="editorOpen.set(false)" />
     </section>
@@ -193,6 +203,8 @@ const PERIODS: readonly Period[] = ['week', 'month', 'year'];
   styles: `
     .page { padding: 16px var(--gutter) 24px; max-width: 720px; margin: 0 auto; }
     h1 { margin: 0 0 4px; font-family: var(--book); font-size: 28px; font-weight: 600; }
+    .card { margin-top: 14px; padding: 14px 16px 16px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+    .card > h2:first-child { margin-top: 0; }
     h2 { margin: 24px 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
     .week { flex: 1; min-width: 0; margin: 0; color: var(--muted); font-size: 14px; text-align: center; overflow-wrap: anywhere; }
     .nav { display: flex; align-items: center; gap: 4px; margin-bottom: 12px; }

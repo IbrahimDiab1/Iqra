@@ -127,7 +127,7 @@ describe('ImportService', () => {
       addedAt: 1000,
       lastPageReached: 0,
       progressMode: 'last-page',
-      pageMode: 'scroll',
+      pageMode: 'swipe',
       categoryIds: [],
       tags: [],
       updatedAt: 1000,

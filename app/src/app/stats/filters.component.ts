@@ -67,8 +67,9 @@ const F = STATS_COPY.filters;
   `,
   styles: `
     :host { display: block; margin-bottom: 12px; }
-    .legend { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-    .chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 40px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--fg); font: 500 13px var(--ui); cursor: pointer; }
+    .legend { display: flex; flex-wrap: nowrap; gap: 6px; margin-bottom: 8px; padding: 3px; overflow-x: auto; scrollbar-width: none; }
+    .legend::-webkit-scrollbar { display: none; }
+    .chip { display: inline-flex; flex: none; align-items: center; gap: 6px; max-width: 240px; min-height: 40px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--fg); font: 500 13px var(--ui); cursor: pointer; }
     .chip[aria-pressed='true'] { background: var(--fg); border-color: var(--fg); color: var(--surface); }
     .dot { flex: none; width: 10px; height: 10px; border-radius: 3px; background: var(--dot, var(--accent)); }
     .nm { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }

@@ -346,3 +346,28 @@ test.describe('stats heat map', () => {
     await expect(page.getByTestId('day-detail')).toBeVisible();
   });
 });
+
+test.describe('goals by period', () => {
+  test('a monthly goal is chosen in the editor and shown with its period; there is no default goal', async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    try {
+      const page = await openDevice(context);
+      await page.getByRole('link', { name: 'Stats' }).click();
+      await expect(page.locator('.goal')).toHaveCount(0);
+      await expect(page.getByTestId('overview').getByText('No daily goal set').first()).toBeVisible();
+      await page.getByRole('button', { name: 'Add goal', exact: true }).click();
+      const dialog = page.getByRole('dialog');
+      await dialog.getByRole('button', { name: 'Monthly', exact: true }).click();
+      await dialog.getByLabel('Minutes per month').fill('600');
+      await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+      await expect(page.locator('.goal')).toHaveCount(1);
+      await expect(page.locator('.goal .gs')).toContainText('Monthly');
+      await expect(page.getByTestId('overview').getByText('No daily goal set').first()).toBeVisible();
+      // Each block is its own card, and nothing scrolls the page sideways.
+      await expect(page.locator('.card')).toHaveCount(4);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    } finally {
+      await context.close();
+    }
+  });
+});

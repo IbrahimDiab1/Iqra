@@ -1,5 +1,8 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, Directive, OnInit, ViewContainerRef, computed, inject, input, type Type } from '@angular/core';
+import { Router } from '@angular/router';
 import { AuthApi } from '../auth/auth.service';
+import { ONBOARDING_COPY } from '../onboarding/onboarding-copy';
+import { openIntro } from '../onboarding/open-intro';
 import { SETTINGS_COPY } from '../settings/settings-copy';
 
 interface SectionDef {
@@ -65,6 +68,7 @@ class SectionHost implements OnInit {
           <ng-container [iqraSectionHost]="s.load" />
         </section>
       }
+      <button type="button" class="intro" data-testid="show-intro" (click)="showIntro()">{{ introLabel }}</button>
     </section>
   `,
   styles: `
@@ -75,15 +79,29 @@ class SectionHost implements OnInit {
     .who { min-width: 0; }
     h1 { margin: 0; font-size: 22px; font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
     .email { margin: 2px 0 0; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
-    .sec { margin-top: 22px; }
-    h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .intro { display: block; margin: 14px auto 0; min-height: 44px; padding: 0 14px; border: 0; border-radius: 12px; background: none; color: var(--accent); font: 600 14px var(--ui); cursor: pointer; }
+    .intro:hover { background: var(--surface-2); }
+    .intro:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .sec { margin-top: 14px; padding: 14px 16px 16px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+    h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
   `,
 })
 export class ProfilePage {
   private readonly auth = inject(AuthApi);
+  private readonly router = inject(Router);
+  protected readonly introLabel = ONBOARDING_COPY.showIntro;
+  private readonly vcr = inject(ViewContainerRef);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly sections = SECTIONS;
   protected readonly name = computed(() => this.auth.profile()?.name ?? SETTINGS_COPY.title);
   protected readonly email = computed(() => this.auth.profile()?.email ?? '');
   protected readonly picture = computed(() => this.auth.profile()?.picture ?? null);
+  protected showIntro(): void {
+    void openIntro(this.vcr, this.destroyRef, () => this.goToLibrary());
+  }
+
+  protected goToLibrary(): void {
+    void this.router.navigateByUrl('/library');
+  }
   protected readonly initial = computed(() => (this.auth.profile()?.name ?? '?').trim().charAt(0).toUpperCase() || '?');
 }

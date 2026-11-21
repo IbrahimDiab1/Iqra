@@ -1,0 +1,27 @@
+/** Copy for the first-run intro. Lazy, with the sheet that uses it. */
+export const ONBOARDING_COPY = {
+  steps: [
+    { id: 'what', title: 'Welcome to Iqra', body: 'Read PDFs on your phone and your computer. Your place, highlights and notes follow you everywhere, and everything works offline.' },
+    { id: 'drive', title: 'Your books stay yours', body: 'Your books live in your own Google Drive, in files Iqra creates. There is no Iqra server, so nobody else can see your library.' },
+    { id: 'book', title: 'Add your first book', body: 'Choose a PDF from your device, or drop one onto the Library page. Iqra reads Arabic and English, in either direction.' },
+    { id: 'goal', title: 'Set a reading goal', body: 'Optional. Pick pages or time, and whether it repeats every day, week or month. You can change it any time in Stats.' },
+  ],
+  addAction: 'Choose a PDF',
+  pages: 'Pages',
+  time: 'Time',
+  goalMeasure: 'Measure',
+  goalPeriod: 'Repeats',
+  daily: 'Daily',
+  weekly: 'Weekly',
+  monthly: 'Monthly',
+  pagesCount: 'Number of pages',
+  minutes: 'Number of minutes',
+  saveGoal: 'Save goal',
+  goalSaved: 'Goal saved',
+  skip: 'Skip',
+  back: 'Back',
+  next: 'Next',
+  done: 'Done',
+  progress: (n: number, total: number) => `Step ${n} of ${total}`,
+  showIntro: 'Show intro',
+} as const;

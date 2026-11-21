@@ -108,3 +108,47 @@ test('the Library home and Profile never scroll sideways, at 320, 390 and 1280 p
     }
   }
 });
+
+test('first-run intro: skippable, shown once, reachable again from Profile', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 800 } });
+  try {
+    const page = await context.newPage();
+    await page.goto('/library?intro=1');
+    const next = page.getByTestId('onboarding-next');
+    await expect(next).toBeVisible();
+    await next.click();
+    await expect(page.getByTestId('onboarding-step')).toHaveAttribute('data-step', '1');
+    await page.getByTestId('onboarding-back').click();
+    await expect(page.getByTestId('onboarding-step')).toHaveAttribute('data-step', '0');
+    await page.getByTestId('onboarding-skip').click();
+    await expect(next).toHaveCount(0);
+
+    // Seen once: a reload does not open it again.
+    await page.goto('/library?intro=1');
+    await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
+    await expect(page.getByTestId('welcome')).toBeVisible();
+    await expect(next).toHaveCount(0);
+
+    await page.getByRole('link', { name: 'Profile' }).click();
+    await page.getByTestId('show-intro').click();
+    await expect(next).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  } finally {
+    await context.close();
+  }
+});
+
+test('Filter and Sort are borderless and the greeting stat line rotates', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 800 } });
+  try {
+    const page = await openDevice(context);
+    await page.locator('input[type="file"]').setInputFiles([SAMPLE]);
+    await expect(bookCard(page, 'Sample Book')).toBeVisible();
+    const pill = page.locator('.tools .pill').first();
+    expect(await pill.evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('0px');
+    const first = await page.getByTestId('welcome-stats').textContent();
+    await expect.poll(async () => page.getByTestId('welcome-stats').textContent(), { timeout: 8000 }).not.toBe(first);
+  } finally {
+    await context.close();
+  }
+});

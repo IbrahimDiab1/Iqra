@@ -30,6 +30,9 @@ import {
   type SortKey,
 } from '../../books/library/library-query';
 import { UploadQueue } from '../../books/upload-queue';
+import { FAKE_DRIVE } from '../../../environments/environment';
+import { introDue } from '../../onboarding/intro-due';
+import { openIntro } from '../../onboarding/open-intro';
 import { DB } from '../../core/db';
 import type { Book, ID } from '../../core/models';
 import { Repo } from '../../core/repo';
@@ -403,7 +406,7 @@ function isPdf(file: File): boolean {
       gap: 6px;
       min-height: 40px;
       padding: 6px 12px;
-      border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
+      border: 0;
       border-radius: 999px;
       background: none;
       color: var(--fg);
@@ -412,6 +415,7 @@ function isPdf(file: File): boolean {
       white-space: nowrap;
     }
     .pill:hover { background: var(--surface-2); }
+    .pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .badge {
       display: inline-grid;
       place-items: center;
@@ -613,12 +617,27 @@ export class LibraryPage {
   protected readonly filterOpen = signal(false);
   protected readonly sortOpen = signal(false);
   protected readonly dropActive = signal(false);
+  private readonly vcr = inject(ViewContainerRef);
+  private readonly destroyRef = inject(DestroyRef);
   private dragDepth = 0;
 
   protected readonly upNextViews = computed<BookView[]>(() => this.result().upNext.map((b) => this.viewOf(b)));
 
+  /** Opens the intro for someone new. A failed read just leaves it closed; Profile can still open it. */
+  private async checkIntro(): Promise<void> {
+    try {
+      const settings = await this.db.settings.get('settings');
+      const books = await this.db.books.filter((b) => !b.deleted).count();
+      const suppressed = FAKE_DRIVE && !location.search.includes('intro=1');
+      if (!this.gone && introDue(settings?.introSeen, books, suppressed)) void openIntro(this.vcr, this.destroyRef, () => this.pickFiles());
+    } catch (err) {
+      console.warn('Could not check whether to show the intro', err);
+    }
+  }
+
   constructor() {
     inject(DestroyRef).onDestroy(() => (this.gone = true));
+    void this.checkIntro();
     effect(() => {
       const host = this.topHost();
       if (host && host.length === 0) void this.mountTop(host);

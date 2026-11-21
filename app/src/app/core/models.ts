@@ -126,6 +126,8 @@ export interface Settings extends SyncMeta {
   weekStartsOn: 0 | 1 | 6; // Sun / Mon / Sat; default 6 = Saturday [decided]
   reminders: ReminderSettings;
   cardDirection: 'en-ar' | 'ar-en' | 'mixed'; // phase 2
+  /** The first-run intro was shown (or skipped). Syncs, so it is not repeated on another device. */
+  introSeen?: boolean;
 }
 
 export interface ReadingSession extends SyncMeta {
