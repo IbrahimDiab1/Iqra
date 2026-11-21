@@ -1,0 +1,25 @@
+# Plan 10 — fixes + Android app (decisions final; lean)
+Shared rules: as /home/user/iqra/.superpowers/sdd/plan-8/brief.md "Shared rules" (TDD, private e2e port, never pkill others, initial bundle <= 522 kB, commit identity + trailers but use `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`, add "Plan 10 checks" bullets to docs/deploy-and-test.md, report to /home/user/iqra/.superpowers/sdd/plan-10/<group>-report.md via Bash if Write is blocked, short reply with branch + SHA). Plain copy for everyday readers.
+
+## Group W — web fixes
+W1 Desktop/web: the Contents drawer always opens on the LEFT, also for Arabic/RTL books (phones unchanged).
+W2 Rename the reader setting "Text direction" to "Page direction" (Auto / Right to left / Left to right) and show it only when page mode is swipe (setting value kept either way).
+W3 Library greeting: replace the inline quote with a small "Today's quote" button (quote icon + label, compact) opening a simple popover/dialog with the full quote (and author if any); close on outside/Esc.
+W4 Library default sort = Recently added (existing stored choice kept).
+W5 BUG: entering then leaving full screen changes the current page. Keep the page anchored across resize/fullscreen/orientation changes (both modes; zoom too). Regression e2e (set viewport sizes to simulate).
+W6 Scroll mode: header page number and chapter/section update live while scrolling (rAF-throttled), not only after scrolling stops.
+W7 Translate popup: long text must not push actions off-screen: max-height within viewport, scrollable text area, Save/Listen/Close always visible.
+W8 Review for highlights and notes:
+   - "Add to Review" action: in the toast after creating a highlight (next to Undo) and in the highlight/note popup next to Delete. Creates a ReviewItem kind 'highlight' or 'note' linked to the annotation (no duplicates; show "In Review" state).
+   - Review page filter chips multi-select [All, Words, Sentences, Notes, Highlights] (All clears others). Remove the list search box and the practice direction choice (EN->AR / AR->EN / Mixed).
+   - Practice: words/sentences show front = saved text, flip to translation (natural direction); notes/highlights show the whole card directly (quote + note + book/page), no flip/"Show answer", just Again/Hard/Good/Easy.
+W9 Book details > stats: "Chapter progress" collapsed by default and each chapter's sections collapsed by default.
+W10 Library category bar: hide "Uncategorized" when it has 0 books.
+
+## Group X — Android app (Capacitor)
+Constraints: the Android SDK cannot be downloaded in this container (dl.google.com blocked), so the APK is built in GitHub Actions (ubuntu runner has the Android SDK). npm works here.
+X1 Add Capacitor (latest stable) to app/: android platform committed (app/android), appId e.g. `io.github.ibrahimdiab1.iqra`, app name Iqra, icons/splash from existing assets, a separate build configuration for the native bundle (base href `/`, FAKE_DRIVE false). Web/PWA build and Pages deploy must keep working unchanged.
+X2 Workflow .github/workflows/android.yml: on push to main (paths app/**) and manual dispatch: build web, `npx cap sync android`, `./gradlew assembleRelease`, sign with a keystore from repo secrets (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD); if secrets are missing, build a debug APK instead. Upload the APK as an artifact AND attach it to a GitHub Release `android-latest` (overwrite). Generate a release keystore with keytool into /tmp/claude-0/-home-user-iqra/0c3dc6e1-f4a9-5546-8706-29675704ce57/scratchpad/android/ (never commit it, do NOT set any GitHub secrets yourself — the controller will ask the owner). Write the exact `gh secret set` commands needed (reading values from files there, not printing secrets) into that folder as set-secrets.sh, and record the SHA-1 fingerprint in the report and docs (needed for Google sign-in).
+X3 Google sign-in inside the app: Google blocks web OAuth in WebViews, so on native use a Capacitor Google sign-in/authorization plugin (Android Credential Manager / AuthorizationClient) to get Drive (drive.file, drive.appdata) and optional Calendar access tokens silently on the device (no repeated logins). Keep the web GIS flow for the browser. Abstract behind the existing auth API (platform check). Document the owner's one-time setup: create an Android OAuth client in Google Cloud with package name + SHA-1 (plus keep the Web client), in docs/setup-google.md.
+X4 Reminders: add "Phone notifications" as a reminder option next to Google Calendar (choose one or both), native only, using @capacitor/local-notifications scheduled on the device from the reminder settings (request permission on Android 13+, reschedule on change and on app start). Hidden on web.
+X5 Report min Android version supported (minSdk of the Capacitor version) and test what you can here: unit tests for platform branching (mock Capacitor), web build/e2e unchanged; you cannot run Gradle here, so make the workflow correct by inspection and also push nothing yourself—the controller pushes and watches CI.
