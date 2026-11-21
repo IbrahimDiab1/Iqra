@@ -69,4 +69,42 @@ describe('ReviewService', () => {
     expect(graded!.srs).toMatchObject({ reps: 1, intervalDays: 1, due: now + 86_400_000 });
     await vi.waitFor(() => expect(due()).toBe(1));
   });
+
+  describe('highlights and notes', () => {
+    const anchor = { page: 4, start: { item: 0, offset: 0 }, end: { item: 0, offset: 9 }, rects: [], quote: ' A quoted  line ' };
+    const hl = { id: 'a1', bookId: 'b1', deviceId: 'd', updatedAt: 1, createdAt: 1, type: 'highlight' as const, page: 4, color: 'yellow' as const, text: anchor, tags: [] };
+
+    it('adds a highlight linked to the annotation, due now, with no translation', async () => {
+      const out = await service.addAnnotation(hl);
+      expect(out!.existed).toBe(false);
+      expect(out!.item).toMatchObject({ kind: 'highlight', text: 'A quoted line', translation: '', annotationId: 'a1', bookId: 'b1', page: 4, sourceLang: 'en' });
+      expect(out!.item.srs.due).toBe(now);
+      expect(out!.item.note).toBeUndefined();
+    });
+
+    it('adds a note with its body, and never twice for the same annotation', async () => {
+      const note = { ...hl, id: 'n1', type: 'note' as const, body: ' Why? ' };
+      const first = await service.addAnnotation(note);
+      expect(first!.item).toMatchObject({ kind: 'note', note: 'Why?', annotationId: 'n1' });
+      const again = await service.addAnnotation(note);
+      expect(again!.existed).toBe(true);
+      expect(again!.item.id).toBe(first!.item.id);
+      expect(await db.review.count()).toBe(1);
+      const ids = TestBed.runInInjectionContext(() => service.annotationIds());
+      await vi.waitFor(() => expect([...ids()]).toEqual(['n1']));
+    });
+
+    it('does not take areas, side notes or bookmarks, and a saved word with the same text stays a separate item', async () => {
+      expect(await service.addAnnotation({ ...hl, id: 'x', type: 'area', text: undefined })).toBeUndefined();
+      await service.addAnnotation({ ...hl, id: 'h2', text: { ...anchor, quote: 'serendipity' } });
+      await service.add(input);
+      expect(await db.review.count()).toBe(2);
+    });
+
+    it('editing a highlight\u2019s text keeps its kind', async () => {
+      const { item } = (await service.addAnnotation(hl))!;
+      const next = await service.update(item.id, { text: 'one two three four five six' });
+      expect(next!.kind).toBe('highlight');
+    });
+  });
 });

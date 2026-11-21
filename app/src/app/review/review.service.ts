@@ -2,9 +2,9 @@ import { Injectable, Injector, Signal, computed, inject, runInInjectionContext, 
 import { CLOCK } from '../core/clock';
 import { DB } from '../core/db';
 import { newId } from '../core/ids';
-import type { ID, ReviewItem, ReviewLang } from '../core/models';
+import type { Annotation, ID, ReviewItem, ReviewLang } from '../core/models';
 import { Repo } from '../core/repo';
-import { grade, kindFor, newSrs, normalizeSelection, type Grade } from './review-logic';
+import { detectLang, grade, kindFor, newSrs, normalizeSelection, type Grade } from './review-logic';
 
 export interface NewReviewItem {
   text: string;
@@ -53,7 +53,9 @@ export class ReviewService {
   async add(input: NewReviewItem): Promise<{ item: ReviewItem; existed: boolean }> {
     const text = normalizeSelection(input.text);
     const key = text.toLowerCase();
-    const same = (await this.db.review.where('bookId').equals(input.bookId).toArray()).find((r) => !r.deleted && r.text.toLowerCase() === key);
+    const same = (await this.db.review.where('bookId').equals(input.bookId).toArray()).find(
+      (r) => !r.deleted && r.annotationId === undefined && r.text.toLowerCase() === key,
+    );
     const now = this.clock.now();
     if (same) {
       const item = await this.repo.put<ReviewItem>('review', { ...same, translation: input.translation, context: input.context || same.context, page: input.page });
@@ -74,10 +76,47 @@ export class ReviewService {
     return { item, existed: false };
   }
 
+  /** The ids of the highlights and notes that are in Review. */
+  annotationIds(): Signal<ReadonlySet<ID>> {
+    const items = this.items();
+    return computed(() => new Set((items() ?? []).flatMap((r) => (r.annotationId ? [r.annotationId] : []))));
+  }
+
+  /**
+   * Adds a highlight or note to Review, linked to the annotation. One annotation is one item: adding it again
+   * changes nothing and reports `existed`. Areas, side notes, summaries and bookmarks have no text and cannot be added.
+   */
+  async addAnnotation(a: Annotation): Promise<{ item: ReviewItem; existed: boolean } | undefined> {
+    if ((a.type !== 'highlight' && a.type !== 'note') || !a.text) return undefined;
+    const same = (await this.db.review.where('bookId').equals(a.bookId).toArray()).find((r) => !r.deleted && r.annotationId === a.id);
+    if (same) return { item: same, existed: true };
+    const now = this.clock.now();
+    const text = normalizeSelection(a.text.quote);
+    const note = a.type === 'note' ? (a.body ?? '').trim() : '';
+    const item = await this.repo.put<ReviewItem>('review', {
+      id: newId(),
+      text,
+      translation: '',
+      kind: a.type,
+      sourceLang: detectLang(text),
+      bookId: a.bookId,
+      page: a.page ?? a.text.page,
+      context: '',
+      ...(note ? { note } : {}),
+      annotationId: a.id,
+      srs: newSrs(now),
+      createdAt: now,
+    });
+    return { item, existed: false };
+  }
+
   update(id: ID, patch: Partial<Pick<ReviewItem, 'text' | 'translation' | 'note' | 'context'>>): Promise<ReviewItem | undefined> {
-    return this.repo.update<ReviewItem>('review', id, () => ({
+    return this.repo.update<ReviewItem>('review', id, (cur) => ({
       ...patch,
-      ...(patch.text !== undefined ? { text: normalizeSelection(patch.text), kind: kindFor(patch.text) } : {}),
+      // A highlight or note keeps its kind when its text is edited; a word, phrase or sentence is re-sized by length.
+      ...(patch.text !== undefined
+        ? { text: normalizeSelection(patch.text), ...(cur.annotationId ? {} : { kind: kindFor(patch.text) }) }
+        : {}),
     }));
   }
 

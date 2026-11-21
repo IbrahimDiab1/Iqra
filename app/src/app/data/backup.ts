@@ -78,7 +78,7 @@ const FIELDS: Partial<Record<TableName, Record<string, Check>>> = {
   readMarks: { bookId: str, page: num, read: bool },
   review: {
     text: str, translation: str, bookId: str, page: num, context: str, createdAt: num,
-    kind: oneOf('word', 'phrase', 'sentence'), sourceLang: oneOf('en', 'ar'), note: opt(str),
+    kind: oneOf('word', 'phrase', 'sentence', 'highlight', 'note'), sourceLang: oneOf('en', 'ar'), note: opt(str), annotationId: opt(str),
     srs: shape({ due: num, intervalDays: nonNeg, ease: num, reps: nonNeg, lapses: nonNeg }),
   },
   sessions: { bookId: str, startedAt: num, endedAt: num, activeMs: nonNeg, pagesRead: list(num) },

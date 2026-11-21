@@ -16,6 +16,7 @@ import type { Annotation } from '../core/models';
 import { COPY } from '../ui/copy';
 import { SheetComponent } from '../ui/sheet.component';
 import { ToastService } from '../ui/toast.service';
+import { ReviewService } from '../review/review.service';
 import { AnnotationService, HIGHLIGHT_COLORS, type HighlightColor } from './annotation.service';
 import { CHROME_COPY } from '../reader/chrome-copy';
 import { UndoStack, recordCommand } from '../reader/undo-stack';
@@ -72,7 +73,14 @@ const SAVE_DEBOUNCE_MS = 400;
             }
           </div>
         }
-        <button type="button" class="del" (click)="remove()">{{ copy.delete }}</button>
+        <div class="foot">
+          @if (canReview()) {
+            <button type="button" class="rev" data-testid="add-review" [disabled]="inReview()" (click)="addToReview()">
+              {{ inReview() ? copy.inReview : copy.addToReview }}
+            </button>
+          }
+          <button type="button" class="del" (click)="remove()">{{ copy.delete }}</button>
+        </div>
       }
     </f-sheet>
   `,
@@ -87,7 +95,11 @@ const SAVE_DEBOUNCE_MS = 400;
     .cdot { position: relative; width: 44px; height: 44px; border: 0; border-radius: 50%; background: none; cursor: pointer; }
     .cdot::after { content: ''; position: absolute; inset: 8px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px var(--line); }
     .cdot[aria-pressed='true']::after { box-shadow: 0 0 0 2px var(--accent); }
-    .del { min-height: 40px; margin-top: 16px; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--radius-control); background: none; color: var(--danger, var(--fg)); font: 14px var(--ui); cursor: pointer; }
+    .foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .rev { min-height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--radius-control); background: none; color: var(--accent); font: 14px var(--ui); cursor: pointer; }
+    .rev:disabled { color: var(--muted); cursor: default; }
+    .rev:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .del { min-height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--radius-control); background: none; color: var(--danger, var(--fg)); font: 14px var(--ui); cursor: pointer; }
     .body:focus-visible, .cdot:focus-visible, .del:focus-visible, .more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   `,
 })
@@ -111,6 +123,15 @@ export class NoteSheetComponent {
     const t = this.annotation()?.type;
     return t === 'highlight' || t === 'area';
   });
+  /** Highlights and notes (with their text) can be added to Review. */
+  protected readonly canReview = computed(() => {
+    const a = this.annotation();
+    return !!a && (a.type === 'highlight' || a.type === 'note') && !!a.text;
+  });
+  protected readonly inReview = computed(() => {
+    const a = this.annotation();
+    return !!a && this.reviewIds().has(a.id);
+  });
   protected readonly title = computed(() => {
     const t = this.annotation()?.type;
     return t === 'area' ? this.copy.area : t === 'highlight' ? this.copy.highlight : this.copy.note;
@@ -118,6 +139,8 @@ export class NoteSheetComponent {
 
   private readonly service = inject(AnnotationService);
   private readonly toast = inject(ToastService);
+  private readonly reviews = inject(ReviewService);
+  private readonly reviewIds = this.reviews.annotationIds();
   /** The reader's undo history; absent where the sheet is used outside a reader. */
   private readonly undoStack = inject(UndoStack, { optional: true });
   private readonly edits = new FieldEdits();
@@ -221,6 +244,20 @@ export class NoteSheetComponent {
     if (!this.annotation() || this.done) return;
     this.settle();
     this.closed.emit();
+  }
+
+  protected async addToReview(): Promise<void> {
+    const a = this.annotation();
+    if (!a || this.inReview()) return;
+    // Save what was typed first, so the Review card carries the note as it is now.
+    this.flush();
+    try {
+      await this.reviews.addAnnotation(a.type === 'note' ? { ...a, body: this.body() } : a);
+      this.toast.show(this.copy.addedToReview);
+    } catch (err) {
+      console.warn('Could not add to Review', err);
+      this.toast.show(this.copy.reviewFailed);
+    }
   }
 
   protected async remove(): Promise<void> {

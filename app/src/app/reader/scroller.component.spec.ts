@@ -139,6 +139,18 @@ describe('ScrollerComponent', () => {
     await vi.waitFor(() => expect(host.places[host.places.length - 1]?.page).toBe(expectedTop));
   });
 
+  it('reports the place on every animation frame while scrolling, not only after the scrolling stops', async () => {
+    await create();
+    host.places.length = 0;
+    const step = RATIO * VIEW_W + GAP;
+    // Keep scrolling with gaps shorter than any quiet-period debounce: pages 3, 5 and 7 must each be reported.
+    for (const page of [3, 5, 7]) {
+      viewport().scrollTop = (page - 1) * step;
+      viewport().dispatchEvent(new Event('scroll'));
+      await vi.waitFor(() => expect(host.places.some((p) => p.page === page)).toBe(true), { timeout: 60, interval: 5 });
+    }
+  });
+
   it('a fast scroll through 50 pages never keeps more than visible + overscan canvases', async () => {
     await create();
     let max = 0;

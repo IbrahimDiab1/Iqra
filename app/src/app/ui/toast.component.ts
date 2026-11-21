@@ -11,6 +11,9 @@ import { ToastService } from './toast.service';
         @if (t.undo) {
           <button type="button" (click)="toast.undo()">{{ t.actionLabel ?? undoLabel }}</button>
         }
+        @if (t.extra; as x) {
+          <button type="button" data-testid="toast-extra" (click)="toast.runExtra()">{{ x.label }}</button>
+        }
       </div>
     }
   `,

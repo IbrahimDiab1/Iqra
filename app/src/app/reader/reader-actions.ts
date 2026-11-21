@@ -9,6 +9,7 @@ import { contextSentence, detectLang } from '../review/review-logic';
 import type { TranslateTarget } from '../review/translate.sheet';
 import { canSpeak, speak, stopSpeaking } from '../review/translation';
 import { COPY } from '../ui/copy';
+import { ReviewService } from '../review/review.service';
 import { ToastService } from '../ui/toast.service';
 import { CHROME_COPY } from './chrome-copy';
 import type { ReaderSession } from './reader.page';
@@ -39,6 +40,7 @@ export interface ReaderActionsContext {
 export class ReaderActions {
   private readonly annotationService = inject(AnnotationService);
   private readonly toast = inject(ToastService);
+  private readonly reviews = inject(ReviewService);
   private readonly selection = inject(SelectionService);
   private readonly readMarks = inject(ReadMarkService);
   readonly undoStack = inject(UndoStack);
@@ -273,10 +275,24 @@ export class ReaderActions {
         undo: () => this.annotationService.undoAddHighlight(result),
         redo: () => this.annotationService.redoAddHighlight(result),
       };
-      this.toast.show(COPY.annotations.highlightSaved, { undo: recordCommand(this.undoStack, cmd) });
+      this.toast.show(COPY.annotations.highlightSaved, {
+        undo: recordCommand(this.undoStack, cmd),
+        extra: { label: COPY.annotations.addToReview, run: () => void this.addToReview(result.created) },
+      });
     } catch (err) {
       console.warn('Could not save the highlight', err);
       this.toast.show(COPY.annotations.saveFailed);
+    }
+  }
+
+  /** The toast's Add to Review: the highlight becomes a Review item (once). */
+  private async addToReview(a: Annotation): Promise<void> {
+    try {
+      const out = await this.reviews.addAnnotation(a);
+      this.toast.show(out?.existed ? COPY.annotations.inReview : COPY.annotations.addedToReview);
+    } catch (err) {
+      console.warn('Could not add to Review', err);
+      this.toast.show(COPY.annotations.reviewFailed);
     }
   }
 

@@ -9,7 +9,6 @@ const LATIN = /[A-Za-z]/g;
 const TERMINATORS = '.!?؟۔…';
 
 export type Grade = 'again' | 'hard' | 'good' | 'easy';
-export type CardDirection = 'en-ar' | 'ar-en' | 'mixed';
 
 /** Whitespace collapsed to single spaces, ends trimmed. */
 export function normalizeSelection(text: string): string {
@@ -84,28 +83,42 @@ export interface Card {
   backLang: ReviewLang;
 }
 
-/** The two sides of an item for one direction: `en-ar` shows the English side first, `ar-en` the Arabic. */
-export function frontBack(item: Pick<ReviewItem, 'text' | 'translation' | 'sourceLang'>, direction: Exclude<CardDirection, 'mixed'>): Card {
-  const en = item.sourceLang === 'en' ? item.text : item.translation;
-  const ar = item.sourceLang === 'ar' ? item.text : item.translation;
-  return direction === 'en-ar' ? { front: en, back: ar, frontLang: 'en', backLang: 'ar' } : { front: ar, back: en, frontLang: 'ar', backLang: 'en' };
+/** What the Review list can be narrowed to. Phrases count as sentences. */
+export type ReviewChip = 'word' | 'sentence' | 'note' | 'highlight';
+export const REVIEW_CHIPS: readonly ReviewChip[] = ['word', 'sentence', 'note', 'highlight'];
+
+/** The chip an item belongs to. */
+export function chipOf(item: Pick<ReviewItem, 'kind'>): ReviewChip {
+  return item.kind === 'phrase' ? 'sentence' : item.kind;
+}
+
+/** Highlights and notes are shown whole, with no flip; words and sentences flip to their translation. */
+export function isWholeCard(item: Pick<ReviewItem, 'kind'>): boolean {
+  return item.kind === 'highlight' || item.kind === 'note';
+}
+
+export interface Card {
+  front: string;
+  back: string;
+  frontLang: ReviewLang;
+  backLang: ReviewLang;
+}
+
+/** The two sides of a word or sentence: the saved text first, then its translation (the natural direction). */
+export function cardFor(item: Pick<ReviewItem, 'text' | 'translation' | 'sourceLang'>): Card {
+  const back: ReviewLang = item.sourceLang === 'en' ? 'ar' : 'en';
+  return { front: item.text, back: item.translation, frontLang: item.sourceLang, backLang: back };
 }
 
 export interface ReviewFilter {
-  query: string;
-  kind: ReviewKind | 'all';
+  /** Chips that are on; empty means All. */
+  chips: readonly ReviewChip[];
   bookId: string | null;
 }
 
-/** Items matching the search text (in the text, translation, context or note), the kind and the book. */
+/** Items in the chosen chips (any of them; none means all) and book. */
 export function filterItems(items: ReviewItem[], f: ReviewFilter): ReviewItem[] {
-  const q = normalizeSelection(f.query).toLowerCase();
-  return items.filter(
-    (r) =>
-      (f.kind === 'all' || (f.kind === 'sentence' ? r.kind !== 'word' : r.kind === f.kind)) &&
-      (f.bookId === null || r.bookId === f.bookId) &&
-      (q === '' || [r.text, r.translation, r.context, r.note ?? ''].some((v) => v.toLowerCase().includes(q))),
-  );
+  return items.filter((r) => (f.chips.length === 0 || f.chips.includes(chipOf(r))) && (f.bookId === null || r.bookId === f.bookId));
 }
 
 /** Whole days from `now` until the item is due; 0 or less when due. */

@@ -63,29 +63,52 @@ describe('ReviewPage', () => {
     expect(el().querySelector('[data-testid="start-practice"]')).toBeNull();
   });
 
-  it('lists saved items and filters by search, kind and book', async () => {
+  it('lists saved items and filters with multi-select chips and by book; there is no search box', async () => {
     await seed();
     await create();
     await vi.waitFor(async () => {
       await settle();
       expect(rows()).toHaveLength(3);
     });
-    const input = el().querySelector<HTMLInputElement>('input[type="search"]')!;
-    input.value = 'serendip';
-    input.dispatchEvent(new Event('input'));
-    await settle();
-    expect(rows()).toHaveLength(1);
-    input.value = '';
-    input.dispatchEvent(new Event('input'));
+    expect(el().querySelector('input[type="search"]')).toBeNull();
     const chip = (name: string) => Array.from(el().querySelectorAll<HTMLButtonElement>('.chips .chip')).find((b) => b.textContent?.trim() === name)!;
+    expect(Array.from(el().querySelectorAll('.chips .chip')).map((b) => b.textContent?.trim())).toEqual(['All', 'Words', 'Sentences', 'Notes', 'Highlights']);
     chip('Sentences').click();
     await settle();
     expect(rows()).toHaveLength(1);
     expect(rows()[0].textContent).toContain('break the ice');
+    chip('Words').click();
+    await settle();
+    expect(rows()).toHaveLength(3);
+    expect(chip('All').getAttribute('aria-pressed')).toBe('false');
     chip('All').click();
+    await settle();
+    expect(chip('Words').getAttribute('aria-pressed')).toBe('false');
     const select = el().querySelector<HTMLSelectElement>('select')!;
     select.value = 'b2';
     select.dispatchEvent(new Event('change'));
+    await settle();
+    expect(rows()).toHaveLength(2);
+  });
+
+  it('lists highlights and notes under their chips, without a translation line', async () => {
+    await seed();
+    const anchor = { page: 2, start: { item: 0, offset: 0 }, end: { item: 0, offset: 5 }, rects: [], quote: 'A quoted line' };
+    const base = { bookId: 'b1', page: 2, tags: [], createdAt: 1, updatedAt: 1, deviceId: 'd', text: anchor };
+    await reviews.addAnnotation({ ...base, id: 'h1', type: 'highlight', color: 'yellow' });
+    await reviews.addAnnotation({ ...base, id: 'n1', type: 'note', body: 'Why?' });
+    await create();
+    await vi.waitFor(async () => {
+      await settle();
+      expect(rows()).toHaveLength(5);
+    });
+    const chip = (name: string) => Array.from(el().querySelectorAll<HTMLButtonElement>('.chips .chip')).find((b) => b.textContent?.trim() === name)!;
+    chip('Notes').click();
+    await settle();
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0].textContent).toContain('Why?');
+    expect(rows()[0].querySelector('.tr')).toBeNull();
+    chip('Highlights').click();
     await settle();
     expect(rows()).toHaveLength(2);
   });
@@ -140,17 +163,14 @@ describe('ReviewPage', () => {
     expect(open).toHaveBeenCalledWith(expect.objectContaining({ id: 'b1' }), { page: 3 });
   });
 
-  it('Practice starts a session with the due items; the direction choice is saved in settings', async () => {
+  it('Practice starts a session with the due items and offers no direction choice', async () => {
     await seed();
     await create();
     await vi.waitFor(async () => {
       await settle();
       expect(el().querySelector('[data-testid="start-practice"]')?.textContent).toContain('3 due today');
     });
-    const radio = Array.from(el().querySelectorAll<HTMLButtonElement>('[role="radio"]')).find((b) => b.textContent?.trim() === 'Arabic to English')!;
-    radio.click();
-    await vi.waitFor(async () => expect((await db.settings.get('settings'))?.cardDirection).toBe('ar-en'));
-    await settle();
+    expect(el().querySelector('[role="radio"]')).toBeNull();
     el().querySelector<HTMLButtonElement>('[data-testid="start-practice"]')!.click();
     await settle();
     expect(el().querySelector('iqra-practice [data-testid="progress"]')?.textContent).toBe('0 of 3');

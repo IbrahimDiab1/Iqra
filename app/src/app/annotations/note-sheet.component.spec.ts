@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Annotation } from '../core/models';
 import { COPY } from '../ui/copy';
 import { ToastService } from '../ui/toast.service';
+import { DB } from '../core/db';
+import { ReviewService } from '../review/review.service';
 import { AnnotationService } from './annotation.service';
 import { NoteSheetComponent } from './note-sheet.component';
 
@@ -62,6 +64,28 @@ describe('NoteSheetComponent', () => {
     const q = el.querySelector('.quote')!;
     expect(q.textContent).toContain('Quoted text');
     expect(q.getAttribute('dir')).toBe('auto');
+  });
+
+  it('offers Add to Review next to Delete, then shows In Review and adds only once', async () => {
+    const reviews = TestBed.inject(ReviewService);
+    open(REC);
+    const btn = () => el.querySelector<HTMLButtonElement>('[data-testid="add-review"]')!;
+    expect(btn().textContent!.trim()).toBe(COPY.annotations.addToReview);
+    expect(btn().nextElementSibling?.classList.contains('del')).toBe(true);
+    btn().click();
+    await vi.waitFor(async () => {
+      fixture.detectChanges();
+      expect(btn().textContent!.trim()).toBe(COPY.annotations.inReview);
+    });
+    expect(btn().disabled).toBe(true);
+    expect((await TestBed.inject(DB).review.toArray()).filter((r) => r.annotationId === 'a1')).toHaveLength(1);
+    expect(TestBed.inject(ToastService).current()?.message).toBe(COPY.annotations.addedToReview);
+    expect(reviews).toBeTruthy();
+  });
+
+  it('has no Add to Review for an area', () => {
+    open({ ...REC, type: 'area', text: undefined, rect: { x: 0, y: 0, w: 1, h: 1 } });
+    expect(el.querySelector('[data-testid="add-review"]')).toBeNull();
   });
 
   it('typing then closing saves the body', async () => {

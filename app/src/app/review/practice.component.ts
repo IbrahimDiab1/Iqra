@@ -1,22 +1,20 @@
 import { ChangeDetectionStrategy, Component, HostListener, computed, inject, input, output, signal } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import type { ReviewItem } from '../core/models';
+import { DB } from '../core/db';
+import { Repo } from '../core/repo';
 import { icon } from '../ui/icons';
-import { frontBack, type CardDirection, type Grade } from './review-logic';
+import { cardFor, isWholeCard, type Grade } from './review-logic';
 import { REVIEW_COPY } from './review-copy';
 import { ReviewService } from './review.service';
 import { canSpeak, speak } from './translation';
 
 const GRADES: readonly Grade[] = ['again', 'hard', 'good', 'easy'];
 
-interface QueueCard {
-  item: ReviewItem;
-  dir: 'en-ar' | 'ar-en';
-}
-
 /**
  * A flashcard session. The queue is fixed when it starts; a card graded Again returns to the end of it.
- * Space or Enter flips the card; 1 to 4 grade it (Again, Hard, Good, Easy).
+ * A word or sentence shows the saved text and flips to its translation (Space); a highlight or note shows
+ * whole, with no flip. 1 to 4 grade a card (Again, Hard, Good, Easy).
  */
 @Component({
   selector: 'iqra-practice',
@@ -31,6 +29,15 @@ interface QueueCard {
         <span [style.width.%]="total() ? (done() / total()) * 100 : 0"></span>
       </div>
       @if (card(); as k) {
+        @if (whole()) {
+          <div class="card whole" data-testid="card" data-whole="true">
+            <p class="quote" dir="auto" [attr.lang]="k.sourceLang" data-testid="whole-text">{{ k.text }}</p>
+            @if (k.note) {
+              <p class="wnote" dir="auto" data-testid="whole-note">{{ k.note }}</p>
+            }
+            <p class="src" data-testid="whole-source"><span dir="auto">{{ bookTitle() }}</span> · {{ pageLabel() }}</p>
+          </div>
+        } @else {
         <div class="card" data-testid="card" [attr.data-flipped]="flipped()">
           <div class="side">
             <p class="front" dir="auto" [attr.lang]="face().frontLang" data-testid="front">{{ face().front }}</p>
@@ -46,12 +53,13 @@ interface QueueCard {
                 <button type="button" class="ico" [attr.aria-label]="c.speak(face().backLang)" (click)="say(face().back, face().backLang)" [innerHTML]="speakerIcon"></button>
               }
             </div>
-            @if (k.item.context) {
-              <p class="ctx" dir="auto">{{ k.item.context }}</p>
+            @if (k.context) {
+              <p class="ctx" dir="auto">{{ k.context }}</p>
             }
           }
         </div>
-        @if (!flipped()) {
+        }
+        @if (!whole() && !flipped()) {
           <button type="button" class="flip" data-testid="flip" (click)="flip()">{{ c.flip }}</button>
           <p class="hint">{{ c.flipHint }}</p>
         } @else {
@@ -79,6 +87,10 @@ interface QueueCard {
     .bar { height: 4px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
     .bar span { display: block; height: 100%; background: var(--accent); }
     .card { display: grid; gap: 10px; min-height: 200px; align-content: center; padding: 20px 16px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+    .card.whole { gap: 12px; justify-items: stretch; }
+    .quote { margin: 0; padding-inline-start: 12px; border-inline-start: 3px solid var(--accent); font: 22px/1.55 var(--book); overflow-wrap: anywhere; }
+    .wnote { margin: 0; font: 16px/1.5 var(--ui); overflow-wrap: anywhere; white-space: pre-wrap; }
+    .src { margin: 0; color: var(--muted); font: 13px var(--ui); }
     .side { display: flex; align-items: flex-start; gap: 6px; }
     .front, .back { flex: 1; min-width: 0; margin: 0; text-align: center; overflow-wrap: anywhere; font: 26px/1.5 var(--book); }
     .back { color: var(--accent); }
@@ -100,7 +112,6 @@ interface QueueCard {
 })
 export class PracticeComponent {
   readonly cards = input.required<ReviewItem[]>();
-  readonly direction = input<CardDirection>('en-ar');
   readonly exit = output<void>();
 
   protected readonly c = REVIEW_COPY.practice;
@@ -108,41 +119,44 @@ export class PracticeComponent {
   protected readonly speech = canSpeak();
   protected readonly speakerIcon = inject(DomSanitizer).bypassSecurityTrustHtml(icon('speaker', 20));
   private readonly reviews = inject(ReviewService);
+  private readonly db = inject(DB);
+  private readonly repo = inject(Repo);
+  private readonly bookRecs = this.repo.live(() => this.db.books.filter((b) => !b.deleted).toArray());
 
-  private fixed: QueueCard[] | undefined;
-  private readonly queue = computed(() => this.fixed ?? (this.cards().length > 0 ? (this.fixed = this.start()) : []));
+  private fixed: ReviewItem[] | undefined;
+  private readonly queue = computed(() => this.fixed ?? (this.cards().length > 0 ? (this.fixed = [...this.cards()]) : []));
   protected readonly flipped = signal(false);
   private readonly doneCount = signal(0);
   private readonly pos = signal(0);
   /** Cards returned by Again, appended to the queue. */
-  private readonly extra = signal<QueueCard[]>([]);
+  private readonly extra = signal<ReviewItem[]>([]);
 
   protected readonly total = computed(() => this.queue().length);
   protected readonly done = this.doneCount.asReadonly();
   protected readonly card = computed(() => [...this.queue(), ...this.extra()][this.pos()] ?? null);
+  protected readonly whole = computed(() => {
+    const k = this.card();
+    return !!k && isWholeCard(k);
+  });
   protected readonly face = computed(() => {
     const k = this.card();
-    return k ? frontBack(k.item, k.dir) : { front: '', back: '', frontLang: 'en' as const, backLang: 'ar' as const };
+    return k ? cardFor(k) : { front: '', back: '', frontLang: 'en' as const, backLang: 'ar' as const };
   });
-
-  /** Fixes the queue and, for mixed, each card's direction, once when the session opens. */
-  private start(): QueueCard[] {
-    const mode = this.direction();
-    return this.cards().map((item): QueueCard => ({ item, dir: mode === 'mixed' ? (Math.random() < 0.5 ? 'en-ar' : 'ar-en') : mode }));
-  }
+  protected readonly bookTitle = computed(() => (this.bookRecs() ?? []).find((b) => b.id === this.card()?.bookId)?.title ?? '');
+  protected readonly pageLabel = computed(() => REVIEW_COPY.list.page(this.card()?.page ?? 0));
 
   protected flip(): void {
-    if (this.card()) this.flipped.set(true);
+    if (this.card() && !this.whole()) this.flipped.set(true);
   }
 
   protected async grade(g: Grade): Promise<void> {
     const k = this.card();
-    if (!k || !this.flipped()) return;
+    if (!k || (!this.whole() && !this.flipped())) return;
     this.flipped.set(false);
     if (g === 'again') this.extra.update((e) => [...e, k]);
     else this.doneCount.update((n) => n + 1);
     this.pos.update((p) => p + 1);
-    await this.reviews.gradeItem(k.item.id, g);
+    await this.reviews.gradeItem(k.id, g);
   }
 
   protected say(text: string, lang: 'en' | 'ar'): void {
@@ -161,7 +175,7 @@ export class PracticeComponent {
       return;
     }
     const n = Number(e.key);
-    if (n >= 1 && n <= 4 && this.flipped()) {
+    if (n >= 1 && n <= 4 && (this.flipped() || this.whole())) {
       e.preventDefault();
       void this.grade(GRADES[n - 1]);
     }
